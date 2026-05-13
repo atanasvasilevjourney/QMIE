@@ -126,7 +126,7 @@ class TestWeights:
 
 def _make_daily_df(n: int = 250, close: float = 100.0) -> pd.DataFrame:
     """Synthetic daily OHLCV with uniform close."""
-    idx = pd.date_range("2024-01-01", periods=n, freq="1D")
+    idx = pd.date_range("2024-01-01", periods=n, freq="1D", tz="UTC")
     return pd.DataFrame(
         {"open": close, "high": close * 1.001, "low": close * 0.999,
          "close": close, "volume": 1_000_000.0},
@@ -173,3 +173,22 @@ class TestDailyTrend:
         )
         assert result is not None
         assert result.daily_trend == "unknown"
+
+    def test_unknown_at_exactly_199_rows(self, bull_trend_df):
+        """199 rows is one short of minimum → daily_trend == 'unknown'."""
+        daily = _make_daily_df(199, close=100.0)
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
+        )
+        assert result is not None
+        assert result.daily_trend == "unknown"
+
+    def test_computes_at_exactly_200_rows(self, bull_trend_df):
+        """Exactly 200 rows is the minimum accepted — must not return 'unknown'."""
+        daily = _make_daily_df(200, close=100.0)
+        daily.iloc[-1, daily.columns.get_loc("close")] = 200.0
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
+        )
+        assert result is not None
+        assert result.daily_trend == "bullish"
