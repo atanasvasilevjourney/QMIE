@@ -66,6 +66,7 @@ class ScanResult:
     nearest_sup:   float              # ATR-distance to nearest support
     components:    dict = field(default_factory=dict)  # per-module raw votes
     reason:        str = ""
+    daily_trend:   str = "unknown"     # "bullish" / "bearish" / "unknown"
 
 
 @dataclass
@@ -99,6 +100,7 @@ def compute_signal(
     symbol: str,
     timeframe: str,
     htf_df: Optional[pd.DataFrame] = None,
+    daily_df: Optional[pd.DataFrame] = None,
     weights: Weights = Weights(),
     sl_atr_mult: float = 1.5,
     tp_atr_mult: float = 2.5,
@@ -259,6 +261,18 @@ def compute_signal(
     else:
         sl = tp = last_close
 
+    # ─── Daily trend (EMA200 on 1D) ──────────────────────────────────────
+    daily_trend = "unknown"
+    if daily_df is not None and len(daily_df) >= 200:
+        d_ema200 = ema(daily_df["close"], 200)
+        d_e200_last = float(d_ema200.iloc[-1])
+        d_close_last = float(daily_df["close"].iloc[-1])
+        if not pd.isna(d_e200_last):
+            if d_close_last > d_e200_last:
+                daily_trend = "bullish"
+            elif d_close_last < d_e200_last:
+                daily_trend = "bearish"
+
     return ScanResult(
         symbol=symbol,
         timeframe=timeframe,
@@ -286,6 +300,7 @@ def compute_signal(
             "d_sup_atr": round(d_sup, 2) if d_sup != float("inf") else 99.0,
         },
         reason=_explain(side, st_d, ema_d, rsi_d, adx_d, htf_d, sr_d),
+        daily_trend=daily_trend,
     )
 
 

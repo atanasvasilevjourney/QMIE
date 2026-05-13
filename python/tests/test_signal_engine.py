@@ -120,3 +120,56 @@ class TestWeights:
         # will scale differently. No exception expected.
         w = Weights(supertrend=50, ema=0, rsi=0, adx=0, htf=50, sr=0, vol=0)
         assert w.total == 100
+
+
+# ─── Daily trend tests ───────────────────────────────────────────────────
+
+def _make_daily_df(n: int = 250, close: float = 100.0) -> pd.DataFrame:
+    """Synthetic daily OHLCV with uniform close."""
+    idx = pd.date_range("2024-01-01", periods=n, freq="1D")
+    return pd.DataFrame(
+        {"open": close, "high": close * 1.001, "low": close * 0.999,
+         "close": close, "volume": 1_000_000.0},
+        index=idx,
+    )
+
+
+class TestDailyTrend:
+    def test_bullish_when_close_above_ema200(self, bull_trend_df):
+        """Last daily close well above EMA200 → daily_trend == 'bullish'."""
+        daily = _make_daily_df(250, close=100.0)
+        # Bump only the last bar: EMA200 ≈ 100, last close = 200 → bullish
+        daily.iloc[-1, daily.columns.get_loc("close")] = 200.0
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
+        )
+        assert result is not None
+        assert result.daily_trend == "bullish"
+
+    def test_bearish_when_close_below_ema200(self, bull_trend_df):
+        """Last daily close well below EMA200 → daily_trend == 'bearish'."""
+        daily = _make_daily_df(250, close=100.0)
+        # Drop only the last bar: EMA200 ≈ 100, last close = 50 → bearish
+        daily.iloc[-1, daily.columns.get_loc("close")] = 50.0
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
+        )
+        assert result is not None
+        assert result.daily_trend == "bearish"
+
+    def test_unknown_when_no_daily_df(self, bull_trend_df):
+        """daily_df=None → daily_trend == 'unknown'."""
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=None
+        )
+        assert result is not None
+        assert result.daily_trend == "unknown"
+
+    def test_unknown_when_insufficient_daily_data(self, bull_trend_df):
+        """daily_df with < 200 rows → daily_trend == 'unknown' (EMA can't seed)."""
+        daily = _make_daily_df(150, close=100.0)
+        result = compute_signal(
+            bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
+        )
+        assert result is not None
+        assert result.daily_trend == "unknown"
