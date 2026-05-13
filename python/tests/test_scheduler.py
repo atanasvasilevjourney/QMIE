@@ -122,3 +122,112 @@ class TestSchedulerTick:
             scheduler.client.fetch_klines.assert_not_called()
         finally:
             mod.time.time = orig
+
+
+class TestDailyDfRouting:
+    """Verify that scan_one passes the correct daily_df to compute_signal."""
+
+    @pytest.mark.asyncio
+    async def test_4h_scan_reuses_htf_as_daily_df(self, monkeypatch):
+        """For a 4H scan (HTF=1d), daily_df must equal htf_df — no extra fetch."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        import pandas as pd
+
+        captured: dict = {}
+
+        def fake_compute(df, *, symbol, timeframe, htf_df=None, daily_df=None, **kw):
+            captured["daily_df"] = daily_df
+            captured["htf_df"] = htf_df
+            return None  # skip full scoring
+
+        fake_df = pd.DataFrame(
+            {"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            index=pd.date_range("2024-01-01", periods=300, freq="1h"),
+        )
+        fake_daily = pd.DataFrame(
+            {"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            index=pd.date_range("2024-01-01", periods=300, freq="1D"),
+        )
+
+        async def fake_fetch(sym, tf, limit=300):
+            if tf == "4h":
+                return fake_df
+            if tf == "1d":
+                return fake_daily
+            return fake_df
+
+        client = AsyncMock()
+        client.fetch_klines = fake_fetch
+
+        from scanner.dispatcher import SignalDispatcher
+        from scanner.symbol_universe import SymbolUniverse
+        from scanner.scheduler import ScannerScheduler
+
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT"])
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(return_value=False)
+
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["4h"],
+            htf_map={"4h": "1d"},
+        )
+
+        with patch("scanner.scheduler.compute_signal", side_effect=fake_compute):
+            await scheduler._scan_pass("4h")
+
+        # For 4H, htf="1d" so daily_df should be the same object as htf_df
+        assert captured.get("daily_df") is captured.get("htf_df")
+
+    @pytest.mark.asyncio
+    async def test_1h_scan_fetches_daily_separately(self, monkeypatch):
+        """For a 1H scan (HTF=4h), daily_df is a separate fetch of '1d'."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        import pandas as pd
+
+        captured: dict = {}
+        fetched_tfs: list = []
+
+        def fake_compute(df, *, symbol, timeframe, htf_df=None, daily_df=None, **kw):
+            captured["daily_df"] = daily_df
+            captured["htf_df"] = htf_df
+            return None
+
+        fake_df = pd.DataFrame(
+            {"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            index=pd.date_range("2024-01-01", periods=300, freq="1h"),
+        )
+
+        async def fake_fetch(sym, tf, limit=300):
+            fetched_tfs.append(tf)
+            # Return a distinct copy per call so identity checks work correctly
+            return fake_df.copy()
+
+        client = AsyncMock()
+        client.fetch_klines = fake_fetch
+
+        from scanner.symbol_universe import SymbolUniverse
+        from scanner.scheduler import ScannerScheduler
+
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT"])
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(return_value=False)
+
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+        )
+
+        with patch("scanner.scheduler.compute_signal", side_effect=fake_compute):
+            await scheduler._scan_pass("1h")
+
+        assert "1d" in fetched_tfs, "Expected a separate 1d fetch for 1H scan"
+        assert captured.get("daily_df") is not None
+        assert captured.get("daily_df") is not captured.get("htf_df")

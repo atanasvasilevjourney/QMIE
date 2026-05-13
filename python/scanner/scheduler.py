@@ -170,9 +170,20 @@ class ScannerScheduler:
                             htf_df = await self.client.fetch_klines(sym, htf, limit=300)
                         except Exception:
                             htf_df = None
+                    # Daily trend filter: supply 1D klines to compute_signal.
+                    # If HTF is already "1d" (4H scans), reuse htf_df — no extra call.
+                    # Otherwise fetch "1d" separately (e.g. for 1H scans where HTF=4H).
+                    daily_df = None
+                    if htf == "1d":
+                        daily_df = htf_df
+                    elif htf is not None:
+                        try:
+                            daily_df = await self.client.fetch_klines(sym, "1d", limit=250)
+                        except Exception:
+                            daily_df = None
                     res = compute_signal(
                         df, symbol=sym, timeframe=tf,
-                        htf_df=htf_df, weights=self.weights,
+                        htf_df=htf_df, daily_df=daily_df, weights=self.weights,
                     )
                     if res is None:
                         return
