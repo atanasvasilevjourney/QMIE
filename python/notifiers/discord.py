@@ -126,6 +126,15 @@ class DiscordNotifier(Notifier):
         if sig.htf:
             fields.append({"name": "HTF", "value": sig.htf.title(), "inline": True})
 
+        # Daily trend (EMA200 1D filter)
+        daily_trend = getattr(sig, "daily_trend", None)
+        if daily_trend:
+            fields.append({
+                "name": "Daily Trend",
+                "value": daily_trend.title(),
+                "inline": True,
+            })
+
         # Score + grade
         if sig.score is not None:
             grade_str = sig.grade.value if sig.grade else "—"

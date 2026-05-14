@@ -90,6 +90,9 @@ class TelegramNotifier(Notifier):
             lines.append(kv("Trend", sig.trend))
         if sig.htf:
             lines.append(kv("HTF", sig.htf))
+        daily_trend = getattr(sig, "daily_trend", None)
+        if daily_trend:
+            lines.append(kv("Daily Trend", daily_trend.title()))
         if sig.stop_loss is not None:
             lines.append(kv("SL", _fmt_price(sig.stop_loss, ac)))
         if sig.take_profit is not None:

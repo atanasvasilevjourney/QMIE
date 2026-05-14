@@ -110,6 +110,7 @@ class SignalDispatcher:
         # TVSignal has extra="allow" so we can attach freely.
         sig_dict = sig.model_dump()
         sig_dict["chart_url"] = chart_url
+        sig_dict["daily_trend"] = result.daily_trend
 
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)
