@@ -35,3 +35,7 @@ Thumbs.db
 
 # Docker
 docker/data/
+
+# Backtest cache and results
+python/backtest/data/
+python/backtest/results/
