@@ -113,6 +113,8 @@ def test_load_klines_returns_correct_schema(tmp_path):
     assert list(df.columns) == ["open", "high", "low", "close", "volume"]
     assert df.index.tz is not None
     assert df.dtypes["close"] == "float64"
+    # Index must not bleed past the requested end date
+    assert df.index.max() < pd.Timestamp("2024-02-01", tz="UTC")
 
 
 def test_load_klines_caches_to_disk(tmp_path):

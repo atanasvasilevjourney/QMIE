@@ -59,6 +59,8 @@ def _download_month(symbol: str, tf: str, year: int, month: int) -> pd.DataFrame
         return None
 
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        if not zf.namelist():
+            return None
         csv_name = zf.namelist()[0]
         with zf.open(csv_name) as f:
             df = pd.read_csv(f, header=None, usecols=list(_COLS.keys()))
@@ -111,7 +113,7 @@ def load_klines(
     result = pd.concat(frames)
     result = result[~result.index.duplicated(keep="first")].sort_index()
     start_ts = pd.Timestamp(start, tz="UTC")
-    end_ts = pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)
+    end_ts = pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)
     return result.loc[start_ts:end_ts]
 
 
