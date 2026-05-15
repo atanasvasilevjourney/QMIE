@@ -49,7 +49,7 @@ def main(argv=None):
 
     all_results = []
     combos = [(s, tf) for s in args.symbols for tf in args.tf]
-    print(f"Running {len(combos)} symbol/tf combinations ({start} → {end})\n")
+    print(f"Running {len(combos)} symbol/tf combinations ({start} to {end})\n")
 
     for symbol, tf in combos:
         print(f"  {symbol} {tf} ...", end=" ", flush=True)
@@ -91,8 +91,8 @@ def main(argv=None):
             summary = pd.DataFrame(rows).set_index("Grade")
             print("\n" + summary.to_string())
 
-    print(f"\nSaved → {latest}")
-    print(f"        {stamped}")
+    print(f"\nSaved: {latest}")
+    print(f"       {stamped}")
 
 
 if __name__ == "__main__":

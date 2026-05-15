@@ -92,10 +92,14 @@ def run_backtest(
     results: list[BacktestResult] = []
     n = len(df_base)
 
+    # Use a fixed-size rolling window — compute_signal only needs ~300 bars
+    # of lookback. Passing df[:i+1] grows O(n²); 400-bar window is O(n).
+    WINDOW = 400
+
     for i in range(WARMUP_BARS, n):
         bar_ts = df_base.index[i]
-        slice_base = df_base.iloc[: i + 1]
-        slice_htf = df_htf.loc[:bar_ts]
+        slice_base = df_base.iloc[max(0, i - WINDOW + 1): i + 1]
+        slice_htf = df_htf.loc[:bar_ts].iloc[-WINDOW:]
         slice_daily = df_daily.loc[:bar_ts]
 
         sig: Optional[ScanResult] = compute_signal(
