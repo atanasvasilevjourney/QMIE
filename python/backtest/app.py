@@ -147,7 +147,8 @@ def main():
         if val == "LOSS":  return "background-color: #f8d7da"
         return "background-color: #e2e3e5"
 
-    display = filtered.sort_values("timestamp", ascending=False).reset_index(drop=True)
+    display = filtered.sort_values("timestamp", ascending=False).head(2000).reset_index(drop=True)
+    st.caption(f"Showing latest 2,000 of {len(filtered)} signals")
     st.dataframe(
         display.style.map(_colour_outcome, subset=["outcome"]),
         use_container_width=True,

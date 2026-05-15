@@ -22,7 +22,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 # HTF map: base TF → pandas resample rule for HTF
 _HTF_MAP = {"1h": "4h", "4h": "1D", "1d": "1W"}
 
-_DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+_DEFAULT_SYMBOLS = [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT",
+]
 
 
 def _parse_args(argv=None):
@@ -37,6 +40,9 @@ def _parse_args(argv=None):
                    help="End date YYYY-MM-DD (default: yesterday)")
     p.add_argument("--out", default=str(Path(__file__).parent / "results"),
                    help="Output directory for parquet files")
+    p.add_argument("--split", default=None,
+                   help="Walk-forward split date YYYY-MM-DD. "
+                        "Signals before split = in-sample, on/after = out-of-sample.")
     return p.parse_args(argv)
 
 
@@ -70,26 +76,40 @@ def main(argv=None):
     df_out.to_parquet(stamped, index=False)
     df_out.to_parquet(latest, index=False)
 
-    # Print summary table
+    # Print summary table(s)
     print(f"\nTotal signals: {len(df_out)}")
+
+    def _print_summary(label: str, subset: pd.DataFrame) -> None:
+        closed = subset[subset["outcome"] != "OPEN"]
+        if closed.empty:
+            print(f"\n{label}: no closed trades")
+            return
+        grade_order = ["A+", "A", "B", "C"]
+        rows = []
+        for g in grade_order:
+            g_df = closed[closed["grade"] == g]
+            if len(g_df) == 0:
+                continue
+            rows.append({
+                "Grade": g,
+                "Signals": len(subset[subset["grade"] == g]),
+                "Closed": len(g_df),
+                "Win %": f"{100 * (g_df['outcome'] == 'WIN').mean():.1f}%",
+                "Avg bars": f"{g_df['bars_to_outcome'].mean():.1f}",
+            })
+        print(f"\n{label} ({len(subset)} signals):")
+        print(pd.DataFrame(rows).set_index("Grade").to_string())
+
     if len(df_out):
-        closed = df_out[df_out["outcome"] != "OPEN"]
-        if len(closed):
-            grade_order = ["A+", "A", "B", "C"]
-            rows = []
-            for g in grade_order:
-                g_df = closed[closed["grade"] == g]
-                if len(g_df) == 0:
-                    continue
-                rows.append({
-                    "Grade": g,
-                    "Signals": len(df_out[df_out["grade"] == g]),
-                    "Closed": len(g_df),
-                    "Win %": f"{100 * (g_df['outcome'] == 'WIN').mean():.1f}%",
-                    "Avg bars": f"{g_df['bars_to_outcome'].mean():.1f}",
-                })
-            summary = pd.DataFrame(rows).set_index("Grade")
-            print("\n" + summary.to_string())
+        split_date = date.fromisoformat(args.split) if args.split else None
+        if split_date:
+            split_ts = pd.Timestamp(split_date, tz="UTC")
+            in_sample = df_out[df_out["timestamp"] < split_ts]
+            out_sample = df_out[df_out["timestamp"] >= split_ts]
+            _print_summary(f"IN-SAMPLE  (< {split_date})", in_sample)
+            _print_summary(f"OUT-OF-SAMPLE (>= {split_date})", out_sample)
+        else:
+            _print_summary("All signals", df_out)
 
     print(f"\nSaved: {latest}")
     print(f"       {stamped}")
