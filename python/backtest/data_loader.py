@@ -69,7 +69,7 @@ def _download_month(symbol: str, tf: str, year: int, month: int) -> pd.DataFrame
     # Newer Binance files include a header row — drop it if present
     if isinstance(df.iloc[0, 0], str):
         df = df.iloc[1:].reset_index(drop=True)
-    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+    df["open_time"] = pd.to_datetime(df["open_time"].astype("int64"), unit="ms", utc=True)
     df = df.set_index("open_time")
     df.index.name = None
     for col in ["open", "high", "low", "close", "volume"]:
