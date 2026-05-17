@@ -33,19 +33,32 @@ class BacktestResult:
     stop_loss: float
     take_profit: float
     atr_pct: float
+    rr_ratio: float           # reward / risk at signal time
     outcome: str              # WIN / LOSS / OPEN
     bars_to_outcome: Optional[int]
+    realized_r: Optional[float]  # +rr_ratio on WIN, -1.0 on LOSS, None on OPEN
+    mae_r: Optional[float]    # max adverse excursion in R units (how far against us)
+    mfe_r: Optional[float]    # max favorable excursion in R units (how far in our favour)
 
 
 def _evaluate_outcome(
     df: pd.DataFrame,
     signal_idx: int,
     side: str,
+    entry: float,
     take_profit: float,
     stop_loss: float,
     max_lookahead: int = MAX_LOOKAHEAD,
-) -> tuple[str, Optional[int]]:
-    """Scan forward from signal_idx to find first TP or SL touch."""
+) -> tuple[str, Optional[int], Optional[float], Optional[float]]:
+    """Scan forward from signal_idx to find first TP or SL touch.
+
+    Returns (outcome, bars_to_outcome, mae_r, mfe_r).
+    MAE/MFE are in R units: 1.0 R = one stop-loss distance from entry.
+    """
+    risk = abs(entry - stop_loss)
+    max_adverse: float = 0.0   # worst move against us (in R)
+    max_favorable: float = 0.0  # best move in our favour (in R)
+
     for offset in range(1, max_lookahead + 1):
         i = signal_idx + offset
         if i >= len(df):
@@ -54,20 +67,29 @@ def _evaluate_outcome(
         bar_low = df["low"].iloc[i]
 
         if side == "BUY":
+            adverse = (entry - bar_low) / risk if risk > 0 else 0.0
+            favorable = (bar_high - entry) / risk if risk > 0 else 0.0
             tp_hit = bar_high >= take_profit
             sl_hit = bar_low <= stop_loss
         else:  # SELL
+            adverse = (bar_high - entry) / risk if risk > 0 else 0.0
+            favorable = (entry - bar_low) / risk if risk > 0 else 0.0
             tp_hit = bar_low <= take_profit
             sl_hit = bar_high >= stop_loss
 
-        if tp_hit and sl_hit:
-            return "LOSS", offset   # conservative: gap-through both = LOSS
-        if tp_hit:
-            return "WIN", offset
-        if sl_hit:
-            return "LOSS", offset
+        max_adverse = max(max_adverse, adverse)
+        max_favorable = max(max_favorable, favorable)
 
-    return "OPEN", None
+        if tp_hit and sl_hit:
+            return "LOSS", offset, round(max_adverse, 3), round(max_favorable, 3)
+        if tp_hit:
+            return "WIN", offset, round(max_adverse, 3), round(max_favorable, 3)
+        if sl_hit:
+            return "LOSS", offset, round(max_adverse, 3), round(max_favorable, 3)
+
+    mae = round(max_adverse, 3) if max_adverse > 0 else None
+    mfe = round(max_favorable, 3) if max_favorable > 0 else None
+    return "OPEN", None, mae, mfe
 
 
 def run_backtest(
@@ -113,9 +135,19 @@ def run_backtest(
         if sig is None or sig.grade == "REJECT" or sig.side == "NEUTRAL":
             continue
 
-        outcome, bars_to = _evaluate_outcome(
-            df_base, i, sig.side, sig.take_profit, sig.stop_loss
+        outcome, bars_to, mae_r, mfe_r = _evaluate_outcome(
+            df_base, i, sig.side, sig.price, sig.take_profit, sig.stop_loss
         )
+
+        risk = abs(sig.price - sig.stop_loss)
+        reward = abs(sig.take_profit - sig.price)
+        rr_ratio = round(reward / risk, 3) if risk > 0 else 0.0
+        if outcome == "WIN":
+            realized_r: Optional[float] = rr_ratio
+        elif outcome == "LOSS":
+            realized_r = -1.0
+        else:
+            realized_r = None
 
         results.append(BacktestResult(
             symbol=symbol,
@@ -129,8 +161,12 @@ def run_backtest(
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
             atr_pct=sig.atr_pct,
+            rr_ratio=rr_ratio,
             outcome=outcome,
             bars_to_outcome=bars_to,
+            realized_r=realized_r,
+            mae_r=mae_r,
+            mfe_r=mfe_r,
         ))
 
     return results
@@ -142,6 +178,6 @@ def results_to_dataframe(results: list[BacktestResult]) -> pd.DataFrame:
         return pd.DataFrame(columns=[
             "symbol", "timeframe", "timestamp", "side", "grade", "score",
             "daily_trend", "entry", "stop_loss", "take_profit", "atr_pct",
-            "outcome", "bars_to_outcome",
+            "rr_ratio", "outcome", "bars_to_outcome", "realized_r", "mae_r", "mfe_r",
         ])
     return pd.DataFrame([vars(r) for r in results])

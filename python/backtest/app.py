@@ -9,6 +9,7 @@ Launch:
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -95,16 +96,32 @@ def main():
             closed_g = closed[closed["grade"] == g]
             if len(all_g) == 0:
                 continue
-            win_pct = (
-                round(100 * (closed_g["outcome"] == "WIN").mean(), 1)
-                if len(closed_g) else 0.0
-            )
+            win_rate = (closed_g["outcome"] == "WIN").mean() if len(closed_g) else 0.0
+            avg_rr = round(closed_g["rr_ratio"].mean(), 2) if len(closed_g) else None
+            expectancy = pf = sqn = avg_mae = avg_mfe = None
+            if len(closed_g):
+                wins_r = closed_g.loc[closed_g["outcome"] == "WIN", "rr_ratio"].sum()
+                losses_n = float(len(closed_g[closed_g["outcome"] == "LOSS"]))
+                expectancy = round(win_rate * (avg_rr or 0) - (1 - win_rate) * 1.0, 3)
+                pf = round(wins_r / losses_n, 2) if losses_n > 0 else None
+                r_series = closed_g["realized_r"].dropna()
+                r_std = r_series.std()
+                sqn = round(r_series.mean() / r_std * math.sqrt(len(r_series)), 2) if r_std > 0 else 0.0
+                if "mae_r" in closed_g.columns:
+                    avg_mae = round(closed_g["mae_r"].mean(), 2)
+                    avg_mfe = round(closed_g["mfe_r"].mean(), 2)
             avg_bars = round(closed_g["bars_to_outcome"].mean(), 1) if len(closed_g) else None
             rows.append({
                 "Grade": g,
                 "Signals": len(all_g),
                 "Closed": len(closed_g),
-                "Win %": win_pct,
+                "Win %": round(100 * win_rate, 1),
+                "Avg RR": avg_rr,
+                "Expectancy R": expectancy,
+                "Prof. Factor": pf,
+                "SQN": sqn,
+                "Avg MAE R": avg_mae,
+                "Avg MFE R": avg_mfe,
                 "Avg bars": avg_bars,
             })
         st.dataframe(
@@ -124,6 +141,13 @@ def main():
         chart_data.columns = ["Grade", "Win %"]
         st.bar_chart(chart_data.set_index("Grade"))
 
+    # ── Panel 2b: Realized-R distribution ───────────────────────────
+    st.subheader("Realized R Distribution (closed trades)")
+    if not closed.empty and "realized_r" in closed.columns:
+        r_data = closed["realized_r"].dropna()
+        if len(r_data):
+            st.bar_chart(r_data.value_counts(bins=20).sort_index())
+
     # ── Panel 3: Score distribution ──────────────────────────────────
     st.subheader("Score Distribution: WIN vs LOSS")
     if not closed.empty:
@@ -138,6 +162,44 @@ def main():
             losses = closed[closed["outcome"] == "LOSS"]["score"]
             if len(losses):
                 st.bar_chart(losses.value_counts(bins=10).sort_index())
+
+    # ── Panel 3b: MAE vs MFE scatter ────────────────────────────────
+    if not closed.empty and "mae_r" in closed.columns and closed["mae_r"].notna().any():
+        st.subheader("MAE vs MFE by Grade (closed trades)")
+        st.caption(
+            "MAE = max adverse excursion in R (how far against you before exit). "
+            "MFE = max favorable excursion in R (how far in your favour before exit). "
+            "Ideal: low MAE, high MFE."
+        )
+        mae_mfe = (
+            closed.groupby("grade")[["mae_r", "mfe_r"]]
+            .mean()
+            .reindex(_GRADE_ORDER)
+            .dropna()
+            .round(2)
+        )
+        st.dataframe(mae_mfe, use_container_width=True)
+
+    # ── Panel 3c: Monthly P&L heatmap ───────────────────────────────
+    st.subheader("Monthly Expectancy R (closed trades by grade)")
+    if not closed.empty and "realized_r" in closed.columns:
+        grade_filter = st.selectbox("Grade for monthly view", _GRADE_ORDER, key="monthly_grade")
+        monthly_df = closed[closed["grade"] == grade_filter].copy()
+        if not monthly_df.empty:
+            monthly_df["year"] = monthly_df["timestamp"].dt.year
+            monthly_df["month"] = monthly_df["timestamp"].dt.month
+            pivot = (
+                monthly_df.groupby(["year", "month"])["realized_r"]
+                .mean()
+                .unstack(level="month")
+                .round(3)
+            )
+            pivot.columns = [
+                ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
+                for m in pivot.columns
+            ]
+            st.dataframe(pivot, use_container_width=True)
+            st.caption("Values = avg realized R per month. Green months > 0, red < 0.")
 
     # ── Panel 4: Signal log ──────────────────────────────────────────
     st.subheader("Signal Log")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -90,11 +91,33 @@ def main(argv=None):
             g_df = closed[closed["grade"] == g]
             if len(g_df) == 0:
                 continue
+            win_rate = (g_df["outcome"] == "WIN").mean()
+            avg_rr = g_df["rr_ratio"].mean()
+            # Expectancy in R: win% * avg_rr - loss% * 1.0
+            expectancy = win_rate * avg_rr - (1 - win_rate) * 1.0
+            # Profit factor: sum of winning R / sum of losing R
+            wins_r = g_df.loc[g_df["outcome"] == "WIN", "rr_ratio"].sum()
+            losses_r = float(len(g_df[g_df["outcome"] == "LOSS"]))
+            pf = wins_r / losses_r if losses_r > 0 else float("inf")
+            # SQN = E(R) / stdev(R) * sqrt(n)  — Van Tharp, >1.6 tradeable
+            r_series = g_df["realized_r"].dropna()
+            r_std = r_series.std()
+            sqn = (r_series.mean() / r_std * math.sqrt(len(r_series))
+                   if r_std > 0 else 0.0)
+            # MAE/MFE averages
+            avg_mae = g_df["mae_r"].mean() if "mae_r" in g_df else float("nan")
+            avg_mfe = g_df["mfe_r"].mean() if "mfe_r" in g_df else float("nan")
             rows.append({
                 "Grade": g,
                 "Signals": len(subset[subset["grade"] == g]),
                 "Closed": len(g_df),
-                "Win %": f"{100 * (g_df['outcome'] == 'WIN').mean():.1f}%",
+                "Win %": f"{100 * win_rate:.1f}%",
+                "Avg RR": f"{avg_rr:.2f}",
+                "Expectancy R": f"{expectancy:+.3f}",
+                "Prof.Factor": f"{pf:.2f}",
+                "SQN": f"{sqn:.2f}",
+                "Avg MAE": f"{avg_mae:.2f}",
+                "Avg MFE": f"{avg_mfe:.2f}",
                 "Avg bars": f"{g_df['bars_to_outcome'].mean():.1f}",
             })
         print(f"\n{label} ({len(subset)} signals):")
