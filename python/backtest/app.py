@@ -58,6 +58,12 @@ def main():
         "Daily Trend", ["All", "bullish", "bearish", "unknown"]
     )
 
+    atr_range = st.sidebar.slider(
+        "ATR % range", min_value=0.0, max_value=5.0,
+        value=(0.0, 5.0), step=0.1,
+        help="Sweet spot: 1.0–4.0% — below=choppy/noise, above=unpredictable extremes",
+    )
+
     min_d = df["timestamp"].dt.date.min()
     max_d = df["timestamp"].dt.date.max()
     date_range = st.sidebar.date_input(
@@ -78,6 +84,7 @@ def main():
         mask &= (df["timestamp"].dt.date >= date_range[0]) & (
             df["timestamp"].dt.date <= date_range[1]
         )
+    mask &= (df["atr_pct"] >= atr_range[0]) & (df["atr_pct"] <= atr_range[1])
 
     filtered = df[mask].copy()
     st.caption(f"{len(filtered)} signals after filters ({len(df)} total)")

@@ -44,6 +44,12 @@ def _parse_args(argv=None):
     p.add_argument("--split", default=None,
                    help="Walk-forward split date YYYY-MM-DD. "
                         "Signals before split = in-sample, on/after = out-of-sample.")
+    p.add_argument("--min-atr-pct", type=float, default=0.0,
+                   help="Exclude signals with ATR%% below this value (default: 0 = all). "
+                        "Sweet spot ≥1.0 filters low-volatility noise.")
+    p.add_argument("--max-atr-pct", type=float, default=99.0,
+                   help="Exclude signals with ATR%% above this value (default: 99 = all). "
+                        "Use ≤4.0 to avoid extreme-volatility signals.")
     return p.parse_args(argv)
 
 
@@ -76,6 +82,16 @@ def main(argv=None):
     latest = out_dir / "latest.parquet"
     df_out.to_parquet(stamped, index=False)
     df_out.to_parquet(latest, index=False)
+
+    # ATR volatility filter (post-collection, no re-run needed)
+    if args.min_atr_pct > 0 or args.max_atr_pct < 99:
+        before = len(df_out)
+        df_out = df_out[
+            (df_out["atr_pct"] >= args.min_atr_pct) &
+            (df_out["atr_pct"] <= args.max_atr_pct)
+        ].copy()
+        print(f"ATR filter [{args.min_atr_pct}%-{args.max_atr_pct}%]: "
+              f"{before} -> {len(df_out)} signals ({before - len(df_out)} removed)")
 
     # Print summary table(s)
     print(f"\nTotal signals: {len(df_out)}")
