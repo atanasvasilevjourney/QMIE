@@ -37,13 +37,16 @@ g_viz    = "❸ Visualization"
 g_alert  = "❹ Alerts"
 
 // Weights (must match server config)
-wST  = input.int(20, "Supertrend Weight", group=g_core, minval=0, maxval=100)
-wEMA = input.int(15, "EMA200 Weight",     group=g_core, minval=0, maxval=100)
-wRSI = input.int(15, "RSI Weight",        group=g_core, minval=0, maxval=100)
-wADX = input.int(15, "ADX Weight",        group=g_core, minval=0, maxval=100)
-wHTF = input.int(20, "HTF Weight",        group=g_core, minval=0, maxval=100)
-wSR  = input.int(10, "S/R Weight",        group=g_core, minval=0, maxval=100)
-wVOL = input.int( 5, "Volatility Weight", group=g_core, minval=0, maxval=100)
+wST  = input.int(20, "Supertrend Weight",     group=g_core, minval=0, maxval=100)
+wEMA = input.int(15, "EMA200 Weight",         group=g_core, minval=0, maxval=100)
+wRSI = input.int(15, "RSI Weight",            group=g_core, minval=0, maxval=100)
+wADX = input.int(15, "ADX Weight",            group=g_core, minval=0, maxval=100)
+wHTF = input.int(20, "HTF Weight",            group=g_core, minval=0, maxval=100)
+wSR  = input.int(10, "S/R Weight",            group=g_core, minval=0, maxval=100)
+wVOL = input.int( 5, "Volatility Weight",     group=g_core, minval=0, maxval=100)
+wRIB = input.int(10, "EMA Ribbon Weight",     group=g_core, minval=0, maxval=100)
+wSTR = input.int(10, "Structure (BOS) Weight",group=g_core, minval=0, maxval=100)
+wSWP = input.int( 8, "Liquidity Sweep Weight",group=g_core, minval=0, maxval=100)
 
 minGrade = input.string("A", "Min Alert Grade",
      options=["A+","A","B","C","REJECT"], group=g_alert)
@@ -213,13 +216,100 @@ else if dSup > dRes
         srC := srC * 0.3
 srScore = math.round(srD * wSR * srC)
 
+// 7b. EMA Ribbon (8/21/55/89) — matches ema_ribbon_dir()
+e8  = ta.ema(close, 8)
+e21 = ta.ema(close, 21)
+e55 = ta.ema(close, 55)
+e89 = ta.ema(close, 89)
+ribD = 0
+ribC = 0.0
+if e8 > e21 and e21 > e55 and e55 > e89 and close > e8
+    ribD := 1
+    ribC := 1.0
+else if e8 > e21 and e21 > e55 and close > e21
+    ribD := 1
+    ribC := 0.6
+else if close > e55
+    ribD := 1
+    ribC := 0.3
+else if e8 < e21 and e21 < e55 and e55 < e89 and close < e8
+    ribD := -1
+    ribC := 1.0
+else if e8 < e21 and e21 < e55 and close < e21
+    ribD := -1
+    ribC := 0.6
+else if close < e55
+    ribD := -1
+    ribC := 0.3
+ribScore = math.round(ribD * wRIB * ribC)
+
+// 7c. Market Structure — BOS via pivot sequence (matches market_structure_dir())
+// Track last 4 pivot highs/lows, check ascending lows (bull) or descending highs (bear)
+var float[] pivHi = array.new<float>()
+var float[] pivLo = array.new<float>()
+pivH2 = ta.pivothigh(high, 5, 5)
+pivL2 = ta.pivotlow(low, 5, 5)
+if not na(pivH2)
+    array.unshift(pivHi, pivH2)
+    if array.size(pivHi) > 4
+        array.pop(pivHi)
+if not na(pivL2)
+    array.unshift(pivLo, pivL2)
+    if array.size(pivLo) > 4
+        array.pop(pivLo)
+strD = 0
+strC = 0.0
+if array.size(pivLo) >= 4
+    ascLows = (array.get(pivLo,0) > array.get(pivLo,1) ? 1 : 0) +
+              (array.get(pivLo,1) > array.get(pivLo,2) ? 1 : 0) +
+              (array.get(pivLo,2) > array.get(pivLo,3) ? 1 : 0)
+    if ascLows == 3
+        strD := 1
+        strC := 1.0
+    else if ascLows >= 2
+        strD := 1
+        strC := 0.5
+if array.size(pivHi) >= 4
+    descHighs = (array.get(pivHi,0) < array.get(pivHi,1) ? 1 : 0) +
+                (array.get(pivHi,1) < array.get(pivHi,2) ? 1 : 0) +
+                (array.get(pivHi,2) < array.get(pivHi,3) ? 1 : 0)
+    if descHighs == 3
+        strD := -1
+        strC := 1.0
+    else if descHighs >= 2
+        strD := -1
+        strC := 0.5
+strScore = math.round(strD * wSTR * strC)
+
+// 7d. Liquidity Sweep — wick grab of recent swing (matches liquidity_sweep_dir())
+swpLow  = ta.lowest(low[1],  20)
+swpHigh = ta.highest(high[1], 20)
+swpD = 0
+swpC = 0.0
+// Check last 3 bars
+for bi = 1 to 3
+    bLow   = low[bi]
+    bHigh  = high[bi]
+    bClose = close[bi]
+    refLow  = ta.lowest(low[bi+1],  20)
+    refHigh = ta.highest(high[bi+1], 20)
+    if bLow < refLow and bClose > refLow
+        swpD := 1
+        swpC := 1.0
+        break
+    if bHigh > refHigh and bClose < refHigh
+        swpD := -1
+        swpC := 1.0
+        break
+swpScore = math.round(swpD * wSWP * swpC)
+
 // 7. Volatility regime (additive bonus)
 atrPct = (atrVal / close) * 100.0
 volBonus = (atrPct >= 0.4 and atrPct <= 4.0) ? wVOL : 0
 
 // ─── Aggregate ─────────────────────────────────────────────────────────
-rawSum = stScore + emaScore + rsiScore + adxScore + htfScore + srScore
-maxDir = wST + wEMA + wRSI + wADX + wHTF + wSR
+rawSum = stScore + emaScore + rsiScore + adxScore + htfScore + srScore + ribScore + strScore + swpScore
+maxDir = wST + wEMA + wRSI + wADX + wHTF + wSR + wRIB + wSTR + wSWP
 
 side    = rawSum > 0 ? "BUY" : rawSum < 0 ? "SELL" : "NEUTRAL"
 score0  = math.abs(rawSum) / maxDir * 95.0 + volBonus
@@ -246,6 +336,11 @@ tp = side == "BUY"  ? close + tpMult * atrVal :
 
 // ─── Plots ─────────────────────────────────────────────────────────────
 plot(showEMA ? ema200 : na, "EMA 200",   color=color.new(color.orange, 0), linewidth=2)
+// EMA Ribbon (8/21/55/89) — always shown when showEMA is on
+plot(showEMA ? e8  : na, "EMA 8",  color=color.new(color.green,  20), linewidth=1)
+plot(showEMA ? e21 : na, "EMA 21", color=color.new(color.green,  50), linewidth=1)
+plot(showEMA ? e55 : na, "EMA 55", color=color.new(color.orange, 40), linewidth=1)
+plot(showEMA ? e89 : na, "EMA 89", color=color.new(color.red,    40), linewidth=1)
 plot(showST  ? st1    : na, "Supertrend",
      color = d1 == 1 ? color.new(#26a69a, 0) : color.new(#ef5350, 0),
      linewidth = 2)
@@ -307,7 +402,7 @@ color C_BULL    = #26a69a
 color C_BEAR    = #ef5350
 color C_NEUTRAL = #2a2d35
 
-var table dash = table.new(position.top_right, 2, 12,
+var table dash = table.new(position.top_right, 2, 15,
      bgcolor = C_BG, frame_color = C_NEUTRAL, frame_width = 1,
      border_color = C_NEUTRAL, border_width = 1)
 
@@ -342,17 +437,26 @@ if showPanel and (barstate.islastconfirmedhistory or barstate.islast)
     table.cell(dash, 0, 7, "S/R",          text_color=C_LABEL, text_size=size.small)
     table.cell(dash, 1, 7, str.tostring(srScore),  text_color=cellOf(srScore, wSR),  text_size=size.small)
 
-    table.cell(dash, 0, 8, "Vol bonus",    text_color=C_LABEL, text_size=size.small)
-    table.cell(dash, 1, 8, str.tostring(volBonus) + "  (" + str.tostring(atrPct, "#.00") + "%)", text_color=C_TEXT, text_size=size.small)
+    table.cell(dash, 0, 8, "Ribbon",        text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1, 8, str.tostring(ribScore), text_color=cellOf(ribScore, wRIB), text_size=size.small)
 
-    table.cell(dash, 0, 9, "Room R",       text_color=C_LABEL, text_size=size.small)
-    table.cell(dash, 1, 9, str.tostring(dRes, "#.00") + " ATR", text_color=C_TEXT, text_size=size.small)
+    table.cell(dash, 0, 9, "Structure",    text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1, 9, str.tostring(strScore), text_color=cellOf(strScore, wSTR), text_size=size.small)
 
-    table.cell(dash, 0,10, "Room S",       text_color=C_LABEL, text_size=size.small)
-    table.cell(dash, 1,10, str.tostring(dSup, "#.00") + " ATR", text_color=C_TEXT, text_size=size.small)
+    table.cell(dash, 0,10, "Sweep",        text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,10, str.tostring(swpScore), text_color=cellOf(swpScore, wSWP), text_size=size.small)
 
-    table.cell(dash, 0,11, "Suggested",    text_color=C_LABEL, text_size=size.small)
-    table.cell(dash, 1,11, "SL " + str.tostring(sl, format.mintick) + " · TP " + str.tostring(tp, format.mintick), text_color=C_TEXT, text_size=size.small)
+    table.cell(dash, 0,11, "Vol bonus",    text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,11, str.tostring(volBonus) + "  (" + str.tostring(atrPct, "#.00") + "%)", text_color=C_TEXT, text_size=size.small)
+
+    table.cell(dash, 0,12, "Room R",       text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,12, str.tostring(dRes, "#.00") + " ATR", text_color=C_TEXT, text_size=size.small)
+
+    table.cell(dash, 0,13, "Room S",       text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,13, str.tostring(dSup, "#.00") + " ATR", text_color=C_TEXT, text_size=size.small)
+
+    table.cell(dash, 0,14, "Suggested",    text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,14, "SL " + str.tostring(sl, format.mintick) + " · TP " + str.tostring(tp, format.mintick), text_color=C_TEXT, text_size=size.small)
 
 // ─── Alerts (server-compatible JSON) ───────────────────────────────────
 // Mirrors `models.TVSignal`. Send to your /webhook with HMAC if you want.

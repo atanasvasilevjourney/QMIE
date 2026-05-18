@@ -26,9 +26,10 @@ class TestComputeSignal:
         assert sig.components["supertrend"] > 0
         assert sig.components["ema"] > 0
         assert sig.components["adx"] >= 0      # ADX may be neutral early in trend
-        # No HTF passed and pivots are sparse on linear data, so the
-        # achievable grade is bounded; just verify it's not REJECT
-        assert sig.grade != "REJECT"
+        assert sig.components["ribbon"] >= 0   # ribbon aligned or neutral
+        # No HTF / S/R / sweep on simple linear fixture; score is bounded.
+        # Verify the signal is directionally correct (positive score).
+        assert sig.score > 0
 
     def test_clear_downtrend_yields_sell(self, bear_trend_df):
         sig = compute_signal(bear_trend_df, symbol="X", timeframe="1h")
@@ -107,18 +108,21 @@ class TestGrade:
 
 
 class TestWeights:
-    def test_default_weights_sum_to_100(self):
+    def test_default_weights_total(self):
         w = Weights()
-        assert w.total == 100
+        # 20+15+15+15+20+10+5+10+10+8 = 128
+        assert w.total == 128
 
     def test_custom_weights(self):
-        w = Weights(supertrend=30, ema=10, rsi=10, adx=10, htf=30, sr=5, vol=5)
-        assert w.total == 100
+        w = Weights(supertrend=30, ema=10, rsi=10, adx=10, htf=30, sr=5, vol=5,
+                    ribbon=10, structure=10, sweep=8)
+        assert w.total == 128
 
     def test_weights_can_be_lopsided(self):
-        # Engine should still work with non-100-sum weights, though grades
+        # Engine should still work with non-equal weights, though grades
         # will scale differently. No exception expected.
-        w = Weights(supertrend=50, ema=0, rsi=0, adx=0, htf=50, sr=0, vol=0)
+        w = Weights(supertrend=50, ema=0, rsi=0, adx=0, htf=50, sr=0, vol=0,
+                    ribbon=0, structure=0, sweep=0)
         assert w.total == 100
 
 

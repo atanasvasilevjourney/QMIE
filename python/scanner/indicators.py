@@ -281,3 +281,99 @@ def triple_supertrend_dir(df: pd.DataFrame
     b = int(d2_series.iloc[-1])
     c = int(d3_series.iloc[-1])
     return a, b, c, a + b + c, line1, d1_series
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  EMA Ribbon  (8 / 21 / 55 / 89)
+# ═══════════════════════════════════════════════════════════════════════
+def ema_ribbon_dir(df: pd.DataFrame) -> tuple[int, float]:
+    """EMA ribbon 8/21/55/89. Returns (direction, contribution).
+
+    Bullish: e8>e21>e55>e89 AND close>e8  → (+1, 1.0)  fully fanned up
+    Partial: e8>e21>e55 AND close>e21     → (+1, 0.6)  3/4 in order
+    Weak:    close > e55                  → (+1, 0.3)  above mid ribbon
+    Mirror for bearish. Compressed/mixed  → (0, 0.0)
+    """
+    if len(df) < 90:
+        return 0, 0.0
+    close = df["close"]
+    e8  = float(ema(close, 8).iloc[-1])
+    e21 = float(ema(close, 21).iloc[-1])
+    e55 = float(ema(close, 55).iloc[-1])
+    e89 = float(ema(close, 89).iloc[-1])
+    c   = float(close.iloc[-1])
+    if e8 > e21 > e55 > e89 and c > e8:    return +1, 1.0
+    if e8 > e21 > e55 and c > e21:         return +1, 0.6
+    if c > e55:                             return +1, 0.3
+    if e8 < e21 < e55 < e89 and c < e8:    return -1, 1.0
+    if e8 < e21 < e55 and c < e21:         return -1, 0.6
+    if c < e55:                             return -1, 0.3
+    return 0, 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Market Structure  (BOS / CHoCH)
+# ═══════════════════════════════════════════════════════════════════════
+def market_structure_dir(df: pd.DataFrame, left: int = 5, right: int = 5,
+                          lookback: int = 4) -> tuple[int, float]:
+    """BOS detection via ascending/descending confirmed pivot sequence.
+
+    Bullish BOS: last `lookback` pivot lows are all ascending (HH+HL)  → (+1, 1.0)
+    Partial:     majority ascending                                     → (+1, 0.5)
+    Bearish BOS: last `lookback` pivot highs are all descending (LH+LL) → (-1, 1.0)
+    Partial:     majority descending                                    → (-1, 0.5)
+    Choppy/mixed                                                        → (0, 0.0)
+
+    Uses confirmed pivots only (right bars look-ahead already past).
+    """
+    min_bars = (left + right) * lookback
+    if len(df) < min_bars:
+        return 0, 0.0
+    ph = pivots(df["high"], left, right, "high").dropna()
+    pl = pivots(df["low"],  left, right, "low").dropna()
+    if len(ph) < lookback or len(pl) < lookback:
+        return 0, 0.0
+    recent_highs = ph.iloc[-lookback:].values
+    recent_lows  = pl.iloc[-lookback:].values
+    n = lookback - 1  # number of consecutive pairs
+    bull = sum(recent_lows[i]  > recent_lows[i - 1]  for i in range(1, lookback))
+    bear = sum(recent_highs[i] < recent_highs[i - 1] for i in range(1, lookback))
+    majority = (n + 1) // 2  # ceiling of half
+    if bull == n:          return +1, 1.0
+    if bull >= majority:   return +1, 0.5
+    if bear == n:          return -1, 1.0
+    if bear >= majority:   return -1, 0.5
+    return 0, 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Liquidity Sweep  (wick grab of recent swing high / low)
+# ═══════════════════════════════════════════════════════════════════════
+def liquidity_sweep_dir(df: pd.DataFrame, lookback: int = 20,
+                         bars_back: int = 3) -> tuple[int, float]:
+    """Detect a wick-based liquidity sweep on recent completed bars.
+
+    Bullish sweep: bar low < rolling swing low AND bar close > swing low
+                   (price grabbed stops below swing low then reversed)  → (+1, 1.0)
+    Bearish sweep: bar high > rolling swing high AND bar close < swing high
+                                                                        → (-1, 1.0)
+    Checks the last `bars_back` completed bars; returns on first match.
+    No sweep detected                                                   → (0, 0.0)
+    """
+    if len(df) < lookback + bars_back:
+        return 0, 0.0
+    for i in range(bars_back, 0, -1):
+        end   = len(df) - i
+        start = end - lookback
+        if start < 0:
+            continue
+        sw_low    = float(df["low"].iloc[start:end].min())
+        sw_high   = float(df["high"].iloc[start:end].max())
+        bar_low   = float(df["low"].iloc[end])
+        bar_high  = float(df["high"].iloc[end])
+        bar_close = float(df["close"].iloc[end])
+        if bar_low < sw_low and bar_close > sw_low:
+            return +1, 1.0
+        if bar_high > sw_high and bar_close < sw_high:
+            return -1, 1.0
+    return 0, 0.0

@@ -5,13 +5,16 @@ Pine-compatible scoring engine. Given a confirmed-candle DataFrame
 for the scan timeframe and (optionally) one for the higher
 timeframe, compute a directional signal with grade.
 
-Scoring (sum=100):
+Scoring (sum=100 directional + 5 vol bonus):
    Supertrend (triple-confluence) ............... 20
    EMA200 macro filter ........................... 15
    RSI zone + direction ........................... 15
    ADX trend strength ............................ 15
    HTF alignment ................................. 20
    S/R distance (room to move) ................... 10
+   EMA Ribbon 8/21/55/89 ......................... 10
+   Market Structure (BOS/CHoCH) .................. 10
+   Liquidity Sweep (wick grab) ..................... 8
    Volatility regime (ATR%) ....................... 5
 
 Letter grades:
@@ -40,6 +43,7 @@ import pandas as pd
 from .indicators import (
     adx, atr, ema, recent_sr_zones, rsi, supertrend,
     triple_supertrend_dir, nearest_sr_distance,
+    ema_ribbon_dir, market_structure_dir, liquidity_sweep_dir,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,10 +83,14 @@ class Weights:
     htf:        int = 20
     sr:         int = 10
     vol:        int = 5
+    ribbon:     int = 10   # EMA ribbon 8/21/55/89
+    structure:  int = 10   # BOS/CHoCH market structure
+    sweep:      int = 8    # Liquidity sweep (wick grab)
 
     @property
     def total(self) -> int:
-        return self.supertrend + self.ema + self.rsi + self.adx + self.htf + self.sr + self.vol
+        return (self.supertrend + self.ema + self.rsi + self.adx + self.htf +
+                self.sr + self.vol + self.ribbon + self.structure + self.sweep)
 
 
 # Module vote: -1 = sell-side support, 0 = neutral / penalty, +1 = buy-side support
@@ -223,6 +231,18 @@ def compute_signal(
         sr_c *= 0.3
     sr_score = _component(sr_d, weights.sr, sr_c)
 
+    # ─── 7b. EMA Ribbon (8/21/55/89) ────────────────────────────────────
+    ribbon_d, ribbon_c = ema_ribbon_dir(df)
+    ribbon_score = _component(ribbon_d, weights.ribbon, ribbon_c)
+
+    # ─── 7c. Market Structure (BOS/CHoCH) ───────────────────────────────
+    struct_d, struct_c = market_structure_dir(df)
+    struct_score = _component(struct_d, weights.structure, struct_c)
+
+    # ─── 7d. Liquidity Sweep ────────────────────────────────────────────
+    sweep_d, sweep_c = liquidity_sweep_dir(df)
+    sweep_score = _component(sweep_d, weights.sweep, sweep_c)
+
     # ─── 7. Volatility regime ───────────────────────────────────────────
     atr_pct = (atr_now / last_close) * 100.0
     # Sweet spot: 0.4% – 4.0% ATR. Outside → neutral.
@@ -236,10 +256,11 @@ def compute_signal(
     vol_score = vol_bonus
 
     # ─── Aggregate ──────────────────────────────────────────────────────
-    raw = st_score + ema_score + rsi_score + adx_score + htf_score + sr_score
+    raw = (st_score + ema_score + rsi_score + adx_score + htf_score + sr_score
+           + ribbon_score + struct_score + sweep_score)
     raw_directional_total = (
         weights.supertrend + weights.ema + weights.rsi + weights.adx +
-        weights.htf + weights.sr
+        weights.htf + weights.sr + weights.ribbon + weights.structure + weights.sweep
     )
     # Side = sign of raw vote sum
     if raw > 0:   side = "BUY"
@@ -294,6 +315,7 @@ def compute_signal(
         components={
             "supertrend": st_score, "ema": ema_score, "rsi": rsi_score,
             "adx": adx_score, "htf": htf_score, "sr": sr_score,
+            "ribbon": ribbon_score, "structure": struct_score, "sweep": sweep_score,
             "vol": vol_score, "st_dir": st_dir_last, "agreement": agreement,
             "rsi_now": round(rsi_now, 1), "adx_now": round(adx_now, 1),
             "atr_pct": round(atr_pct, 3),

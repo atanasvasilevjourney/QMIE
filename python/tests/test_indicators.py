@@ -18,7 +18,7 @@ import pytest
 from scanner.indicators import (
     SRZones, adx, atr, ema, nearest_sr_distance, pivots,
     recent_sr_zones, rma, rsi, supertrend, triple_supertrend_dir,
-    true_range,
+    true_range, ema_ribbon_dir, market_structure_dir, liquidity_sweep_dir,
 )
 
 
@@ -248,3 +248,123 @@ class TestSRZones:
         assert d_res == float("inf")
         # All supports below: nearest is 95
         assert d_sup == pytest.approx((200.0 - 95.0) / 2.0)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  EMA Ribbon  (8 / 21 / 55 / 89)
+# ════════════════════════════════════════════════════════════════════════
+def _ribbon_df(n: int = 150, slope: float = 1.0) -> pd.DataFrame:
+    """Trending price series: close[i] = 100 + slope*i."""
+    idx = pd.date_range("2024-01-01", periods=n, freq="1h", tz="UTC")
+    close = pd.Series([100.0 + slope * i for i in range(n)], index=idx)
+    return pd.DataFrame({
+        "open": close, "high": close + 0.5,
+        "low": close - 0.5, "close": close, "volume": 1000.0,
+    })
+
+
+class TestEmaRibbonDir:
+    def test_bullish_fanned_returns_positive_full(self):
+        df = _ribbon_df(150, slope=1.0)
+        d, c = ema_ribbon_dir(df)
+        assert d == +1
+        assert c == pytest.approx(1.0)
+
+    def test_bearish_fanned_returns_negative_full(self):
+        df = _ribbon_df(150, slope=-1.0)
+        d, c = ema_ribbon_dir(df)
+        assert d == -1
+        assert c == pytest.approx(1.0)
+
+    def test_too_short_returns_neutral(self):
+        df = _ribbon_df(50, slope=1.0)
+        d, c = ema_ribbon_dir(df)
+        assert d == 0
+        assert c == pytest.approx(0.0)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  Market Structure  (BOS / CHoCH)
+# ════════════════════════════════════════════════════════════════════════
+def _bos_df(n: int = 200, bullish: bool = True) -> pd.DataFrame:
+    """Price with clear swing structure — ascending lows (bullish) or descending highs (bearish)."""
+    idx = pd.date_range("2024-01-01", periods=n, freq="1h", tz="UTC")
+    # Oscillating pattern with overall drift
+    drift = 1.0 if bullish else -1.0
+    close = [100.0 + drift * i * 0.1 + 5.0 * np.sin(i * 0.3) for i in range(n)]
+    close = pd.Series(close, index=idx)
+    high  = close + 2.0
+    low   = close - 2.0
+    return pd.DataFrame({"open": close, "high": high, "low": low, "close": close, "volume": 1000.0})
+
+
+class TestMarketStructureDir:
+    def test_bullish_trend_returns_positive(self):
+        df = _bos_df(200, bullish=True)
+        d, c = market_structure_dir(df)
+        assert d == +1
+        assert c > 0.0
+
+    def test_bearish_trend_returns_negative(self):
+        df = _bos_df(200, bullish=False)
+        d, c = market_structure_dir(df)
+        assert d == -1
+        assert c > 0.0
+
+    def test_too_short_returns_neutral(self):
+        df = _bos_df(10, bullish=True)
+        d, c = market_structure_dir(df)
+        assert d == 0
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  Liquidity Sweep
+# ════════════════════════════════════════════════════════════════════════
+def _sweep_df(n: int = 40, kind: str = "bullish") -> pd.DataFrame:
+    """Create a df with a sweep on the second-to-last bar."""
+    idx = pd.date_range("2024-01-01", periods=n, freq="1h", tz="UTC")
+    close = pd.Series([100.0] * n, index=idx)
+    high  = pd.Series([101.0] * n, index=idx)
+    low   = pd.Series([99.0]  * n, index=idx)
+    if kind == "bullish":
+        # Sweep bar: low dips below swing low (95), closes back above it (100)
+        low.iloc[-2]   = 94.0
+        close.iloc[-2] = 100.0
+        high.iloc[-2]  = 101.0
+    else:
+        # Sweep bar: high spikes above swing high (105), closes back below it (100)
+        high.iloc[-2]  = 106.0
+        close.iloc[-2] = 100.0
+        low.iloc[-2]   = 99.0
+    return pd.DataFrame({"open": close, "high": high, "low": low, "close": close, "volume": 1000.0})
+
+
+class TestLiquiditySweepDir:
+    def test_bullish_sweep_returns_positive(self):
+        df = _sweep_df(40, "bullish")
+        d, c = liquidity_sweep_dir(df)
+        assert d == +1
+        assert c == pytest.approx(1.0)
+
+    def test_bearish_sweep_returns_negative(self):
+        df = _sweep_df(40, "bearish")
+        d, c = liquidity_sweep_dir(df)
+        assert d == -1
+        assert c == pytest.approx(1.0)
+
+    def test_no_sweep_returns_neutral(self):
+        # Flat df — no bars breach the swing range
+        idx = pd.date_range("2024-01-01", periods=40, freq="1h", tz="UTC")
+        close = pd.Series([100.0] * 40, index=idx)
+        df = pd.DataFrame({"open": close, "high": close + 0.5,
+                           "low": close - 0.5, "close": close, "volume": 1000.0})
+        d, c = liquidity_sweep_dir(df)
+        assert d == 0
+
+    def test_too_short_returns_neutral(self):
+        idx = pd.date_range("2024-01-01", periods=5, freq="1h", tz="UTC")
+        close = pd.Series([100.0] * 5, index=idx)
+        df = pd.DataFrame({"open": close, "high": close + 1,
+                           "low": close - 1, "close": close, "volume": 1000.0})
+        d, c = liquidity_sweep_dir(df)
+        assert d == 0
