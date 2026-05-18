@@ -107,6 +107,25 @@ def main(argv=None):
             # MAE/MFE averages
             avg_mae = g_df["mae_r"].mean() if "mae_r" in g_df else float("nan")
             avg_mfe = g_df["mfe_r"].mean() if "mfe_r" in g_df else float("nan")
+            # Sharpe / Sortino / Calmar via quantstats (daily R-series)
+            # Sharpe / Sortino via quantstats (daily R-series; Calmar skipped — not valid for R-multiples)
+            sharpe = sortino = float("nan")
+            try:
+                import quantstats as qs
+                daily_r = (
+                    g_df.set_index("timestamp")["realized_r"]
+                    .dropna()
+                    .resample("1D")
+                    .sum()
+                )
+                if len(daily_r) >= 30:
+                    sharpe  = round(qs.stats.sharpe(daily_r, annualize=True), 2)
+                    sortino = round(qs.stats.sortino(daily_r, annualize=True), 2)
+            except Exception:
+                pass
+            # Max drawdown on equity curve (in R units)
+            r_eq = g_df.sort_values("timestamp")["realized_r"].dropna().cumsum()
+            max_dd = round((r_eq - r_eq.cummax()).min(), 1)
             rows.append({
                 "Grade": g,
                 "Signals": len(subset[subset["grade"] == g]),
@@ -116,6 +135,9 @@ def main(argv=None):
                 "Expectancy R": f"{expectancy:+.3f}",
                 "Prof.Factor": f"{pf:.2f}",
                 "SQN": f"{sqn:.2f}",
+                "Sharpe": f"{sharpe:.2f}",
+                "Sortino": f"{sortino:.2f}",
+                "Max DD R": f"{max_dd:.1f}",
                 "Avg MAE": f"{avg_mae:.2f}",
                 "Avg MFE": f"{avg_mfe:.2f}",
                 "Avg bars": f"{g_df['bars_to_outcome'].mean():.1f}",

@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -111,6 +112,22 @@ def main():
                     avg_mae = round(closed_g["mae_r"].mean(), 2)
                     avg_mfe = round(closed_g["mfe_r"].mean(), 2)
             avg_bars = round(closed_g["bars_to_outcome"].mean(), 1) if len(closed_g) else None
+            sharpe = sortino = None
+            try:
+                import quantstats as qs
+                daily_r = (
+                    closed_g.set_index("timestamp")["realized_r"]
+                    .dropna()
+                    .resample("1D")
+                    .sum()
+                )
+                if len(daily_r) >= 30:
+                    sharpe  = round(qs.stats.sharpe(daily_r, annualize=True), 2)
+                    sortino = round(qs.stats.sortino(daily_r, annualize=True), 2)
+            except Exception:
+                pass
+            r_eq = closed_g.sort_values("timestamp")["realized_r"].dropna().cumsum()
+            max_dd = round((r_eq - r_eq.cummax()).min(), 1) if len(r_eq) else None
             rows.append({
                 "Grade": g,
                 "Signals": len(all_g),
@@ -120,6 +137,9 @@ def main():
                 "Expectancy R": expectancy,
                 "Prof. Factor": pf,
                 "SQN": sqn,
+                "Sharpe": sharpe,
+                "Sortino": sortino,
+                "Max DD R": max_dd,
                 "Avg MAE R": avg_mae,
                 "Avg MFE R": avg_mfe,
                 "Avg bars": avg_bars,
@@ -200,6 +220,51 @@ def main():
             ]
             st.dataframe(pivot, use_container_width=True)
             st.caption("Values = avg realized R per month. Green months > 0, red < 0.")
+
+    # ── Panel 3d: Equity Curve + Max Drawdown ───────────────────────
+    st.subheader("Equity Curve — Cumulative R (closed trades)")
+    if not closed.empty and "realized_r" in closed.columns:
+        equity_data = {}
+        for g in _GRADE_ORDER:
+            g_closed = closed[closed["grade"] == g].sort_values("timestamp")
+            r = g_closed["realized_r"].dropna()
+            if len(r):
+                equity_data[g] = r.cumsum().reset_index(drop=True)
+        if equity_data:
+            st.line_chart(pd.DataFrame(equity_data))
+            # Max drawdown table
+            dd_rows = []
+            for g, eq in equity_data.items():
+                peak = eq.cummax()
+                max_dd = round((eq - peak).min(), 2)
+                dd_rows.append({"Grade": g, "Max Drawdown R": max_dd,
+                                "Final R": round(eq.iloc[-1], 2)})
+            st.dataframe(pd.DataFrame(dd_rows).set_index("Grade"), use_container_width=True)
+            st.caption("Max Drawdown R = worst peak-to-trough in cumulative R. "
+                       "Final R = total R earned across all closed trades in filtered set.")
+
+    # ── Panel 3e: Monte Carlo ────────────────────────────────────────
+    st.subheader("Monte Carlo — 1,000 Trade-Order Shuffles")
+    if not closed.empty and "realized_r" in closed.columns:
+        grade_mc = st.selectbox("Grade", _GRADE_ORDER, key="mc_grade")
+        mc_r = closed[closed["grade"] == grade_mc]["realized_r"].dropna()
+        if len(mc_r) >= 30:
+            N_SIMS = 1000
+            arr = mc_r.values
+            rng = np.random.default_rng(42)
+            sims = np.array([rng.permutation(arr).cumsum() for _ in range(N_SIMS)])
+            p5  = np.percentile(sims, 5,  axis=0)
+            p50 = np.percentile(sims, 50, axis=0)
+            p95 = np.percentile(sims, 95, axis=0)
+            st.line_chart(pd.DataFrame({"P5 (worst)": p5, "Median": p50, "P95 (best)": p95}))
+            st.caption(
+                f"1,000 shuffles of {len(mc_r):,} closed {grade_mc} trades. "
+                f"All paths end at the same total R (sum is order-invariant). "
+                f"The bands show path variance — wide separation = high sensitivity to "
+                f"trade clustering. Narrow bands = robust regardless of when trades hit."
+            )
+        else:
+            st.info(f"Need ≥ 30 closed {grade_mc} trades for Monte Carlo (have {len(mc_r)}).")
 
     # ── Panel 4: Signal log ──────────────────────────────────────────
     st.subheader("Signal Log")
