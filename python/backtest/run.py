@@ -50,6 +50,9 @@ def _parse_args(argv=None):
     p.add_argument("--max-atr-pct", type=float, default=99.0,
                    help="Exclude signals with ATR%% above this value (default: 99 = all). "
                         "Use ≤4.0 to avoid extreme-volatility signals.")
+    p.add_argument("--min-adx", type=float, default=0.0,
+                   help="Exclude signals with ADX below this value (default: 0 = all). "
+                        "Recommended: 20 — filters entries during low-trend consolidation.")
     return p.parse_args(argv)
 
 
@@ -91,6 +94,13 @@ def main(argv=None):
             (df_out["atr_pct"] <= args.max_atr_pct)
         ].copy()
         print(f"ATR filter [{args.min_atr_pct}%-{args.max_atr_pct}%]: "
+              f"{before} -> {len(df_out)} signals ({before - len(df_out)} removed)")
+
+    # ADX trend-strength filter
+    if args.min_adx > 0 and "adx_value" in df_out.columns:
+        before = len(df_out)
+        df_out = df_out[df_out["adx_value"] >= args.min_adx].copy()
+        print(f"ADX filter [>={args.min_adx}]: "
               f"{before} -> {len(df_out)} signals ({before - len(df_out)} removed)")
 
     # Print summary table(s)

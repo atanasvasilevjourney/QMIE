@@ -33,6 +33,7 @@ class BacktestResult:
     stop_loss: float
     take_profit: float
     atr_pct: float
+    adx_value: float          # ADX at signal time (for post-hoc filtering)
     rr_ratio: float           # reward / risk at signal time
     outcome: str              # WIN / LOSS / OPEN
     bars_to_outcome: Optional[int]
@@ -161,6 +162,7 @@ def run_backtest(
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
             atr_pct=sig.atr_pct,
+            adx_value=sig.adx_value,
             rr_ratio=rr_ratio,
             outcome=outcome,
             bars_to_outcome=bars_to,
@@ -177,7 +179,7 @@ def results_to_dataframe(results: list[BacktestResult]) -> pd.DataFrame:
     if not results:
         return pd.DataFrame(columns=[
             "symbol", "timeframe", "timestamp", "side", "grade", "score",
-            "daily_trend", "entry", "stop_loss", "take_profit", "atr_pct",
+            "daily_trend", "entry", "stop_loss", "take_profit", "atr_pct", "adx_value",
             "rr_ratio", "outcome", "bars_to_outcome", "realized_r", "mae_r", "mfe_r",
         ])
     return pd.DataFrame([vars(r) for r in results])

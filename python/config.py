@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     sig_max_signals_per_symbol_per_day: int = 4
     sig_min_atr_pct: float = 0.10          # too quiet → suppress
     sig_max_atr_pct: float = 8.0           # too volatile → suppress
+    sig_min_adx: float = 0.0               # ADX trend-strength gate (0 = disabled, 20 = recommended)
     sig_funding_rate_threshold: float = 0.001  # suppress BUY when rate > +threshold, SELL when < -threshold (0.001 = 0.1%/8h)
 
     @property

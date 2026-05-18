@@ -155,6 +155,7 @@ async def lifespan(app: FastAPI):
         max_concurrency=s.scan_max_concurrency,
         sig_min_atr_pct=s.sig_min_atr_pct,
         sig_max_atr_pct=s.sig_max_atr_pct,
+        sig_min_adx=s.sig_min_adx,
         sig_funding_rate_threshold=s.sig_funding_rate_threshold,
     )
     await scheduler.start()

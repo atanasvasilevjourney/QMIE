@@ -100,7 +100,7 @@ def test_results_to_dataframe_schema():
         symbol="BTCUSDT", timeframe="1h",
         timestamp=pd.Timestamp("2024-01-01", tz="UTC"),
         side="BUY", grade="A", score=85.0, daily_trend="bullish",
-        entry=100.0, stop_loss=95.0, take_profit=110.0, atr_pct=1.5,
+        entry=100.0, stop_loss=95.0, take_profit=110.0, atr_pct=1.5, adx_value=28.0,
         outcome="WIN", bars_to_outcome=3,
         rr_ratio=1.5, realized_r=1.5, mae_r=-0.2, mfe_r=1.8,
     )

@@ -67,6 +67,7 @@ class ScannerScheduler:
         max_concurrency: int = 8,
         sig_min_atr_pct: float = 0.10,
         sig_max_atr_pct: float = 8.0,
+        sig_min_adx: float = 0.0,
         sig_funding_rate_threshold: float = 0.001,
     ):
         self.client = client
@@ -79,6 +80,7 @@ class ScannerScheduler:
         self.sem = asyncio.Semaphore(max_concurrency)
         self.sig_min_atr_pct = sig_min_atr_pct
         self.sig_max_atr_pct = sig_max_atr_pct
+        self.sig_min_adx = sig_min_adx
         self.sig_funding_rate_threshold = sig_funding_rate_threshold
 
         # tf → unix-sec of the most recent bar we've already scanned
@@ -191,6 +193,13 @@ class ScannerScheduler:
                         return
                     # Volatility regime gate
                     if not (self.sig_min_atr_pct <= res.atr_pct <= self.sig_max_atr_pct):
+                        return
+                    # ADX trend-strength gate (0 = disabled)
+                    if self.sig_min_adx > 0 and res.adx_value < self.sig_min_adx:
+                        logger.debug(
+                            "ADX gate suppressed %s %s (adx=%.1f < %.1f)",
+                            sym, res.side, res.adx_value, self.sig_min_adx,
+                        )
                         return
                     # Funding rate directional filter (crowded-side suppression)
                     try:
