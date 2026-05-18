@@ -125,3 +125,61 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
 
 If a request would take it in any of those directions, push back and
 ask for confirmation that the scope is intentionally changing.
+
+---
+
+## Workflow (Claude Code Operating Instructions)
+
+### 1. Plan Mode Default
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions).
+- If something goes sideways, STOP and re-plan immediately — do not keep pushing.
+- Use plan mode for verification steps, not just building.
+- Write specs to `tasks/todo.md` before starting implementation.
+
+### 2. Subagent Strategy
+- Use subagents to keep main context clean.
+- Offload research, exploration, and parallel analysis to subagents.
+- One task per subagent for focused execution.
+
+### 3. Self-Improvement Loop
+- After ANY correction from user: update `tasks/lessons.md` with the pattern.
+- Write rules to prevent the same mistake from recurring.
+- Review lessons at session start.
+
+### 4. Verification Before Done
+- Never mark a task complete without proving it works.
+- Run tests, check logs, use `git diff` to verify behavior.
+- Ask: "Would a staff engineer approve this?"
+
+### 5. Task Management
+1. Write plan to `tasks/todo.md` with checkable items.
+2. Check in with user before starting implementation.
+3. Mark items complete as you go.
+4. Capture lessons in `tasks/lessons.md` after major corrections.
+
+### 6. Core Principles
+- **Simplicity First**: Make every change as simple as possible. Minimal code impact.
+- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
+- **Minimal Impact**: Only touch what is necessary. Avoid side effects.
+
+---
+
+## Recommended Open-Source Frameworks
+
+### Backtest / Analysis (use in `python/backtest/`)
+| Library | Purpose | Why it fits QMIE |
+|---|---|---|
+| **quantstats** | Tearsheet: Sharpe, Sortino, Calmar, monthly heatmap, drawdown chart | Drop-in from a `realized_r` series — replaces hand-rolled monthly P&L |
+| **vectorbt** | Vectorized backtesting, Monte Carlo, parameter sweeps | Phase 3: equity curve + drawdown, 100x faster than bar loops |
+| **pandas-ta** | 130+ technical indicators | Augment scanner without breaking Pine parity (never replace indicators.py) |
+
+### Infrastructure (already used or considered)
+| Library | Purpose |
+|---|---|
+| **Jesse** | Reference for accurate bar-by-bar backtest methodology |
+| **Freqtrade** | Reference for metrics standards (Profit Factor ≥ 1.5, Expectancy > 0) |
+
+### Install when needed
+```bash
+pip install quantstats vectorbt pandas-ta
+```
