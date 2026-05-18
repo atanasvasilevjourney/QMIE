@@ -25,40 +25,40 @@ class TestEvaluateOutcome:
     def test_buy_win_when_high_hits_tp_first(self):
         df = _make_flat_df(20)
         df.iloc[5, df.columns.get_loc("high")] = 110.0
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="BUY",
-                                          take_profit=105.0, stop_loss=95.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="BUY",
+                                                        entry=100.0, take_profit=105.0, stop_loss=95.0)
         assert outcome == "WIN"
         assert bars == 5
 
     def test_buy_loss_when_low_hits_sl_first(self):
         df = _make_flat_df(20)
         df.iloc[3, df.columns.get_loc("low")] = 90.0
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="BUY",
-                                          take_profit=105.0, stop_loss=95.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="BUY",
+                                                        entry=100.0, take_profit=105.0, stop_loss=95.0)
         assert outcome == "LOSS"
         assert bars == 3
 
     def test_buy_open_when_neither_hit(self):
         df = _make_flat_df(20)
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="BUY",
-                                          take_profit=200.0, stop_loss=1.0,
-                                          max_lookahead=10)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="BUY",
+                                                        entry=100.0, take_profit=200.0, stop_loss=1.0,
+                                                        max_lookahead=10)
         assert outcome == "OPEN"
         assert bars is None
 
     def test_sell_win_when_low_hits_tp_first(self):
         df = _make_flat_df(20)
         df.iloc[4, df.columns.get_loc("low")] = 85.0
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="SELL",
-                                          take_profit=90.0, stop_loss=110.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="SELL",
+                                                        entry=100.0, take_profit=90.0, stop_loss=110.0)
         assert outcome == "WIN"
         assert bars == 4
 
     def test_sell_loss_when_high_hits_sl_first(self):
         df = _make_flat_df(20)
         df.iloc[2, df.columns.get_loc("high")] = 115.0
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="SELL",
-                                          take_profit=90.0, stop_loss=110.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="SELL",
+                                                        entry=100.0, take_profit=90.0, stop_loss=110.0)
         assert outcome == "LOSS"
         assert bars == 2
 
@@ -66,23 +66,23 @@ class TestEvaluateOutcome:
         df = _make_flat_df(20)
         df.iloc[1, df.columns.get_loc("high")] = 200.0
         df.iloc[1, df.columns.get_loc("low")] = 1.0
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="BUY",
-                                          take_profit=150.0, stop_loss=50.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="BUY",
+                                                        entry=100.0, take_profit=150.0, stop_loss=50.0)
         assert outcome == "LOSS"
         assert bars == 1
 
     def test_respects_max_lookahead(self):
         df = _make_flat_df(200)
-        outcome, bars = _evaluate_outcome(df, signal_idx=0, side="BUY",
-                                          take_profit=200.0, stop_loss=1.0,
-                                          max_lookahead=5)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=0, side="BUY",
+                                                        entry=100.0, take_profit=200.0, stop_loss=1.0,
+                                                        max_lookahead=5)
         assert outcome == "OPEN"
         assert bars is None
 
     def test_signal_at_end_of_df_returns_open(self):
         df = _make_flat_df(5)
-        outcome, bars = _evaluate_outcome(df, signal_idx=4, side="BUY",
-                                          take_profit=200.0, stop_loss=1.0)
+        outcome, bars, mae_r, mfe_r = _evaluate_outcome(df, signal_idx=4, side="BUY",
+                                                        entry=100.0, take_profit=200.0, stop_loss=1.0)
         assert outcome == "OPEN"
         assert bars is None
 
@@ -102,6 +102,7 @@ def test_results_to_dataframe_schema():
         side="BUY", grade="A", score=85.0, daily_trend="bullish",
         entry=100.0, stop_loss=95.0, take_profit=110.0, atr_pct=1.5,
         outcome="WIN", bars_to_outcome=3,
+        rr_ratio=1.5, realized_r=1.5, mae_r=-0.2, mfe_r=1.8,
     )
     df = results_to_dataframe([r])
     assert len(df) == 1

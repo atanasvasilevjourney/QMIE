@@ -67,6 +67,7 @@ class ScannerScheduler:
         max_concurrency: int = 8,
         sig_min_atr_pct: float = 0.10,
         sig_max_atr_pct: float = 8.0,
+        sig_funding_rate_threshold: float = 0.001,
     ):
         self.client = client
         self.universe = universe
@@ -78,6 +79,7 @@ class ScannerScheduler:
         self.sem = asyncio.Semaphore(max_concurrency)
         self.sig_min_atr_pct = sig_min_atr_pct
         self.sig_max_atr_pct = sig_max_atr_pct
+        self.sig_funding_rate_threshold = sig_funding_rate_threshold
 
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
@@ -190,6 +192,27 @@ class ScannerScheduler:
                     # Volatility regime gate
                     if not (self.sig_min_atr_pct <= res.atr_pct <= self.sig_max_atr_pct):
                         return
+                    # Funding rate directional filter (crowded-side suppression)
+                    try:
+                        premium = await self.client.fetch_premium_index(sym)
+                        fr = float(premium.get("lastFundingRate", 0) or 0)
+                        res.funding_rate = fr
+                        threshold = self.sig_funding_rate_threshold
+                        if res.side == "BUY" and fr > threshold:
+                            logger.info(
+                                "Funding filter suppressed BUY %s (rate=%.4f%%)",
+                                sym, fr * 100,
+                            )
+                            return
+                        if res.side == "SELL" and fr < -threshold:
+                            logger.info(
+                                "Funding filter suppressed SELL %s (rate=%.4f%%)",
+                                sym, fr * 100,
+                            )
+                            return
+                    except Exception as exc:
+                        logger.warning("Could not fetch funding rate for %s: %s", sym, exc)
+                        # Fail open — don't suppress signal if API fails
                     if await self.dispatcher.dispatch(res):
                         self.stats["alerts_dispatched"] += 1
                 except Exception as e:

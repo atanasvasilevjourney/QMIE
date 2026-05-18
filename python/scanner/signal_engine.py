@@ -67,6 +67,7 @@ class ScanResult:
     components:    dict = field(default_factory=dict)  # per-module raw votes
     reason:        str = ""
     daily_trend:   str = "unknown"     # "bullish" / "bearish" / "unknown"
+    funding_rate:  Optional[float] = None  # latest 8h rate, injected by scheduler
 
 
 @dataclass

@@ -154,6 +154,22 @@ class BinanceClient(ExchangeClient):
         rows.sort(key=lambda r: -r[1])
         return [r[0] for r in rows[:top_n]]
 
+    async def fetch_premium_index(self, symbol: str) -> dict:
+        """Fetch current mark price + funding rate via /fapi/v1/premiumIndex."""
+        url = f"{self.BASE}/fapi/v1/premiumIndex"
+        params = {"symbol": symbol.upper()}
+        sess = await self._s()
+        for attempt in range(2):
+            try:
+                async with sess.get(url, params=params, timeout=self._timeout) as r:
+                    r.raise_for_status()
+                    return await r.json()
+            except Exception as exc:
+                if attempt == 1:
+                    raise
+                await asyncio.sleep(0.25)
+        return {}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 class BybitClient(ExchangeClient):
