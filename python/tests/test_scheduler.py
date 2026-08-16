@@ -124,6 +124,75 @@ class TestSchedulerTick:
             mod.time.time = orig
 
 
+class TestRadarPass:
+    """Daily Trend Radar fires independently of SCAN_TIMEFRAMES."""
+
+    @pytest.fixture
+    def fake_components(self):
+        client = MagicMock()
+        client.fetch_klines = AsyncMock(return_value=None)
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT"])
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(return_value=False)
+        return client, universe, dispatcher
+
+    @pytest.fixture
+    def bull_daily(self, bull_trend_df):
+        import pandas as pd
+        df = bull_trend_df.copy()
+        df.index = pd.date_range("2024-01-01", periods=len(df), freq="1D", tz="UTC")
+        return df
+
+    async def test_radar_pass_builds_snapshot(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            weights=Weights(),
+            radar_enabled=True,
+        )
+        await scheduler._radar_pass()
+        assert scheduler.last_radar is not None
+        assert scheduler.last_radar.count >= 1
+        assert scheduler.stats["radar_passes"] == 1
+        client.fetch_klines.assert_called()
+        assert client.fetch_klines.call_args.args[1] == "1d"
+
+    async def test_radar_tick_fires_after_daily_grace(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            weights=Weights(),
+            radar_enabled=True,
+        )
+        now = int(time.time())
+        day_boundary = (now // 86400) * 86400
+        scheduler._last_radar_seen = day_boundary - 86400
+        hour_boundary = (now // 3600) * 3600
+        scheduler._last_seen["1h"] = hour_boundary
+        import scanner.scheduler as mod
+        orig = mod.time.time
+        try:
+            mod.time.time = lambda: day_boundary + 10
+            await scheduler._tick()
+        finally:
+            mod.time.time = orig
+        assert scheduler.stats["radar_passes"] == 1
+        assert scheduler.last_radar is not None
+
+
 class TestDailyDfRouting:
     """Verify that scan_one passes the correct daily_df to compute_signal."""
 

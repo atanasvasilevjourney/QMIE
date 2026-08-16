@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     alloc_btc_symbol:     str = "BTCUSDT"
     alloc_paxg_symbol:    str = "PAXGUSDT"
 
+    # ─── Daily Trend Radar (RGG + coil breakouts; signal-only) ───────────
+    radar_enabled:            bool = True
+    radar_adx_length:         int = 14
+    radar_enter_adx:          float = 25.0   # leave GREY → trend
+    radar_exit_adx:           float = 18.0   # trend → GREY
+    radar_coil_lookback:      int = 20
+    radar_coil_max_width_pct: float = 15.0
+    radar_fresh_flip_days:    int = 3
+    radar_late_stage_days:    int = 30
+    radar_late_stage_move_pct: float = 50.0
+    radar_kline_limit:        int = 250
+    radar_notify:             bool = True
+
     @property
     def webhook_allowlist(self) -> list[str]:
         return [ip.strip() for ip in self.webhook_allow_ips.split(",") if ip.strip()]
@@ -184,6 +197,11 @@ class Settings(BaseSettings):
             warnings.append(
                 f"ALLOC_DEFENSIVE2={self.alloc_defensive2!r} invalid; "
                 "expected off, cash, paxg, or paxg_then_cash."
+            )
+        if self.radar_exit_adx > self.radar_enter_adx:
+            warnings.append(
+                f"RADAR_EXIT_ADX={self.radar_exit_adx} > "
+                f"RADAR_ENTER_ADX={self.radar_enter_adx}; hysteresis inverted."
             )
         return warnings
 

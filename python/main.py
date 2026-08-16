@@ -12,6 +12,8 @@ Endpoints:
   GET  /universe              the symbol set the next pass will scan
   POST /scan/once             admin: force an immediate scan pass on a TF
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
+  GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
+  POST /radar/once            admin: force an immediate daily radar pass
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -38,6 +40,7 @@ from notifiers import DiscordNotifier, Notifier, TelegramNotifier
 from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher, tv_chart_url
 from scanner.exchange_clients import get_client
+from scanner.radar import RadarConfig
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
@@ -180,6 +183,19 @@ async def lifespan(app: FastAPI):
             btc_symbol=s.alloc_btc_symbol,
             paxg_symbol=s.alloc_paxg_symbol,
         ),
+        radar_enabled=s.radar_enabled,
+        radar_cfg=RadarConfig(
+            adx_length=s.radar_adx_length,
+            enter_adx=s.radar_enter_adx,
+            exit_adx=s.radar_exit_adx,
+            coil_lookback=s.radar_coil_lookback,
+            coil_max_width_pct=s.radar_coil_max_width_pct,
+            fresh_flip_days=s.radar_fresh_flip_days,
+            late_stage_days=s.radar_late_stage_days,
+            late_stage_move_pct=s.radar_late_stage_move_pct,
+            kline_limit=s.radar_kline_limit,
+            notify=s.radar_notify,
+        ),
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -295,6 +311,45 @@ async def get_allocation() -> dict[str, Any]:
             "note": "no_scan_yet",
         }
     return plan.as_dict()
+
+
+@app.get("/radar")
+async def get_radar() -> dict[str, Any]:
+    """Last daily Trend Radar snapshot (RGG + coils + breakouts).
+    Signal-only — does not place orders."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    snap = state.scheduler.last_radar
+    if snap is None:
+        return {
+            "as_of": None,
+            "timeframe": "1d",
+            "count": 0,
+            "green": 0,
+            "grey": 0,
+            "red": 0,
+            "fresh_green": [],
+            "fresh_red": [],
+            "tight_coils": [],
+            "breakouts": [],
+            "late_stage_green": [],
+            "rows": [],
+            "note": "no_radar_yet",
+            "enabled": state.scheduler.radar_enabled,
+        }
+    return snap.as_dict()
+
+
+@app.post("/radar/once")
+async def radar_once() -> dict[str, Any]:
+    """Admin: force an immediate daily Trend Radar pass (without waiting
+    for the next 1D bar close). Useful for warmup / sanity checks."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    if not state.scheduler.radar_enabled:
+        raise HTTPException(400, "radar_disabled")
+    asyncio.create_task(state.scheduler._radar_pass())
+    return {"ok": True, "queued": "1d"}
 
 
 async def _maybe_notify_journal_drift() -> None:

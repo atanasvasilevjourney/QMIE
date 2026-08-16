@@ -27,6 +27,14 @@ from typing import Optional
 from .allocator import AllocConfig, AllocationPlan, allocate
 from .dispatcher import SignalDispatcher
 from .exchange_clients import ExchangeClient
+from .radar import (
+    RadarConfig,
+    RadarSnapshot,
+    RadarRow,
+    build_snapshot,
+    classify_symbol,
+    format_radar_digest,
+)
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
 
@@ -71,6 +79,8 @@ class ScannerScheduler:
         sig_min_adx: float = 0.0,
         sig_funding_rate_threshold: float = 0.001,
         alloc_cfg: Optional[AllocConfig] = None,
+        radar_cfg: Optional[RadarConfig] = None,
+        radar_enabled: bool = True,
     ):
         self.client = client
         self.universe = universe
@@ -88,6 +98,14 @@ class ScannerScheduler:
         self.last_allocation: Optional[AllocationPlan] = None
         self._last_rotation_key: Optional[tuple] = None
 
+        # Daily Trend Radar (independent of SCAN_TIMEFRAMES)
+        self.radar_enabled = radar_enabled
+        self.radar_cfg = radar_cfg or RadarConfig()
+        self.last_radar: Optional[RadarSnapshot] = None
+        # Seed to "today's" boundary so we wait for the *next* daily close
+        # (and unit tests that tick without start() do not fire a radar pass).
+        self._last_radar_seen: int = _last_close_ts(time.time(), _tf_seconds("1d"))
+
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
         self._task: Optional[asyncio.Task] = None
@@ -98,6 +116,8 @@ class ScannerScheduler:
             "alerts_dispatched": 0,
             "errors": 0,
             "last_pass_at": None,
+            "radar_passes": 0,
+            "last_radar_at": None,
         }
 
     # ─── Lifecycle ───────────────────────────────────────────────────────
@@ -108,8 +128,13 @@ class ScannerScheduler:
         now = time.time()
         for tf in self.timeframes:
             self._last_seen[tf] = _last_close_ts(now, _tf_seconds(tf))
+        # Seed radar so we wait for the *next* daily close (no replay on boot).
+        self._last_radar_seen = _last_close_ts(now, _tf_seconds("1d"))
         self._task = asyncio.create_task(self._run())
-        logger.info("Scanner scheduler started: TFs=%s symbols=universe", self.timeframes)
+        logger.info(
+            "Scanner scheduler started: TFs=%s radar=%s symbols=universe",
+            self.timeframes, self.radar_enabled,
+        )
 
     async def stop(self) -> None:
         self._stop.set()
@@ -145,6 +170,19 @@ class ScannerScheduler:
                (now - current_close >= 5):     # 5s grace
                 due.append(tf)
                 self._last_seen[tf] = current_close
+
+        # Daily Trend Radar — fires once per closed 1D bar (independent of
+        # SCAN_TIMEFRAMES). Signal-only digest; never places orders.
+        if self.radar_enabled:
+            day_sec = _tf_seconds("1d")
+            current_day = _last_close_ts(now, day_sec)
+            if (current_day > self._last_radar_seen) and (now - current_day >= 5):
+                self._last_radar_seen = current_day
+                try:
+                    await self._radar_pass()
+                except Exception:
+                    logger.exception("Trend Radar pass failed")
+                    self.stats["errors"] += 1
 
         if not due:
             return
@@ -323,6 +361,53 @@ class ScannerScheduler:
         self.stats["last_pass_at"] = int(time.time())
         logger.info("Scan pass tf=%s completed in %.2fs (symbols=%d)",
                     tf, elapsed, len(symbols))
+
+    async def _radar_pass(self) -> None:
+        """Daily RGG + coil radar over the current universe. Signal-only."""
+        symbols = await self.universe.get()
+        if not symbols:
+            logger.warning("Trend Radar: universe empty")
+            return
+
+        cfg = self.radar_cfg
+        logger.info("Trend Radar pass: symbols=%d limit=%d", len(symbols), cfg.kline_limit)
+        t0 = time.time()
+
+        async def one(sym: str) -> Optional[RadarRow]:
+            async with self.sem:
+                try:
+                    df = await self.client.fetch_klines(sym, "1d", limit=cfg.kline_limit)
+                    return classify_symbol(df, sym, cfg=cfg)
+                except Exception as e:
+                    logger.warning("radar %s failed: %s", sym, e)
+                    return None
+
+        gathered = await asyncio.gather(*(one(s) for s in symbols), return_exceptions=True)
+        rows: list[RadarRow] = []
+        for item in gathered:
+            if isinstance(item, RadarRow):
+                rows.append(item)
+            elif isinstance(item, Exception):
+                logger.warning("radar gather error: %s", item)
+                self.stats["errors"] += 1
+
+        snap = build_snapshot(rows, timeframe="1d")
+        self.last_radar = snap
+        self.stats["radar_passes"] += 1
+        self.stats["last_radar_at"] = int(time.time())
+        logger.info(
+            "Trend Radar done in %.2fs: n=%d G=%d Gy=%d R=%d flips_g=%d coils=%d brk=%d",
+            time.time() - t0, snap.count, snap.green, snap.grey, snap.red,
+            len(snap.fresh_green), len(snap.tight_coils), len(snap.breakouts),
+        )
+
+        if cfg.notify and rows:
+            msg = format_radar_digest(snap)
+            notifiers = getattr(self.dispatcher, "notifiers", []) or []
+            await asyncio.gather(
+                *(n.send_text(msg) for n in notifiers if getattr(n, "enabled", True)),
+                return_exceptions=True,
+            )
 
     async def _notify_rotation_text(self, plan: AllocationPlan) -> None:
         scores = ", ".join(

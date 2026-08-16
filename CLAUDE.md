@@ -39,6 +39,7 @@ qmie/
 │   │   ├── scheduler.py              Bar-close-aware loop
 │   │   ├── allocator.py              Ranked swing book + ARS rotation
 │   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
+│   │   ├── radar.py                  Daily RGG + coil Trend Radar
 │   │   ├── dispatcher.py             Dedup + notifier fan-out + TV deep-link
 │   │   └── symbol_universe.py        Static list + auto-top-N by volume
 │   ├── journal.py                    Manual fills vs alerts
