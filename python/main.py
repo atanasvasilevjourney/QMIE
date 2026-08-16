@@ -40,7 +40,7 @@ from notifiers import DiscordNotifier, Notifier, TelegramNotifier
 from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher, tv_chart_url
 from scanner.exchange_clients import get_client
-from scanner.radar import RadarConfig
+from scanner.radar import RadarConfig, empty_radar_snapshot
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
@@ -195,6 +195,7 @@ async def lifespan(app: FastAPI):
             late_stage_move_pct=s.radar_late_stage_move_pct,
             kline_limit=s.radar_kline_limit,
             notify=s.radar_notify,
+            min_coverage_pct=s.radar_min_coverage_pct,
         ),
     )
     await scheduler.start()
@@ -316,41 +317,35 @@ async def get_allocation() -> dict[str, Any]:
 @app.get("/radar")
 async def get_radar() -> dict[str, Any]:
     """Last daily Trend Radar snapshot (RGG + coils + breakouts).
-    Signal-only — does not place orders."""
+    Unranked daily context — does not place orders."""
     if state.scheduler is None:
         raise HTTPException(503, "scanner_not_ready")
     snap = state.scheduler.last_radar
     if snap is None:
-        return {
-            "as_of": None,
-            "timeframe": "1d",
-            "count": 0,
-            "green": 0,
-            "grey": 0,
-            "red": 0,
-            "fresh_green": [],
-            "fresh_red": [],
-            "tight_coils": [],
-            "breakouts": [],
-            "late_stage_green": [],
-            "rows": [],
-            "note": "no_radar_yet",
-            "enabled": state.scheduler.radar_enabled,
-        }
-    return snap.as_dict()
+        return empty_radar_snapshot(
+            enabled=state.scheduler.radar_enabled,
+            note="no_radar_yet",
+        ).as_dict()
+    out = snap.as_dict()
+    out.setdefault("enabled", state.scheduler.radar_enabled)
+    return out
 
 
 @app.post("/radar/once")
-async def radar_once() -> dict[str, Any]:
-    """Admin: force an immediate daily Trend Radar pass (without waiting
-    for the next 1D bar close). Useful for warmup / sanity checks."""
+async def radar_once(notify: bool = False) -> dict[str, Any]:
+    """Admin: force a daily Trend Radar pass (no wait for next 1D close).
+
+    Default notify=false so forced runs cannot spam Discord. Pass
+    ``?notify=true`` only when you intentionally want a digest.
+    """
     if state.scheduler is None:
         raise HTTPException(503, "scanner_not_ready")
     if not state.scheduler.radar_enabled:
         raise HTTPException(400, "radar_disabled")
-    asyncio.create_task(state.scheduler._radar_pass())
-    return {"ok": True, "queued": "1d"}
-
+    result = await state.scheduler.request_radar_once(notify=notify)
+    if not result.get("ok") and result.get("reason") == "radar_disabled":
+        raise HTTPException(400, "radar_disabled")
+    return result
 
 async def _maybe_notify_journal_drift() -> None:
     s = state.settings
