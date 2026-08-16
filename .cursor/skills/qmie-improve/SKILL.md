@@ -11,8 +11,11 @@ description: >-
 
 QMIE is an **alert-only** USDT-perp scanner. The self-improve loop is:
 prompt → ranked swing allocation → journaled outcome → one new prompt
-(a single knob). It is **not** Hermes, Signum, HyperLiquid, Railway,
-or a TradingView MCP.
+(a single knob). It is **not** Hermes, Signum, HyperLiquid, or Railway.
+
+The optional TradingView MCP (`.cursor/mcp.json`) is a **shadow stdio**
+server for screeners / second-opinion TA. It is not the scanner and
+must not retune weights. See `docs/tradingview-mcp.md`.
 
 ## When to use
 
@@ -26,7 +29,11 @@ or a TradingView MCP.
 1. **No execution.** No broker adapters, API wallets, private keys, or live orders.
 2. **One variable per cycle.** If last week's change is not yet measured, do not propose another.
 3. **Do not write `.env`.** Write `strategy/reviews/YYYY-MM-DD.md`. A human applies the knob and updates `strategy/baseline.yaml`.
-4. **No shadow MCPs.** Do not `npx` TradingView/Signum/Hermes servers. This repo's TradingView surface is `pine/quant_visualizer.pine` plus `tv_chart_url()` deep links. If an MCP is required later, use a Runlayer-managed server.
+4. **No extra shadow MCPs.** Do not `npx` Signum/Hermes servers. The
+   one allowed project MCP is `tradingview` in `.cursor/mcp.json`
+   (atilaahmettaner/tradingview-mcp via `uvx`). Prefer Runlayer if a
+   managed TradingView server appears. Never mix MCP TA into QMIE
+   `W_*` or `compute_signal`.
 5. **Do not retune scoring weights** on the sample used to report hit rate. Frozen OOS write-up (`docs/backtest-baseline.md`) first.
 
 ## Workflow

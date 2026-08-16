@@ -43,6 +43,9 @@ Sprint 1 has an OOS number.
       (`cash` / `paxg` / `paxg_then_cash`); `pine/asset_rotation.pine`
 - [x] One-variable review CLI + Cursor agent (`python -m improve.review`,
       `strategy/goals.yaml`) — proposes, does not trade or write `.env`
+- [x] Cursor TradingView MCP (`.cursor/mcp.json` →
+      atilaahmettaner/tradingview-mcp via `uvx`; shadow stdio;
+      `docs/tradingview-mcp.md`)
 
 
 ## Sprint 3 — Hardening (only if Sprint 1 shows edge)
@@ -54,6 +57,7 @@ Sprint 1 has an OOS number.
 ## Won't do (unless scope is explicitly changed)
 - Order execution / broker adapters
 - Hermes / Signum / HyperLiquid / Railway "oneshot" trading agents
+- Extra shadow MCPs beyond `.cursor/mcp.json` `tradingview`
 - Weight hyperopt on the reporting sample
 - Forex / indices / equities
 - Re-implementing equity curve / Monte Carlo / SQN (already in

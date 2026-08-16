@@ -18,4 +18,5 @@ Then open the newest `strategy/reviews/*.md` and report:
 - the single `proposed_knob` or why none
 - reminder: do not write `.env`; do not place orders
 
-TradingView in this repo is Pine + chart links, not MCP.
+TradingView charts in this repo are Pine + deep links. Optional MCP:
+`.cursor/mcp.json` (shadow stdio). Do not retune weights from it.

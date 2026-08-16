@@ -37,6 +37,12 @@ plots and the same dashboard. When the server alerts `BUY BTCUSDT 4H A
 87/100`, you click the chart link, the indicator confirms the same
 setup visually, you make the entry decision yourself.
 
+Cursor can also talk to [atilaahmettaner/tradingview-mcp](https://github.com/atilaahmettaner/tradingview-mcp)
+via `.cursor/mcp.json` (`uvx` → `tradingview-mcp-server`). That is a
+**shadow MCP** (not Runlayer). It is a screener / second-opinion TA
+layer, **not** Pine-parity and **not** a QMIE scoring input. Setup:
+[`docs/tradingview-mcp.md`](docs/tradingview-mcp.md).
+
 ---
 
 ## What it does NOT do

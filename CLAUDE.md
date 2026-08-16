@@ -51,13 +51,14 @@ qmie/
 │   ├── pytest.ini
 │   └── .env.example
 ├── strategy/                         goals, baseline knobs, weekly reviews
-├── .cursor/                          qmie-review agent / skill / command
+├── .cursor/                          qmie-review, tradingview MCP, skills
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
 ├── docs/
 │   ├── architecture.md               How things fit + scaling cliffs
-│   └── development-status.md         Completeness score + sprint plan
+│   ├── development-status.md         Completeness score + sprint plan
+│   └── tradingview-mcp.md            Cursor TradingView MCP (shadow stdio)
 ├── README.md
 └── REVIEW.md                         Audit findings (partially stale; see status doc)
 ```
@@ -123,6 +124,12 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    BOS/CHoCH structure, and liquidity sweep were cut. Do not put them
    back without a frozen OOS that shows they help. See
    `test_cut_components_not_in_score`.
+
+8. **TradingView MCP is not the scanner.** `.cursor/mcp.json` launches
+   atilaahmettaner/tradingview-mcp (`uvx`, shadow stdio). Use it for
+   screeners / second-opinion TA. Do not retune `W_*` or Pine from it.
+   Prefer Runlayer if a managed TV server appears. See
+   `docs/tradingview-mcp.md`.
 
 
 ## Conventions

@@ -10,7 +10,11 @@ alwaysApply: false
 # QMIE trading-agent boundary
 
 - No order execution, broker adapters, HyperLiquid API wallets, or Signum bots.
-- No Hermes / OpenClaw install. No `npx` MCP servers. Prefer Runlayer if an MCP is ever required.
-- TradingView = `pine/quant_visualizer.pine` + `tv_chart_url()`. There is no TV HTTP trading API here.
+- No Hermes / OpenClaw install. No `npx` MCP servers. Prefer Runlayer if
+  a managed server exists. The one committed project MCP is
+  `tradingview` in `.cursor/mcp.json` (shadow stdio; see
+  `docs/tradingview-mcp.md`). Do not add more shadow servers.
+- TradingView charts = `pine/quant_visualizer.pine` + `tv_chart_url()`.
+  MCP TA is a second opinion only — never a scoring input.
 - Strategy changes: one variable per review cycle. Update `strategy/baseline.yaml` only when a human applies the matching `.env` knob.
 - Pine parity: if you touch `scanner/indicators.py` or `scanner/signal_engine.py`, change the Pine file in the same commit.

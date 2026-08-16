@@ -10,10 +10,12 @@
 # ----------------
 # * Not Hermes / OpenClaw / "oneshot prompt that trades your account"
 # * Not Signum, HyperLiquid, Railway, or Claude Routines
-# * Not a TradingView MCP. There is no retail TV HTTP API in this repo.
-#   Charts = `pine/quant_visualizer.pine` + Discord/Telegram deep links.
-# * If you later want a TradingView-shaped MCP, use a Runlayer-managed
-#   server. Do not add a shadow `.mcp.json`.
+# * TradingView charts = `pine/quant_visualizer.pine` + Discord/Telegram
+#   deep links. Optional Cursor MCP: `.cursor/mcp.json` →
+#   atilaahmettaner/tradingview-mcp (shadow stdio; see
+#   `docs/tradingview-mcp.md`). That MCP is not Pine-parity and must
+#   not retune QMIE weights. Prefer Runlayer if a managed TV server
+#   exists later.
 #
 # Files
 # -----
