@@ -13,8 +13,8 @@ The *intended* system (scanner + proven edge + live feedback) is
 
 - CI installs `python/backtest/requirements.txt` (unblocks collection)
 - `fetch_premium_index` uses session timeout; Bybit implemented; tests added
-- `W_RIBBON` / `W_STRUCTURE` / `W_SWEEP` env-wired; validator target ~128
-- README / CLAUDE.md / architecture.md describe the 10-component engine
+- Engine restored to original 7 components (ribbon / structure / sweep **cut**)
+- README / CLAUDE.md / architecture.md describe the 7-component engine
 
 Still open in Sprint 0: `docs/deployment.md`, daily cap
 `sig_max_signals_per_symbol_per_day`. Next product work is Sprint 1
@@ -37,7 +37,7 @@ teams over-claim.
 | Workstream | Weight | Done | Contribution | Evidence |
 |---|---|---|---|---|
 | Live scanner core (engine, scheduler, exchanges, universe) | 30 | 92% | 27.6 | Code + 100+ unit tests; funding filter currently dead |
-| Pine visualizer parity | 10 | 88% | 8.8 | 10-component math present; daily-trend label missing on chart |
+| Pine visualizer parity | 10 | 88% | 8.8 | 7-component math present; daily-trend label on chart |
 | Notifiers + HTTP API | 10 | 85% | 8.5 | Discord/Telegram + `/health` `/signals` `/scan/once`; no HTTP tests |
 | Backtest harness (data, runner, CLI, dashboard) | 15 | 90% | 13.5 | Full pipeline; no committed results parquet |
 | Backtest robustness (equity, DD, MC, quantstats) | 10 | 80% | 8.0 | Implemented in `app.py` / `run.py`; trailing-stop variant missing |
@@ -62,7 +62,7 @@ The original design is in place and has been extended past the README:
 
 - Bar-close scheduler with 5s grace (`scanner/scheduler.py`)
 - Binance + Bybit public REST, in-progress candle dropped
-- 10-component score (original 7 + EMA ribbon 8/21/55/89 + BOS/CHoCH + liquidity sweep)
+- 7-component score (Supertrend + EMA200 + RSI + ADX + HTF + S/R + Volatility)
 - Grades A+ / A / B / C / REJECT
 - Daily-trend label (1D EMA200) on Discord/Telegram
 - ATR%, ADX, and funding-rate *gates* on the live path
@@ -70,7 +70,7 @@ The original design is in place and has been extended past the README:
 - SQLite persistence, optional Redis TTL
 - Docker Compose (app + Redis), GitHub Actions workflow *exists*
 
-Pine `quant_visualizer.pine` v2.0 carries the same 10 weights and
+Pine `quant_visualizer.pine` v2.0 carries the same 7 weights and
 aggregate formula. That is load-bearing: chart marks must match alerts.
 
 ### 2.2 Backtest harness — further along than `tasks/todo.md` admits
@@ -101,7 +101,7 @@ collected 138 then aborted on missing `requests`. Approximate split:
 
 | Suite | Tests (approx.) | Role |
 |---|---|---|
-| `test_indicators.py` | ~40 | RMA seed, ST, ribbon, BOS, sweep |
+| `test_indicators.py` | ~30 | RMA seed, ST, ATR, RSI, ADX |
 | `test_signal_engine.py` | ~27 | Side/grade, ST majority, daily_trend |
 | `test_scheduler.py` | ~15 | Grace window, daily_df routing |
 | `test_dispatcher.py` | ~13 | Dedup, grade filter, notifier isolation |
@@ -111,7 +111,8 @@ collected 138 then aborted on missing `requests`. Approximate split:
 | `tests/backtest/` | ~23 | Loader + outcome evaluation |
 
 REVIEW.md's "118 tests / 83% coverage" is **out of date** (written
-2026-05-15, before backtest + ribbon/structure/sweep).
+2026-05-15, before backtest). Ribbon / structure / sweep votes were
+added later and **cut** in this branch.
 
 ---
 
@@ -147,11 +148,8 @@ cover Binance 4xx/5xx and Bybit mapping.
 
 ### P1 — Config / engine / docs disagreed on the scoring contract — **mostly fixed this branch**
 
-The engine and Pine are 10-component, weights total **128**
-(20+15+15+15+20+10+5+10+10+8). This branch wires `W_RIBBON` /
-`W_STRUCTURE` / `W_SWEEP` through env, `main.py`, and
-`validate_runtime()` (~128). README / CLAUDE.md / architecture.md
-match.
+The engine and Pine are 7-component, weights total **100**
+(20+15+15+15+20+10+5). `validate_runtime()` expects ~100.
 
 Remaining: Pine daily-trend label still missing; leftover broker
 tables in `db.py` / `models.py`.
@@ -160,7 +158,7 @@ tables in `db.py` / `models.py`.
 
 | Item | Reality |
 |---|---|
-| README / CLAUDE.md / architecture.md | Still "7-component" |
+| README / CLAUDE.md / architecture.md | 7-component (ribbon / structure / sweep **cut**) |
 | `docs/deployment.md` | Linked from README, **file missing** |
 | `signal_engine.py` docstring | Points at `pine/quant_strategy.pine` (does not exist; file is `quant_visualizer.pine`) |
 | `models.py` / `db.py` | Still carry `OrderIntent`, `orders` table, `daily_pnl` from the deleted broker edition |
@@ -226,20 +224,20 @@ trading while CI is red and the live funding filter is a no-op.
    the `ExchangeClient` ABC (Bybit: `/v5/market/tickers` funding field
    or fail-open *explicitly*). Add tests: 5xx retry, attribute exists,
    4xx raises.
-3. **Wire the three new weights through config.** `w_ribbon`,
-   `w_structure`, `w_sweep` in `Settings`, `.env.example`, `main.py`
-   `Weights(...)`. Change `validate_runtime` to expect **~128** (or
-   renormalize the ten weights back to 100 — pick one, do not leave
-   both). Same numbers in Pine defaults.
-4. **Doc sync.** README, CLAUDE.md, architecture.md: 10-component
+3. **Scoring weights (done, then reversed).** Ribbon / structure /
+   sweep were briefly extra votes (~128). They were **cut** after a
+   keep-or-cut decision. Runtime now expects **~100** on the original
+   seven weights. Do not re-add those three without a frozen OOS that
+   shows they help.
+4. **Doc sync.** README, CLAUDE.md, architecture.md: 7-component
    table. Fix the `quant_strategy.pine` typo. Add a short
    `docs/deployment.md` or remove the README link.
 5. **Drop or enforce `sig_max_signals_per_symbol_per_day`.** Dead config
    is how operators think they are protected.
 
-Exit criterion: CI green on master; `pytest` locally ~2s; env can
-change ribbon/structure/sweep; README describes the engine that
-actually runs.
+Exit criterion: CI green on master; `pytest` locally ~2s; env weights
+sum to ~100; README describes the 7-component engine that actually
+runs. Ribbon / structure / sweep stay **out**.
 
 ### Sprint 1 — Prove or kill the grading hypothesis
 
@@ -256,9 +254,10 @@ indicator is decoration.
    (win %, expectancy R, PF, SQN, max DD per grade, IS vs OOS).
    No parquet in git — table + command line only.
 3. Decision gate:
+   - Extra votes (ribbon / structure / sweep) were **cut** without
+     waiting on OOS. Do not put them back.
    - If **A/A+ OOS expectancy ≤ 0** or **does not beat C**: stop adding
-     components. Either tighten gates (ADX, daily-trend *hard* filter)
-     or cut ribbon/structure/sweep if they added noise.
+     components. Tighten gates (ADX, daily-trend *hard* filter) instead.
    - If **A/A+ OOS expectancy > 0 and PF ≥ 1.3**: proceed to Sprint 2.
      Do not tune weights on this run.
 
@@ -283,8 +282,8 @@ Do **not** build a broker. Build a paper ledger.
 
 ### Sprint 3 — Hardening (only after Sprint 1 says there is edge)
 
-- Pine dashboard: daily-trend + ribbon/structure/sweep rows (parity
-  with Discord).
+- Pine dashboard: daily-trend row (parity with Discord). Do **not**
+  restore ribbon/structure/sweep rows.
 - HTTP tests for `/health`, `/webhook` HMAC, `/scan/once`.
 - Golden-file Pine-parity test on a 500-bar BTC fixture.
 - Strip unused broker tables *or* document them as reserved.
@@ -298,7 +297,7 @@ Call the scanner **v1.0** when all of these are true:
 
 - [ ] CI green on `master` (runtime + backtest deps)
 - [ ] Funding filter works on Binance; Bybit behaviour documented
-- [ ] Env weights match the 10-component engine and Pine
+- [ ] Env weights match the 7-component engine and Pine
 - [ ] README / CLAUDE.md describe the engine that runs
 - [ ] One frozen OOS backtest write-up exists (`docs/backtest-baseline.md`)
 - [ ] Live `SCAN_MIN_ALERT_GRADE` / ATR / ADX defaults match the
@@ -319,15 +318,14 @@ trying to be** after Sprint 0 (was ~72% at research time). The last
 and leftover hygiene (`deployment.md`, daily signal cap).
 
 **What can we improve?**
-1. Confirm CI green on this branch (155 tests locally).
-2. Run and publish one walk-forward backtest; let that decide whether
-   to keep ribbon / structure / sweep.
-3. Add a fill journal before any paper-trading dashboard chrome.
-4. Remaining hygiene: `docs/deployment.md`, enforce or drop
-   `sig_max_signals_per_symbol_per_day`.
+1. Confirm CI green on this branch.
+2. Run and publish one walk-forward backtest (`docs/backtest-baseline.md`).
+   Extra scoring votes (ribbon / structure / sweep) are already **out**.
+3. Remaining hygiene: enforce or drop
+   `sig_max_signals_per_symbol_per_day` if it still drifts from live
+   behaviour. Journal already exists.
 
 **How should we proceed?**
-Sprint 0 is largely done in this branch. Next is Sprint 1 (measure)
-→ Sprint 2 (journal + drift alert) → only then more strategy ideas.
-Do not re-open execution. Do not add an 11th scoring component until
+Sprint 0 is done in this branch. Next is Sprint 1 (measure OOS).
+Do not re-open execution. Do not re-add scoring components until
 Sprint 1 has a number.

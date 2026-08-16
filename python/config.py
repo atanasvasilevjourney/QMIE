@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     # Min grade to ALERT on. REJECT/C/B can be set if you want noisier flow.
     scan_min_alert_grade: str = "A"        # A+ | A | B | C | REJECT
 
-    # ─── Signal engine weights (sum=128: original 7=100 + ribbon/structure/sweep) ─
+    # ─── Signal engine weights (sum=100: ST20+EMA15+RSI15+ADX15+HTF20+SR10+VOL5) ─
     w_supertrend: int = 20
     w_ema:        int = 15
     w_rsi:        int = 15
@@ -85,9 +85,6 @@ class Settings(BaseSettings):
     w_htf:        int = 20
     w_sr:         int = 10
     w_vol:        int = 5
-    w_ribbon:     int = 10   # EMA ribbon 8/21/55/89
-    w_structure:  int = 10   # BOS/CHoCH
-    w_sweep:      int = 8    # liquidity sweep
 
     # ─── TradingView deep-link config ────────────────────────────────────
     # Used in Discord/Telegram embeds: clicking opens the chart in TV.
@@ -150,17 +147,16 @@ class Settings(BaseSettings):
     @property
     def weights_total(self) -> int:
         return (self.w_supertrend + self.w_ema + self.w_rsi + self.w_adx
-                + self.w_htf + self.w_sr + self.w_vol
-                + self.w_ribbon + self.w_structure + self.w_sweep)
+                + self.w_htf + self.w_sr + self.w_vol)
 
     def validate_runtime(self) -> list[str]:
         """Return list of warnings; called once at startup."""
         warnings = []
         wt = self.weights_total
-        # 128 = original 7 (100) + ribbon 10 + structure 10 + sweep 8
-        if not (123 <= wt <= 133):
+        # 100 = ST20 + EMA15 + RSI15 + ADX15 + HTF20 + SR10 + VOL5
+        if not (95 <= wt <= 105):
             warnings.append(
-                f"Weights sum to {wt}, expected ~128. Score scale will be off."
+                f"Weights sum to {wt}, expected ~100. Score scale will be off."
             )
         if self.scan_loop_interval_sec < 5:
             warnings.append(

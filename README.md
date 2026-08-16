@@ -20,10 +20,9 @@ Every time a 1H or 4H bar closes (configurable), the server:
 
 1. Pulls the latest 300 candles for each symbol in your universe
    (default: 30 USDT-perpetuals on Binance Futures)
-2. Computes a 10-component weighted score (original 7: Supertrend +
-   EMA200 + RSI + ADX + HTF + S/R + Volatility, plus EMA ribbon,
-   market structure, liquidity sweep) — math identical to the Pine
-   visualizer. Weights currently total 128, not 100.
+2. Computes a 7-component weighted score (Supertrend + EMA200 + RSI +
+   ADX + HTF + S/R + Volatility) — math identical to the Pine
+   visualizer. Weights currently total 100.
 3. Grades each signal A+ / A / B / C / REJECT
 4. Ranks A/A+ (and optionally B) setups with **Ranked Asset
    Allocation** — top N long + top N short per timeframe, cluster cap
@@ -74,7 +73,7 @@ qmie/
 │   ├── scanner/
 │   │   ├── exchange_clients.py        Binance + Bybit public REST
 │   │   ├── indicators.py              Pine-compatible math
-│   │   ├── signal_engine.py           10-component scoring
+│   │   ├── signal_engine.py           7-component scoring
 │   │   ├── symbol_universe.py         static + auto top-N volume
 │   │   ├── scheduler.py               bar-close-aware loop
 │   │   ├── allocator.py               ranked swing book + ARS rotation
@@ -145,7 +144,7 @@ Three knobs in `.env`:
 |---|---|
 | `SCAN_MIN_ALERT_GRADE` | `A+` only (very rare), `A` (default), `B` (noisier), `C` (firehose) |
 | `SCAN_TIMEFRAMES` | More TFs = more signals. `4h` only is the cleanest. `1h,4h` is balanced. |
-| `W_*` weights | Re-weight the ten components. Defaults sum to **128** (original 7 = 100, plus ribbon 10 + structure 10 + sweep 8). Rebalance all of them together. |
+| `W_*` weights | Re-weight the seven components. Defaults sum to **100**. Rebalance all of them together. |
 
 | `ALLOC_MODE` | `ranked` (default): top N long + top N short per TF. `all`: firehose. `rotation`: ARS lookback ROC into the strongest name (or CASH). |
 | `ALLOC_TOP_LONG` / `ALLOC_TOP_SHORT` | Slots in the swing book (default 3 / 3). Ignored in rotation unless dual. |

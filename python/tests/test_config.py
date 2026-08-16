@@ -39,7 +39,7 @@ class TestValidateRuntime:
     def test_default_weights_no_warning(self):
         s = Settings(webhook_secret="x")
         warnings = s.validate_runtime()
-        # Default weights sum to 128 → no weight warning
+        # Default weights sum to 100 → no weight warning
         assert not any("Weights sum" in w for w in warnings)
 
     def test_lopsided_weights_warns(self):
@@ -66,5 +66,4 @@ class TestValidateRuntime:
 
     def test_weights_total_property(self):
         s = Settings(webhook_secret="x")
-        # original 7 (100) + ribbon 10 + structure 10 + sweep 8
-        assert s.weights_total == 128
+        assert s.weights_total == 100

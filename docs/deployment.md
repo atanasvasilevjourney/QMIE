@@ -17,7 +17,7 @@ Minimum for Discord alerts:
 | `SCAN_DATA_SOURCE` | `binance` (default) or `bybit` |
 | `REDIS_URL` | `redis://redis:6379/0` in Compose — **set this in production** or a restart can re-fire the last bar |
 
-Optional: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `SCAN_MIN_ALERT_GRADE`, `W_*` (sum ~128), `SIG_MIN_ADX`, `SIG_FUNDING_RATE_THRESHOLD`, `SIG_MAX_SIGNALS_PER_SYMBOL_PER_DAY`.
+Optional: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `SCAN_MIN_ALERT_GRADE`, `W_*` (sum ~100), `SIG_MIN_ADX`, `SIG_FUNDING_RATE_THRESHOLD`, `SIG_MAX_SIGNALS_PER_SYMBOL_PER_DAY`.
 
 ## 2. Run
 

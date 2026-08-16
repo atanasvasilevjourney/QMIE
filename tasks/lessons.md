@@ -41,3 +41,14 @@ Patterns and rules captured from corrections. Reviewed at session start.
 ### L007 — MAE/MFE forward scan is slow in pure Python
 **Context**: Scanning 100 bars forward per signal in a Python loop, 83k signals = ~8M iterations.
 **Rule**: If the forward scan becomes a bottleneck, vectorize with numpy (cummax/cummin on sliced arrays). Current runtime ~2h acceptable for offline use but flag if adding more symbols.
+
+---
+
+## Scoring
+
+### L008 — Extra votes without OOS get cut, not company
+**Mistake**: EMA ribbon + BOS/CHoCH + liquidity sweep were added as extra
+score votes (~128) before a frozen OOS write-up existed.
+**Rule**: Keep-or-cut means cut if they have not helped OOS. Restore the
+original 7-component engine (weights sum 100) and matching Pine. Do not
+leave display-only ribbon plots that imply they still score.

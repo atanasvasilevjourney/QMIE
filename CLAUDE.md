@@ -7,10 +7,9 @@ run / test it without you having to re-explain.
 ## What this is
 
 QMIE is a server-side crypto market scanner. It scans ~30 USDT-perp
-symbols on 1H and 4H timeframes, computes a 10-component weighted
-score (original 7: Supertrend + EMA200 + RSI + ADX + HTF alignment +
-S/R room + Volatility, plus EMA ribbon, BOS/CHoCH structure, liquidity
-sweep), and dispatches A/A+ signals to Discord and/or Telegram with a
+symbols on 1H and 4H timeframes, computes a 7-component weighted
+score (Supertrend + EMA200 + RSI + ADX + HTF alignment + S/R room +
+Volatility), and dispatches A/A+ signals to Discord and/or Telegram with a
 TradingView chart deep-link. It does **not** execute trades. Manual
 entry only — by design.
 
@@ -35,7 +34,7 @@ qmie/
 │   ├── security.py                   HMAC + idempotency
 │   ├── scanner/                      ← the core
 │   │   ├── indicators.py             Pine-compatible math (RMA, EMA, RSI, ADX, ATR, Supertrend, pivots)
-│   │   ├── signal_engine.py          10-component scoring → A+/A/B/C/REJECT
+│   │   ├── signal_engine.py          7-component scoring → A+/A/B/C/REJECT
 │   │   ├── exchange_clients.py       Binance + Bybit public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
 │   │   ├── allocator.py              Ranked swing book + ARS rotation
@@ -47,7 +46,7 @@ qmie/
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        212 pytest tests (CI installs requests+pyarrow for backtest)
+│   ├── tests/                        203 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
@@ -79,7 +78,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 212 tests; CI also installs requests+pyarrow
+pytest -v                              # 203 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 
@@ -119,6 +118,11 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
 6. **Ranked allocation does not execute.** `allocator.allocate()` only
    chooses which alerts to fire and a suggested book weight. Changing
    `ALLOC_MODE` must not grow a broker path.
+
+7. **Scoring is seven components summing to 100.** EMA ribbon,
+   BOS/CHoCH structure, and liquidity sweep were cut. Do not put them
+   back without a frozen OOS that shows they help. See
+   `test_cut_components_not_in_score`.
 
 
 ## Conventions

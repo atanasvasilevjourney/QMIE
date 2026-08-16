@@ -6,7 +6,7 @@ Source of truth for *what to do next*. Completeness research:
 **Current score:** live scanner ~90% · intended system (scanner +
 measured edge + live feedback) ~80% (journal landed; OOS write-up still open).
 
-Do **not** add an 11th scoring component or re-open execution until
+Do **not** re-add ribbon / structure / sweep or re-open execution until
 Sprint 1 has an OOS number.
 
 ---
@@ -15,9 +15,9 @@ Sprint 1 has an OOS number.
 - [x] CI: install `requests` + `pyarrow` so backtest tests collect
       (full `backtest/requirements.txt` conflicts with numpy 2)
 - [x] Fix `BinanceClient.fetch_premium_index`; add method to Bybit + ABC; tests
-- [x] Wire `w_ribbon` / `w_structure` / `w_sweep` through `Settings`,
-      `.env.example`, `main.py` `Weights(...)`. Validator target ~128
-- [x] Doc sync: README, CLAUDE.md, architecture.md = 10-component;
+- [x] Wire original-7 weights through `Settings`, `.env.example`,
+      `main.py` `Weights(...)`. Validator target ~100
+- [x] Doc sync: README, CLAUDE.md, architecture.md = 7-component;
       fix `quant_strategy.pine` typo; status doc added
 - [x] `docs/deployment.md` runbook
 - [x] Enforce `sig_max_signals_per_symbol_per_day` (0 = unlimited)
@@ -26,7 +26,8 @@ Sprint 1 has an OOS number.
 - [ ] Canonical walk-forward run (10 symbols, 1h+4h, split 2025-01-01,
       ADX≥20, ATR% 0.4–4.0) — running
 - [ ] `docs/backtest-baseline.md` with IS/OOS table (no parquet in git)
-- [ ] Decision: keep / cut ribbon+structure+sweep based on OOS expectancy
+- [x] Decision: **cut** ribbon+structure+sweep (operator keep-or-cut;
+      engine restored to original 7, weights sum 100)
 - [x] Trailing-stop variant vs fixed 1.5/2.5 ATR on the same signals
 
 ## Sprint 2 — Live loop (Phase 4, no broker)
@@ -77,7 +78,8 @@ Sprint 1 has an OOS number.
 - [x] Max drawdown (peak-to-trough on equity curve)
 - [x] Monte Carlo simulation (shuffle 1000×, P5/P50/P95)
 - [x] quantstats Sharpe / Sortino on daily R (not full HTML tearsheet)
-- [x] EMA ribbon + BOS/CHoCH + liquidity sweep scoring (Python + Pine)
+- [x] EMA ribbon + BOS/CHoCH + liquidity sweep scoring — **cut**
+      (restored 7-component engine; see Sprint 1 keep-or-cut)
 - [x] Funding-rate gate (live) — **code present, currently broken; Sprint 0**
 - [x] ADX trend-strength gate (live + backtest CLI)
 - [x] ATR volatility filter (backtest CLI + dashboard)

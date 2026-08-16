@@ -15,7 +15,7 @@
                    │                                  ▼             │
                    │  ┌──────────────┐    ┌────────────────────┐   │
                    │  │ SymbolUniv.  │───▶│   SignalEngine     │   │
-                   │  │ static+auto  │    │   10-comp weighted │   │
+                   │  │ static+auto  │    │   7-comp weighted  │   │
                    │  └──────────────┘    │   A+/A/B/C/REJECT  │   │
                    │                       └─────────┬──────────┘  │
                    │                                  ▼             │
@@ -134,14 +134,14 @@ seconds after dispatch can re-fire the same alert.
 Critical: `rma()` uses `alpha=1/length, adjust=False`. Plain pandas
 `ewm(span=n)` uses `alpha=2/(n+1)` and is wrong for ATR/RSI/ADX/Wilders.
 
-`scanner/signal_engine.py` — the 10-component scoring is the same
+`scanner/signal_engine.py` — the 7-component scoring is the same
 function shape on both server and Pine. If you change it on one side,
 change it on the other in the same commit. Otherwise the chart will
 disagree with the alerts and the user will lose trust.
 
-Default weight total is 128 (original 7 = 100, plus ribbon 10,
-structure 10, sweep 8). `Settings.weights_total` and `validate_runtime()`
-expect ~128 so env knobs stay in lockstep with Pine.
+Default weight total is 100 (ST 20 + EMA 15 + RSI 15 + ADX 15 + HTF 20
++ S/R 10 + vol 5). `Settings.weights_total` and `validate_runtime()`
+expect ~100 so env knobs stay in lockstep with Pine.
 
 The Pine ST `direction` value is `-1` for uptrend (counterintuitive).
 Both sides explicitly invert it to a `+1=up` convention to keep the
