@@ -22,11 +22,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from .allocator import AllocConfig, AllocationPlan, allocate
 from .dispatcher import SignalDispatcher
 from .exchange_clients import ExchangeClient
+from .radar import (
+    RadarConfig,
+    RadarSnapshot,
+    RadarRow,
+    build_snapshot,
+    classify_symbol,
+    empty_radar_snapshot,
+    format_radar_digest,
+)
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
 
@@ -71,6 +80,8 @@ class ScannerScheduler:
         sig_min_adx: float = 0.0,
         sig_funding_rate_threshold: float = 0.001,
         alloc_cfg: Optional[AllocConfig] = None,
+        radar_cfg: Optional[RadarConfig] = None,
+        radar_enabled: bool = True,
     ):
         self.client = client
         self.universe = universe
@@ -88,6 +99,24 @@ class ScannerScheduler:
         self.last_allocation: Optional[AllocationPlan] = None
         self._last_rotation_key: Optional[tuple] = None
 
+        # Daily Trend Radar (independent of SCAN_TIMEFRAMES)
+        self.radar_enabled = radar_enabled
+        self.radar_cfg = radar_cfg or RadarConfig()
+        try:
+            self.radar_cfg.validate()
+        except ValueError as e:
+            logger.warning("RadarConfig invalid at init (%s); disabling radar", e)
+            self.radar_enabled = False
+        self.last_radar: Optional[RadarSnapshot] = empty_radar_snapshot(
+            enabled=self.radar_enabled, note="no_radar_yet",
+        )
+        # Seed to "today's" boundary so unit tests that tick without start()
+        # do not fire a radar pass. start() runs a silent warm-up.
+        self._last_radar_seen: int = _last_close_ts(time.time(), _tf_seconds("1d"))
+        self._radar_lock = asyncio.Lock()
+        self._radar_task: Optional[asyncio.Task] = None
+        self._radar_warmup_done = False
+
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
         self._task: Optional[asyncio.Task] = None
@@ -98,6 +127,9 @@ class ScannerScheduler:
             "alerts_dispatched": 0,
             "errors": 0,
             "last_pass_at": None,
+            "radar_passes": 0,
+            "last_radar_at": None,
+            "radar_errors": 0,
         }
 
     # ─── Lifecycle ───────────────────────────────────────────────────────
@@ -108,11 +140,29 @@ class ScannerScheduler:
         now = time.time()
         for tf in self.timeframes:
             self._last_seen[tf] = _last_close_ts(now, _tf_seconds(tf))
+        self._last_radar_seen = _last_close_ts(now, _tf_seconds("1d"))
         self._task = asyncio.create_task(self._run())
-        logger.info("Scanner scheduler started: TFs=%s symbols=universe", self.timeframes)
+        logger.info(
+            "Scanner scheduler started: TFs=%s radar=%s symbols=universe",
+            self.timeframes, self.radar_enabled,
+        )
+        # Silent warm-up so GET /radar is useful before the next UTC midnight.
+        if self.radar_enabled and not self._radar_warmup_done:
+            self._radar_warmup_done = True
+            try:
+                await self._radar_pass(notify=False, mark_seen=True)
+            except Exception:
+                logger.exception("Trend Radar warm-up failed (will retry on next close)")
+                self.stats["radar_errors"] += 1
 
     async def stop(self) -> None:
         self._stop.set()
+        if self._radar_task and not self._radar_task.done():
+            self._radar_task.cancel()
+            try:
+                await self._radar_task
+            except (asyncio.CancelledError, Exception):
+                pass
         if self._task:
             self._task.cancel()
             try:
@@ -146,9 +196,7 @@ class ScannerScheduler:
                 due.append(tf)
                 self._last_seen[tf] = current_close
 
-        if not due:
-            return
-
+        # Time-sensitive 1H/4H scans first; radar is latency-insensitive.
         for tf in due:
             try:
                 await self._scan_pass(tf)
@@ -156,6 +204,33 @@ class ScannerScheduler:
                 logger.exception("Scan pass failed for tf=%s", tf)
                 self.stats["errors"] += 1
 
+        # Daily Trend Radar — once per closed 1D bar. Advance _last_radar_seen
+        # only after a successful publish so transient failures retry.
+        if self.radar_enabled:
+            day_sec = _tf_seconds("1d")
+            current_day = _last_close_ts(now, day_sec)
+            if (current_day > self._last_radar_seen) and (now - current_day >= 5):
+                try:
+                    ok = await self._radar_pass(notify=None, mark_seen=False)
+                    if ok:
+                        self._last_radar_seen = current_day
+                except Exception:
+                    logger.exception("Trend Radar pass failed")
+                    self.stats["radar_errors"] += 1
+                    self.stats["errors"] += 1
+
+    async def request_radar_once(self, *, notify: bool = False) -> dict[str, Any]:
+        """Coalesced manual/admin radar pass. Returns status for the HTTP layer."""
+        if not self.radar_enabled:
+            return {"ok": False, "queued": False, "reason": "radar_disabled"}
+        if self._radar_lock.locked() or (
+            self._radar_task is not None and not self._radar_task.done()
+        ):
+            return {"ok": True, "queued": False, "already_running": True}
+        self._radar_task = asyncio.create_task(
+            self._radar_pass(notify=notify, mark_seen=False)
+        )
+        return {"ok": True, "queued": True, "notify": notify}
     # ─── One scan pass at one timeframe ──────────────────────────────────
     async def _scan_pass(self, tf: str) -> None:
         symbols = await self.universe.get()
@@ -323,6 +398,122 @@ class ScannerScheduler:
         self.stats["last_pass_at"] = int(time.time())
         logger.info("Scan pass tf=%s completed in %.2fs (symbols=%d)",
                     tf, elapsed, len(symbols))
+
+    async def _radar_pass(
+        self,
+        *,
+        notify: Optional[bool] = None,
+        mark_seen: bool = False,
+    ) -> bool:
+        """Daily RGG + coil radar. Returns True if a snapshot was published.
+
+        notify=None → use RadarConfig.notify
+        mark_seen → advance _last_radar_seen to today's boundary on success
+        """
+        async with self._radar_lock:
+            symbols = await self.universe.get()
+            if not symbols:
+                logger.warning("Trend Radar: universe empty")
+                return False
+
+            cfg = self.radar_cfg
+            do_notify = cfg.notify if notify is None else notify
+            logger.info(
+                "Trend Radar pass: symbols=%d limit=%d notify=%s",
+                len(symbols), cfg.kline_limit, do_notify,
+            )
+            t0 = time.time()
+
+            async def one(sym: str) -> tuple[str, Optional[RadarRow], Optional[str]]:
+                async with self.sem:
+                    try:
+                        df = await self.client.fetch_klines(
+                            sym, "1d", limit=cfg.kline_limit,
+                        )
+                        row = classify_symbol(df, sym, cfg=cfg)
+                        if row is None:
+                            return sym, None, "too_short_or_empty"
+                        return sym, row, None
+                    except Exception as e:
+                        return sym, None, str(e)
+
+            gathered = await asyncio.gather(
+                *(one(s) for s in symbols), return_exceptions=True,
+            )
+            rows: list[RadarRow] = []
+            failed: list[str] = []
+            for item in gathered:
+                if isinstance(item, Exception):
+                    logger.warning("radar gather error: %s", item)
+                    self.stats["radar_errors"] += 1
+                    self.stats["errors"] += 1
+                    continue
+                sym, row, err = item
+                if row is not None:
+                    rows.append(row)
+                else:
+                    failed.append(sym)
+                    self.stats["radar_errors"] += 1
+                    if err and err != "too_short_or_empty":
+                        logger.warning("radar %s failed: %s", sym, err)
+
+            # Total failure: keep previous snapshot (do not publish empty).
+            if not rows:
+                logger.warning(
+                    "Trend Radar: 0/%d classified — retaining previous snapshot",
+                    len(symbols),
+                )
+                self.stats["radar_errors"] += 1
+                return False
+
+            snap = build_snapshot(
+                rows,
+                timeframe="1d",
+                requested=len(symbols),
+                failed_symbols=failed,
+                enabled=True,
+            )
+            self.last_radar = snap
+            self.stats["radar_passes"] += 1
+            self.stats["last_radar_at"] = int(time.time())
+            if mark_seen:
+                self._last_radar_seen = _last_close_ts(time.time(), _tf_seconds("1d"))
+
+            logger.info(
+                "Trend Radar done in %.2fs: n=%d/%d G=%d Gy=%d R=%d "
+                "flips_g=%d coils=%d brk=%d status=%s",
+                time.time() - t0, snap.succeeded, snap.requested,
+                snap.green, snap.grey, snap.red,
+                len(snap.fresh_green), len(snap.tight_coils),
+                len(snap.breakouts), snap.status,
+            )
+
+            coverage = (
+                100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
+            )
+            if (
+                do_notify
+                and snap.has_actionable
+                and coverage >= cfg.min_coverage_pct
+            ):
+                msg = format_radar_digest(snap)
+                notifiers = getattr(self.dispatcher, "notifiers", []) or []
+                await asyncio.gather(
+                    *(
+                        n.send_text(msg)
+                        for n in notifiers
+                        if getattr(n, "enabled", True)
+                    ),
+                    return_exceptions=True,
+                )
+            elif do_notify and not snap.has_actionable:
+                logger.info("Trend Radar: no actionable buckets — digest skipped")
+            elif do_notify and coverage < cfg.min_coverage_pct:
+                logger.info(
+                    "Trend Radar: coverage %.0f%% < %.0f%% — digest skipped",
+                    coverage, cfg.min_coverage_pct,
+                )
+            return True
 
     async def _notify_rotation_text(self, plan: AllocationPlan) -> None:
         scores = ", ".join(

@@ -83,6 +83,8 @@ qmie/
 │   │   ├── symbol_universe.py         static + auto top-N volume
 │   │   ├── scheduler.py               bar-close-aware loop
 │   │   ├── allocator.py               ranked swing book + ARS rotation
+│   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
+│   │   ├── radar.py                  daily RGG + coil Trend Radar
 │   │   └── dispatcher.py              dedup + notifier fan-out
 │   ├── improve/
 │   │   └── review.py                  one-variable weekly review (no .env writes)
@@ -164,6 +166,29 @@ Three knobs in `.env`:
 
 Suggested `weight_pct` is a 100-point risk budget for **you**. QMIE still does not place orders.
 
+### Daily Trend Radar (RGG + coils)
+
+Independent of the 1H/4H scoring scanner. Once per closed **daily** bar
+(plus a silent warm-up on boot), QMIE classifies every universe symbol:
+
+| Bucket | Meaning |
+|---|---|
+| **GREEN / GREY / RED** | ADX(14)+DMI with hysteresis (enter 25 / exit 20) |
+| **Fresh flips** | Color changed within `RADAR_FRESH_FLIP_DAYS` (default 3) |
+| **Tight coils** | GREY + 20-day range width ≤ `RADAR_COIL_MAX_WIDTH_PCT` |
+| **Breakouts** | Close outside a prior GREY tight-coil range (one-shot) |
+
+This is **unranked daily context**, not a QMIE A/A+ entry. Digests default
+**off** (`RADAR_NOTIFY=false`); enable explicitly if you want Discord/Telegram.
+
+```bash
+curl -s localhost:8080/radar | jq '.status,.green,.fresh_green,.breakouts,.tight_coils'
+curl -s -X POST 'localhost:8080/radar/once'          # silent force pass
+curl -s -X POST 'localhost:8080/radar/once?notify=true'  # force + digest
+```
+
+Still **manual entry only** — radar never places orders and never retunes `W_*`.
+Wait for a separate ranked A/A+ alert before acting.
 Weekly, score the journal against `strategy/goals.yaml` (one knob at a time):
 
 ```bash
