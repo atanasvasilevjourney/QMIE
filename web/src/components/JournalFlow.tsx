@@ -61,7 +61,9 @@ export function JournalFlow({
     }
     setBusy(true)
     try {
-      const row = await api.closeFill(id, Number(exitPrice), notes)
+      // Omit notes on close unless the operator edited them — avoids wiping fill notes.
+      const closeNotes = notes.trim() && notes !== 'manual desk fill' ? notes : undefined
+      const row = await api.closeFill(id, Number(exitPrice), closeNotes)
       setMsg(`Closed #${row.id} · R=${row.realized_r ?? 'n/a'} · ${row.outcome}`)
       onDone()
     } catch (e) {
@@ -124,7 +126,7 @@ export function JournalFlow({
             <div key={f.id} className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-[11px] text-white">
-                  #{f.id} → sig {f.signal_id}
+                  #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}
                 </span>
                 <span className="font-mono text-[10px] text-chrome/60">{f.outcome}</span>
               </div>

@@ -57,25 +57,30 @@ export type SignalRow = {
   daily_trend?: string
 }
 
+/** Flat slot shape from AllocationPlan.as_dict() — not nested under `result`. */
 export type AllocationSlot = {
   rank?: number
-  weight_pct?: number
+  side?: string
+  symbol?: string
   cluster?: string
-  result?: {
-    symbol?: string
-    side?: string
-    grade?: string
-    score?: number
-  }
+  grade?: string
+  score?: number
+  weight_pct?: number
+  price?: number
+  stop_loss?: number | null
+  take_profit?: number | null
+  daily_trend?: string | null
 }
 
 export type AllocationPlan = {
   timeframe?: string | null
+  mode?: string
   considered?: number
   skipped_grade?: number
   slots?: AllocationSlot[]
   note?: string
   regime?: string
+  defensive?: string | null
 }
 
 export type Health = {
@@ -103,6 +108,9 @@ export type JournalFill = {
   notes?: string | null
   realized_r?: number | null
   outcome?: string
+  symbol?: string
+  side?: string
+  grade?: string
 }
 
 export type JournalStats = {

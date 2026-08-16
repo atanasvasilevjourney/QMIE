@@ -14,15 +14,21 @@ export default function App() {
   const [tab, setTab] = useState<DeskTab>('desk')
   const [selected, setSelected] = useState<SignalRow | null>(null)
   const [busy, setBusy] = useState(false)
+  const [radarMsg, setRadarMsg] = useState<string | null>(null)
   const desk = useQmieDesk()
 
   const healthOk = desk.health?.status === 'ok' && !!desk.health?.db_ok
   const uptime = desk.health?.uptime_sec ?? 0
+  const radarFailed = !!radarMsg && !radarMsg.startsWith('Radar pass')
 
   const onRadar = async () => {
     setBusy(true)
+    setRadarMsg(null)
     try {
       await desk.forceRadar()
+      setRadarMsg('Radar pass queued — syncing snapshot')
+    } catch (e) {
+      setRadarMsg(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -56,9 +62,17 @@ export default function App() {
       />
 
       <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-5 sm:px-5">
-        {desk.error && (
-          <div className="mb-4 rounded-2xl border border-magenta/40 bg-magenta/10 px-4 py-3 font-mono text-xs text-magenta">
-            Sync error: {desk.error}
+        {(desk.error || radarMsg) && (
+          <div
+            className={`mb-4 rounded-2xl border px-4 py-3 font-mono text-xs ${
+              desk.error || radarFailed
+                ? 'border-magenta/40 bg-magenta/10 text-magenta'
+                : 'border-cyan/40 bg-cyan/10 text-cyan'
+            }`}
+          >
+            {desk.error ? `Sync: ${desk.error}` : null}
+            {desk.error && radarMsg ? ' · ' : null}
+            {radarMsg}
           </div>
         )}
 

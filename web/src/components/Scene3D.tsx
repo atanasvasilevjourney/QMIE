@@ -144,9 +144,10 @@ function ParticleField({ radar }: { radar: RadarSnapshot | null }) {
 }
 
 export function Scene3D({ radar }: { radar: RadarSnapshot | null }) {
-  const green = radar?.green ?? 8
-  const grey = radar?.grey ?? 12
-  const red = radar?.red ?? 5
+  // Use real counts only — never invent a live mix while loading/failed.
+  const green = radar?.green ?? 0
+  const grey = radar?.grey ?? 0
+  const red = radar?.red ?? 0
   return (
     <div className="relative h-full min-h-[320px] w-full overflow-hidden rounded-[28px] neon-border glass scanlines">
       <Canvas camera={{ position: [0, 1.4, 7.2], fov: 42 }} dpr={[1, 1.75]}>

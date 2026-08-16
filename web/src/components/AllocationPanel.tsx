@@ -13,28 +13,28 @@ export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
       }
     >
       <div className="space-y-2">
-        {slots.map((slot, i) => {
-          const r = slot.result
-          return (
-            <div
-              key={`${r?.symbol}-${i}`}
-              className="flex items-center justify-between rounded-xl border border-white/5 bg-gradient-to-r from-cyan/5 to-magenta/5 px-3 py-2"
-            >
-              <div>
-                <div className="font-display text-xs tracking-wider text-white">
-                  #{slot.rank ?? i + 1} {r?.symbol || '—'}
-                </div>
-                <div className="font-mono text-[10px] text-chrome/55">
-                  {r?.side} · {r?.grade} · {slot.cluster || '—'}
-                </div>
+        {slots.map((slot, i) => (
+          <div
+            key={`${slot.symbol ?? 'slot'}-${slot.rank ?? i}`}
+            className="flex items-center justify-between rounded-xl border border-white/5 bg-gradient-to-r from-cyan/5 to-magenta/5 px-3 py-2"
+          >
+            <div>
+              <div className="font-display text-xs tracking-wider text-white">
+                #{slot.rank ?? i + 1} {slot.symbol || '—'}
               </div>
-              <div className="text-right">
-                <div className="font-mono text-sm text-cyan">{slot.weight_pct?.toFixed?.(1) ?? '—'}%</div>
-                <div className="font-mono text-[10px] text-chrome/40">suggested</div>
+              <div className="font-mono text-[10px] text-chrome/55">
+                {slot.side || '—'} · {slot.grade || '—'} · {slot.cluster || '—'}
+                {slot.score != null ? ` · ${slot.score}` : ''}
               </div>
             </div>
-          )
-        })}
+            <div className="text-right">
+              <div className="font-mono text-sm text-cyan">
+                {slot.weight_pct != null ? `${slot.weight_pct.toFixed(1)}%` : '—'}
+              </div>
+              <div className="font-mono text-[10px] text-chrome/40">suggested</div>
+            </div>
+          </div>
+        ))}
         {!slots.length && <Empty>No allocation slots — wait for a scan pass</Empty>}
       </div>
       <p className="mt-3 font-mono text-[10px] text-chrome/45">
