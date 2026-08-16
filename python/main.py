@@ -11,6 +11,7 @@ Endpoints:
   GET  /signals               last N dispatched alerts
   GET  /universe              the symbol set the next pass will scan
   POST /scan/once             admin: force an immediate scan pass on a TF
+  GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -34,6 +35,7 @@ from config import Settings, get_settings
 from db import Database
 from models import Grade, JournalClose, JournalCreate, TVSignal
 from notifiers import DiscordNotifier, Notifier, TelegramNotifier
+from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher, tv_chart_url
 from scanner.exchange_clients import get_client
 from scanner.scheduler import ScannerScheduler
@@ -162,6 +164,14 @@ async def lifespan(app: FastAPI):
         sig_max_atr_pct=s.sig_max_atr_pct,
         sig_min_adx=s.sig_min_adx,
         sig_funding_rate_threshold=s.sig_funding_rate_threshold,
+        alloc_cfg=AllocConfig(
+            mode=s.alloc_mode,
+            top_long=s.alloc_top_long,
+            top_short=s.alloc_top_short,
+            min_grade=s.alloc_min_grade,
+            weighting=s.alloc_weighting,
+            cluster_max=s.alloc_cluster_max,
+        ),
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -259,6 +269,24 @@ async def scan_once(timeframe: str = "1h") -> dict[str, Any]:
         raise HTTPException(400, f"timeframe {tf} not in scanner config")
     asyncio.create_task(state.scheduler._scan_pass(tf))
     return {"ok": True, "queued": tf}
+
+
+@app.get("/allocation")
+async def get_allocation() -> dict[str, Any]:
+    """Last ranked-allocation plan: which alerts to take and suggested size.
+    Does not place orders."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    plan = state.scheduler.last_allocation
+    if plan is None:
+        return {
+            "timeframe": None,
+            "considered": 0,
+            "skipped_grade": 0,
+            "slots": [],
+            "note": "no_scan_yet",
+        }
+    return plan.as_dict()
 
 
 async def _maybe_notify_journal_drift() -> None:

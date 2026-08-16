@@ -1,0 +1,14 @@
+# Frozen live knobs. Update this file when a human applies a review
+# proposal — never from the review CLI itself.
+
+alloc_mode: ranked
+alloc_top_long: 3
+alloc_top_short: 3
+alloc_min_grade: A
+alloc_weighting: rank
+alloc_cluster_max: 1
+scan_min_alert_grade: A
+sig_min_adx: 0.0
+sig_min_atr_pct: 0.10
+sig_max_atr_pct: 8.0
+sig_funding_rate_threshold: 0.001

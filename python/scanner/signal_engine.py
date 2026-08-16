@@ -72,6 +72,9 @@ class ScanResult:
     reason:        str = ""
     daily_trend:   str = "unknown"     # "bullish" / "bearish" / "unknown"
     funding_rate:  Optional[float] = None  # latest 8h rate, injected by scheduler
+    alloc_rank:    Optional[int] = None
+    alloc_weight_pct: Optional[float] = None
+    alloc_cluster: Optional[str] = None
 
 
 @dataclass

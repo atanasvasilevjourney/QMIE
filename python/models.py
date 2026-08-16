@@ -95,6 +95,11 @@ class TVSignal(BaseModel):
     contracts:     Optional[str] = None
     reason:        Optional[str] = None
     action:        Optional[str] = None         # buy/sell from {{strategy.order.action}}
+    daily_trend:   Optional[str] = None         # bullish / bearish / unknown
+    funding_rate:  Optional[float] = None       # lastFundingRate at scan time
+    alloc_rank:    Optional[int] = None         # 1 = highest conviction in this book
+    alloc_weight_pct: Optional[float] = None    # suggested notional % of the 100-pt book
+    alloc_cluster: Optional[str] = None         # BTC / ETH / SOL / OTHER
 
     @field_validator("price", "signal_price", "stop_loss", "take_profit", mode="before")
     @classmethod

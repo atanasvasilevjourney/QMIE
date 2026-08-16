@@ -37,8 +37,11 @@ qmie/
 │   │   ├── signal_engine.py          10-component scoring → A+/A/B/C/REJECT
 │   │   ├── exchange_clients.py       Binance + Bybit public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
+│   │   ├── allocator.py              Ranked swing book (top N + cluster)
 │   │   ├── dispatcher.py             Dedup + notifier fan-out + TV deep-link
 │   │   └── symbol_universe.py        Static list + auto-top-N by volume
+│   ├── journal.py                    Manual fills vs alerts
+│   ├── improve/review.py             One-variable weekly review
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
@@ -46,6 +49,8 @@ qmie/
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
+├── strategy/                         goals, baseline knobs, weekly reviews
+├── .cursor/                          qmie-review agent / skill / command
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
@@ -72,7 +77,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 176 tests; CI also installs requests+pyarrow
+pytest -v                              # 196 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 
@@ -108,6 +113,11 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `asyncio.gather(..., return_exceptions=True)` is load-bearing —
    a failing Discord must not break Telegram, and vice versa. See
    `test_notifier_failure_isolated`.
+
+6. **Ranked allocation does not execute.** `allocator.allocate()` only
+   chooses which alerts to fire and a suggested book weight. Changing
+   `ALLOC_MODE` must not grow a broker path.
+
 
 ## Conventions
 

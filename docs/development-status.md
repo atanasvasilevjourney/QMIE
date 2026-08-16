@@ -6,7 +6,8 @@ marketing summary.
 
 **Headline: the live scanner is ~90% of a shippable alert product.
 The *intended* system (scanner + proven edge + live feedback) is
-~75% complete after Sprint 0 wiring (was ~72% at research time).**
+~80% complete after the journal + ranked allocation + review CLI
+(was ~75% after Sprint 0 wiring).**
 
 ### Sprint 0 already in this branch
 

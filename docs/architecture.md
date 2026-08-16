@@ -44,6 +44,17 @@
                                    same signal locally
 ```
 
+When `ALLOC_MODE=ranked` (default), the scheduler collects every
+symbol's `ScanResult` for the closed bar, then `allocator.allocate()`
+keeps top N longs and top N shorts (cluster cap, 50/50 books). Only
+those slots reach the dispatcher. `GET /allocation` returns the last
+plan. Suggested `weight_pct` is a risk budget for the human — still
+no orders.
+
+The weekly review loop (`python -m improve.review`) reads the journal
+against `strategy/goals.yaml` and proposes **one** knob. It never
+writes `.env`.
+
 ## Why this shape
 
 ### 1. Server is the source of truth, Pine is the visualizer.

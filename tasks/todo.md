@@ -35,6 +35,11 @@ Sprint 1 has an OOS number.
 - [x] Alert when live A/A+ win rate (from journal, n≥30) drifts >5 pts
       vs OOS baseline (`JOURNAL_OOS_WIN_PCT`; silent until that is set)
 - [x] Pine dashboard: daily-trend row + alert JSON field
+- [x] Ranked asset allocation (`ALLOC_MODE=ranked`): top N long/short,
+      cluster cap, suggested weights on Discord/Telegram; `GET /allocation`
+- [x] One-variable review CLI + Cursor agent (`python -m improve.review`,
+      `strategy/goals.yaml`) — proposes, does not trade or write `.env`
+
 
 ## Sprint 3 — Hardening (only if Sprint 1 shows edge)
 - [ ] HTTP tests for `/health`, `/webhook`, `/scan/once`
@@ -44,6 +49,7 @@ Sprint 1 has an OOS number.
 
 ## Won't do (unless scope is explicitly changed)
 - Order execution / broker adapters
+- Hermes / Signum / HyperLiquid / Railway "oneshot" trading agents
 - Weight hyperopt on the reporting sample
 - Forex / indices / equities
 - Re-implementing equity curve / Monte Carlo / SQN (already in

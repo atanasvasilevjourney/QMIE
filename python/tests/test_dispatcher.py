@@ -309,3 +309,28 @@ class TestDailyTrendPropagation:
         await dispatcher.dispatch(result)
         assert len(received) == 1
         assert getattr(received[0], "funding_rate", None) == pytest.approx(0.0002)
+
+    @pytest.mark.asyncio
+    async def test_alloc_fields_included_in_notifier_signal(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = _make_result()
+        result.alloc_rank = 1
+        result.alloc_weight_pct = 25.0
+        result.alloc_cluster = "BTC"
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        await dispatcher.dispatch(result)
+        assert len(received) == 1
+        assert received[0].alloc_rank == 1
+        assert received[0].alloc_weight_pct == pytest.approx(25.0)
+        assert received[0].alloc_cluster == "BTC"

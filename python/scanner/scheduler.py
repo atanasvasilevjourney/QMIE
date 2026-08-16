@@ -24,9 +24,10 @@ import logging
 import time
 from typing import Optional
 
+from .allocator import AllocConfig, AllocationPlan, allocate
 from .dispatcher import SignalDispatcher
 from .exchange_clients import ExchangeClient
-from .signal_engine import Weights, compute_signal
+from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class ScannerScheduler:
         sig_max_atr_pct: float = 8.0,
         sig_min_adx: float = 0.0,
         sig_funding_rate_threshold: float = 0.001,
+        alloc_cfg: Optional[AllocConfig] = None,
     ):
         self.client = client
         self.universe = universe
@@ -82,6 +84,8 @@ class ScannerScheduler:
         self.sig_max_atr_pct = sig_max_atr_pct
         self.sig_min_adx = sig_min_adx
         self.sig_funding_rate_threshold = sig_funding_rate_threshold
+        self.alloc_cfg = alloc_cfg or AllocConfig(mode="all")
+        self.last_allocation: Optional[AllocationPlan] = None
 
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
@@ -162,12 +166,12 @@ class ScannerScheduler:
         logger.info("Scan pass: tf=%s htf=%s symbols=%d", tf, htf, len(symbols))
         t0 = time.time()
 
-        async def scan_one(sym: str) -> None:
+        async def scan_one(sym: str) -> Optional[ScanResult]:
             async with self.sem:
                 try:
                     df = await self.client.fetch_klines(sym, tf, limit=300)
                     if df is None or len(df) < 220:
-                        return
+                        return None
                     htf_df = None
                     if htf:
                         try:
@@ -190,17 +194,17 @@ class ScannerScheduler:
                         htf_df=htf_df, daily_df=daily_df, weights=self.weights,
                     )
                     if res is None:
-                        return
+                        return None
                     # Volatility regime gate
                     if not (self.sig_min_atr_pct <= res.atr_pct <= self.sig_max_atr_pct):
-                        return
+                        return None
                     # ADX trend-strength gate (0 = disabled)
                     if self.sig_min_adx > 0 and res.adx_value < self.sig_min_adx:
                         logger.debug(
                             "ADX gate suppressed %s %s (adx=%.1f < %.1f)",
                             sym, res.side, res.adx_value, self.sig_min_adx,
                         )
-                        return
+                        return None
                     # Funding rate directional filter (crowded-side suppression)
                     try:
                         premium = await self.client.fetch_premium_index(sym)
@@ -212,23 +216,61 @@ class ScannerScheduler:
                                 "Funding filter suppressed BUY %s (rate=%.4f%%)",
                                 sym, fr * 100,
                             )
-                            return
+                            return None
                         if res.side == "SELL" and fr < -threshold:
                             logger.info(
                                 "Funding filter suppressed SELL %s (rate=%.4f%%)",
                                 sym, fr * 100,
                             )
-                            return
+                            return None
                     except Exception as exc:
                         logger.warning("Could not fetch funding rate for %s: %s", sym, exc)
                         # Fail open — don't suppress signal if API fails
-                    if await self.dispatcher.dispatch(res):
-                        self.stats["alerts_dispatched"] += 1
+                    return res
                 except Exception as e:
                     logger.warning("scan %s/%s failed: %s", sym, tf, e)
+                    return None
 
-        await asyncio.gather(*(scan_one(s) for s in symbols),
-                             return_exceptions=True)
+        gathered = await asyncio.gather(*(scan_one(s) for s in symbols),
+                                        return_exceptions=True)
+        results: list[ScanResult] = []
+        for item in gathered:
+            if isinstance(item, ScanResult):
+                results.append(item)
+            elif isinstance(item, Exception):
+                logger.warning("scan gather error: %s", item)
+                self.stats["errors"] += 1
+
+        to_dispatch: list[ScanResult]
+        if self.alloc_cfg.mode == "ranked":
+            plan = allocate(results, self.alloc_cfg, timeframe=tf)
+            self.last_allocation = plan
+            to_dispatch = [s.result for s in plan.slots]
+            logger.info(
+                "Allocation tf=%s slots=%d considered=%d",
+                tf, len(plan.slots), plan.considered,
+            )
+        else:
+            to_dispatch = results
+            self.last_allocation = allocate(
+                results,
+                AllocConfig(
+                    mode="all",
+                    top_long=999,
+                    top_short=999,
+                    min_grade="C",
+                    weighting="equal",
+                    cluster_max=0,
+                ),
+                timeframe=tf,
+            )
+
+        for res in to_dispatch:
+            try:
+                if await self.dispatcher.dispatch(res):
+                    self.stats["alerts_dispatched"] += 1
+            except Exception as e:
+                logger.warning("dispatch %s/%s failed: %s", res.symbol, tf, e)
 
         elapsed = time.time() - t0
         self.stats["passes"] += 1

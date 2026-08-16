@@ -1,0 +1,16 @@
+---
+description: QMIE stays an alert scanner. Self-improve is journal + one knob, not live execution or shadow MCPs.
+globs:
+  - strategy/**
+  - python/improve/**
+  - python/scanner/allocator.py
+alwaysApply: false
+---
+
+# QMIE trading-agent boundary
+
+- No order execution, broker adapters, HyperLiquid API wallets, or Signum bots.
+- No Hermes / OpenClaw install. No `npx` MCP servers. Prefer Runlayer if an MCP is ever required.
+- TradingView = `pine/quant_visualizer.pine` + `tv_chart_url()`. There is no TV HTTP trading API here.
+- Strategy changes: one variable per review cycle. Update `strategy/baseline.yaml` only when a human applies the matching `.env` knob.
+- Pine parity: if you touch `scanner/indicators.py` or `scanner/signal_engine.py`, change the Pine file in the same commit.

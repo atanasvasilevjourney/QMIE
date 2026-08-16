@@ -108,6 +108,14 @@ class Settings(BaseSettings):
     journal_drift_pts:   float = 5.0
     journal_min_fills:   int = 30
 
+    # ─── Ranked asset allocation (which alerts to take, suggested size) ─
+    alloc_mode:        str = "ranked"   # ranked | all
+    alloc_top_long:    int = 3
+    alloc_top_short:   int = 3
+    alloc_min_grade:   str = "A"
+    alloc_weighting:   str = "rank"     # rank | equal
+    alloc_cluster_max: int = 1          # 0 = unlimited
+
     @property
     def webhook_allowlist(self) -> list[str]:
         return [ip.strip() for ip in self.webhook_allow_ips.split(",") if ip.strip()]

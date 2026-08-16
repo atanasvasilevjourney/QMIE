@@ -119,6 +119,9 @@ class SignalDispatcher:
             reason=result.reason,
             daily_trend=result.daily_trend,
             funding_rate=result.funding_rate,
+            alloc_rank=result.alloc_rank,
+            alloc_weight_pct=result.alloc_weight_pct,
+            alloc_cluster=result.alloc_cluster,
         )
 
         # Persist (idempotent by idempotency_key)
@@ -134,6 +137,9 @@ class SignalDispatcher:
         sig_dict["chart_url"] = chart_url
         sig_dict["daily_trend"] = result.daily_trend
         sig_dict["funding_rate"] = result.funding_rate
+        sig_dict["alloc_rank"] = result.alloc_rank
+        sig_dict["alloc_weight_pct"] = result.alloc_weight_pct
+        sig_dict["alloc_cluster"] = result.alloc_cluster
 
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)

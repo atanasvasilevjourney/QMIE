@@ -231,3 +231,148 @@ class TestDailyDfRouting:
         assert "1d" in fetched_tfs, "Expected a separate 1d fetch for 1H scan"
         assert captured.get("daily_df") is not None
         assert captured.get("daily_df") is not captured.get("htf_df")
+
+
+class TestRankedDispatch:
+    """Ranked mode dispatches only allocated slots, not the full scan."""
+
+    @pytest.mark.asyncio
+    async def test_ranked_mode_dispatches_top_n_only(self):
+        from unittest.mock import patch
+
+        import pandas as pd
+
+        from scanner.allocator import AllocConfig
+        from scanner.signal_engine import ScanResult
+
+        scores = {
+            "BTCUSDT": 90.0,
+            "ETHUSDT": 80.0,
+            "SOLUSDT": 70.0,
+            "BNBUSDT": 60.0,
+            "DOGEUSDT": 50.0,
+        }
+
+        def fake_compute(df, *, symbol, timeframe, **kw):
+            return ScanResult(
+                symbol=symbol,
+                timeframe=timeframe,
+                timestamp=pd.Timestamp("2024-06-01 12:00:00", tz="UTC"),
+                side="BUY",
+                grade="A",
+                score=scores[symbol],
+                price=100.0,
+                stop_loss=95.0,
+                take_profit=110.0,
+                atr_value=1.0,
+                atr_pct=1.0,
+                rsi_value=55.0,
+                adx_value=30.0,
+                htf_aligned=True,
+                nearest_res=1.0,
+                nearest_sup=1.0,
+            )
+
+        fake_df = pd.DataFrame(
+            {"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            index=pd.date_range("2024-01-01", periods=300, freq="1h"),
+        )
+
+        client = AsyncMock()
+        client.fetch_klines = AsyncMock(return_value=fake_df)
+        client.fetch_premium_index = AsyncMock(return_value={"lastFundingRate": 0.0})
+
+        dispatched: list[str] = []
+        dispatcher = MagicMock()
+
+        async def capture(res):
+            dispatched.append(res.symbol)
+            return True
+
+        dispatcher.dispatch = capture
+
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=list(scores))
+
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            alloc_cfg=AllocConfig(
+                mode="ranked",
+                top_long=2,
+                top_short=2,
+                cluster_max=0,
+            ),
+        )
+
+        with patch("scanner.scheduler.compute_signal", side_effect=fake_compute):
+            await scheduler._scan_pass("1h")
+
+        assert dispatched == ["BTCUSDT", "ETHUSDT"]
+        assert scheduler.last_allocation is not None
+        assert len(scheduler.last_allocation.slots) == 2
+        assert scheduler.stats["alerts_dispatched"] == 2
+
+    @pytest.mark.asyncio
+    async def test_all_mode_dispatches_every_result(self):
+        from unittest.mock import patch
+
+        import pandas as pd
+
+        from scanner.allocator import AllocConfig
+        from scanner.signal_engine import ScanResult
+
+        def fake_compute(df, *, symbol, timeframe, **kw):
+            return ScanResult(
+                symbol=symbol,
+                timeframe=timeframe,
+                timestamp=pd.Timestamp("2024-06-01 12:00:00", tz="UTC"),
+                side="BUY",
+                grade="A",
+                score=80.0,
+                price=100.0,
+                stop_loss=95.0,
+                take_profit=110.0,
+                atr_value=1.0,
+                atr_pct=1.0,
+                rsi_value=55.0,
+                adx_value=30.0,
+                htf_aligned=True,
+                nearest_res=1.0,
+                nearest_sup=1.0,
+            )
+
+        fake_df = pd.DataFrame(
+            {"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            index=pd.date_range("2024-01-01", periods=300, freq="1h"),
+        )
+        client = AsyncMock()
+        client.fetch_klines = AsyncMock(return_value=fake_df)
+        client.fetch_premium_index = AsyncMock(return_value={"lastFundingRate": 0.0})
+
+        dispatched: list[str] = []
+        dispatcher = MagicMock()
+
+        async def capture(res):
+            dispatched.append(res.symbol)
+            return True
+
+        dispatcher.dispatch = capture
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            alloc_cfg=AllocConfig(mode="all"),
+        )
+        with patch("scanner.scheduler.compute_signal", side_effect=fake_compute):
+            await scheduler._scan_pass("1h")
+
+        assert set(dispatched) == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}

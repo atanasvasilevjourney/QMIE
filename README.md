@@ -25,8 +25,11 @@ Every time a 1H or 4H bar closes (configurable), the server:
    market structure, liquidity sweep) — math identical to the Pine
    visualizer. Weights currently total 128, not 100.
 3. Grades each signal A+ / A / B / C / REJECT
-4. Dispatches the qualifying ones to Discord and/or Telegram with
-   a one-click TradingView chart deep-link
+4. Ranks A/A+ (and optionally B) setups with **Ranked Asset
+   Allocation** — top N long + top N short per timeframe, cluster cap
+   so correlated names do not stack — then dispatches those slots to
+   Discord and/or Telegram with a TradingView chart deep-link and a
+   suggested book weight (not an order)
 5. Persists every signal in SQLite for audit and later analysis
 
 The companion **Pine visualizer indicator** runs locally on whatever
@@ -44,9 +47,10 @@ setup visually, you make the entry decision yourself.
 * No forex, no indices, no equities, no futures. Crypto only — by
   design. Each market has its own volatility regime, session structure,
   and microstructure. One scoring engine cannot serve all of them well.
-* No "AI" — no neural nets, no LLM trading, no reinforcement learning.
-  Just deterministic indicator math, which means it's auditable and
-  every signal is reproducible from the candle data alone.
+* No "autonomous AI trader" — no Hermes, Signum, HyperLiquid, or
+  LLM that places orders. The Cursor review agent proposes **one**
+  parameter change from journal vs `strategy/goals.yaml`. The scanner
+  math stays deterministic and Pine-parity.
 * No order execution. The Python backtest harness (`python/backtest/`)
   measures historical hit rate of the same `compute_signal` engine;
   it does not place trades. Pine's strategy tester is still unreliable
@@ -72,12 +76,20 @@ qmie/
 │   │   ├── signal_engine.py           10-component scoring
 │   │   ├── symbol_universe.py         static + auto top-N volume
 │   │   ├── scheduler.py               bar-close-aware loop
+│   │   ├── allocator.py               ranked swing book (top N, cluster cap)
 │   │   └── dispatcher.py              dedup + notifier fan-out
+│   ├── improve/
+│   │   └── review.py                  one-variable weekly review (no .env writes)
 │   ├── notifiers/
 │   │   ├── discord.py                 themed embeds + TV deep link
 │   │   └── telegram.py                MarkdownV2 + TV deep link
 │   ├── requirements.txt
 │   └── .env.example
+├── strategy/
+│   ├── goals.yaml                     success vs failure (Sharpe, DD, R)
+│   ├── baseline.yaml                  frozen live knobs
+│   └── reviews/                       dated one-variable proposals
+├── .cursor/                           review agent / skill / /qmie-review
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
@@ -102,6 +114,7 @@ docker compose --env-file ../python/.env up -d --build
 # Sanity-check
 curl -s localhost:8080/health | jq
 curl -s localhost:8080/universe | jq
+curl -s localhost:8080/allocation | jq    # last ranked swing book
 ```
 
 The first 1H or 4H bar close after startup should trigger a scan pass —
@@ -133,6 +146,22 @@ Three knobs in `.env`:
 | `SCAN_TIMEFRAMES` | More TFs = more signals. `4h` only is the cleanest. `1h,4h` is balanced. |
 | `W_*` weights | Re-weight the ten components. Defaults sum to **128** (original 7 = 100, plus ribbon 10 + structure 10 + sweep 8). Rebalance all of them together. |
 
+| `ALLOC_MODE` | `ranked` (default): top N long + top N short per TF. `all`: every grade that passes `SCAN_MIN_ALERT_GRADE`. |
+| `ALLOC_TOP_LONG` / `ALLOC_TOP_SHORT` | Slots in the swing book (default 3 / 3). |
+| `ALLOC_CLUSTER_MAX` | Max names per correlated cluster (BTC / ETH / SOL / OTHER). `1` default; `0` = unlimited. |
+| `ALLOC_WEIGHTING` | `rank` (n, n-1, …, 1) or `equal` inside each side. |
+
+Suggested `weight_pct` is a 100-point risk budget for **you**. QMIE still does not place orders.
+
+Weekly, score the journal against `strategy/goals.yaml` (one knob at a time):
+
+```bash
+cd python && python -m improve.review
+# then open strategy/reviews/YYYY-MM-DD.md
+```
+
+Or ask the Cursor agent `/qmie-review`. It will not write `.env`.
+
 The volatility filter (`SIG_MIN_ATR_PCT` / `SIG_MAX_ATR_PCT`) suppresses
 both dead-quiet and chaos regimes — leave defaults unless you have a
 strong opinion.
@@ -150,10 +179,9 @@ What remains:
    `JOURNAL_OOS_WIN_PCT` from that A/A+ OOS win rate so live drift
    alerts have a baseline (needs ≥ 30 closed journal fills).
 
-2. **Position sizing discipline**: a server that fires 10 A-grade
-   alerts per day cannot tell you which 3 to take. You need an
-   external rule (e.g. max 2 concurrent, max 1 per asset cluster
-   ETH/SOL/AVAX). `SIG_MAX_SIGNALS_PER_SYMBOL_PER_DAY` only caps alerts.
+2. **Position sizing:** Ranked Asset Allocation is built in
+   (`ALLOC_MODE=ranked`). Discord shows rank, suggested weight %, and
+   cluster. You still size and click the order yourself.
 
 3. **Do not refit weights** on the same sample you use to report hit
    rate. Measure first (Sprint 1).
