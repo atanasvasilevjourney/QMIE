@@ -46,6 +46,8 @@ Sprint 1 has an OOS number.
 - [x] Cursor TradingView MCP (`.cursor/mcp.json` →
       atilaahmettaner/tradingview-mcp via `uvx`; shadow stdio;
       `docs/tradingview-mcp.md`)
+- [x] Ruled MCP overlay on A/A+ setups (`/qmie-setup`,
+      `python -m improve.setup_review`) — confirm/skip only
 
 
 ## Sprint 3 — Hardening (only if Sprint 1 shows edge)

@@ -43,10 +43,11 @@ qmie/
 │   │   └── symbol_universe.py        Static list + auto-top-N by volume
 │   ├── journal.py                    Manual fills vs alerts
 │   ├── improve/review.py             One-variable weekly review
+│   ├── improve/setup_review.py       QMIE + MCP ruled setup overlay
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        203 pytest tests (CI installs requests+pyarrow for backtest)
+│   ├── tests/                        214 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
@@ -79,7 +80,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 203 tests; CI also installs requests+pyarrow
+pytest -v                              # 214 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 
@@ -127,9 +128,9 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
 
 8. **TradingView MCP is not the scanner.** `.cursor/mcp.json` launches
    atilaahmettaner/tradingview-mcp (`uvx`, shadow stdio). Use it for
-   screeners / second-opinion TA. Do not retune `W_*` or Pine from it.
-   Prefer Runlayer if a managed TV server appears. See
-   `docs/tradingview-mcp.md`.
+   live quotes and the ruled overlay (`python -m improve.setup_review`,
+   `/qmie-setup`). Do not retune `W_*` or Pine from it. QMIE signal
+   backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
 
 
 ## Conventions

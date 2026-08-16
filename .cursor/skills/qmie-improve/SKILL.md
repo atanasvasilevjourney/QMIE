@@ -14,8 +14,9 @@ prompt → ranked swing allocation → journaled outcome → one new prompt
 (a single knob). It is **not** Hermes, Signum, HyperLiquid, or Railway.
 
 The optional TradingView MCP (`.cursor/mcp.json`) is a **shadow stdio**
-server for screeners / second-opinion TA. It is not the scanner and
-must not retune weights. See `docs/tradingview-mcp.md`.
+server. Live quote + ruled confirm/skip on A/A+ (`/qmie-setup`) is
+allowed. It is not the scanner and must not retune weights. QMIE
+backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
 
 ## When to use
 

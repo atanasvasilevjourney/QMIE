@@ -1,40 +1,78 @@
 ---
 name: tradingview-mcp
 description: >-
-  Use the project TradingView MCP (atilaahmettaner/tradingview-mcp via
-  uvx) for live screeners, third-party TA, news, and MCP backtests.
-  Never mix those numbers into QMIE scoring weights.
+  Use the project TradingView MCP for live quotes, ruled TA overlay on
+  QMIE A/A+ setups, and generic MCP backtests. Never mix MCP numbers
+  into QMIE scoring weights. Trigger on setup review, entry confirm,
+  screener, or "use the MCP".
 ---
 
-# TradingView MCP (shadow stdio)
+# TradingView MCP — live data + ruled overlay
 
 `.cursor/mcp.json` launches `tradingview-mcp-server` with `uvx`.
-This is a **shadow MCP** (not Runlayer). Prefer a Runlayer-managed
-TradingView server if one appears later.
+**Shadow MCP** (not Runlayer). Prefer Runlayer if a managed TV server
+appears later.
+
+This cloud agent often has **no** `tradingview` tools. On the operator's
+Cursor desktop they appear after `uv` is installed and the server is
+enabled. If tools are missing, still run `python -m improve.setup_review`
+without `--mcp-json` (verdict `INCOMPLETE`).
 
 ## When to use
 
-- "screen crypto gainers", "TA on BTC", "multi-timeframe gold"
-- News / Reddit-style sentiment tools on the MCP
-- The MCP's own backtest tools (separate from `python -m backtest.run`)
+- `/qmie-setup` or "confirm this entry with MCP"
+- Live quote / screener / third-party TA
+- Generic MCP strategy backtest (label it MCP, not QMIE OOS)
+
+## Setup overlay (AI-ruled, not vibe)
+
+QMIE grade is already computed. You only **confirm or skip**.
+
+Discover tools with the MCP catalog, then call (names as in
+atilaahmettaner/tradingview-mcp):
+
+| Job | Tool | Map into snapshot |
+|---|---|---|
+| Last price | `yahoo_price` (`BTC-USD`) | `yahoo_last` |
+| TA rec + RSI | `get_technical_analysis` | `recommendation`, `rsi` |
+| HTF bias | `get_multi_timeframe_analysis` | `htf_bias`: bullish/bearish/mixed |
+| News/Reddit | `combined_analysis` / `market_sentiment` | `sentiment` **info only** |
+
+Write `mcp.json` and run `python -m improve.setup_review ... --mcp-json mcp.json`.
+
+Fixed gates (see `improve/setup_review.py`):
+
+1. QMIE side BUY/SELL and grade A/A+.
+2. MCP recommendation same side (HOLD = fail).
+3. MCP HTF same side.
+4. MCP RSI not ≥75 on BUY, not ≤25 on SELL.
+5. Sentiment never gates.
+
+Verdicts: `CONFIRM` (open visualizer, still manual) /
+`CONFLICT` (skip, do not retune `W_*`) /
+`INCOMPLETE` (MCP missing).
+
+## Backtest
+
+**QMIE signals** (the real one):
+
+```bash
+cd python && python -m backtest.run --symbols BTCUSDT ETHUSDT --tf 1h 4h \
+  --start 2024-01-01 --split 2025-01-01 \
+  --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0
+```
+
+Write the table to `docs/backtest-baseline.md` only when the operator
+asks to freeze OOS.
+
+**MCP generic strategies** (optional extra): `backtest_strategy` or
+`walk_forward_backtest_strategy` on `supertrend` / `rsi` for the Yahoo
+symbol. Say clearly: this is not Pine-parity and not QMIE expectancy.
 
 ## Hard rules
 
-1. **QMIE scoring stays 7-component Pine-parity.** Do not change
-   `W_*`, `signal_engine.py`, or `quant_visualizer.pine` because an
-   MCP tool returned a different RSI/ADX/grade.
-2. **Do not treat MCP backtests as `docs/backtest-baseline.md`.**
-   Frozen OOS for QMIE is the Python harness on closed bars.
-3. **No execution.** MCP output is informational. No broker, no
-   HyperLiquid, no "place this trade".
-4. **Do not `npx -y` other MCP servers.** Do not point this config
-   at pro.cryptosieve.com unless the operator asks for that remote.
-5. **Cannot push QMIE → Pine alerts.** Visual verify = Discord
-   deep-link + `quant_visualizer.pine` labels on the same bar.
-   Pine `alert()` can POST to `/webhook`; that is chart → server.
-
-## If tools are missing
-
-The cloud agent often cannot spawn this stdio server. Tell the
-operator to install `uv`, reload Cursor, and enable **tradingview**
-under Settings → MCP. Then retry.
+1. Do not change `W_*`, `signal_engine.py`, or Pine from MCP output.
+2. Do not treat MCP backtests as `docs/backtest-baseline.md`.
+3. No execution. No HyperLiquid. No extra `npx` MCP servers.
+4. Cannot push QMIE → Pine. Visual verify = chart link + visualizer.
+5. Do not install OpenClaw / Hermes to wrap this MCP.

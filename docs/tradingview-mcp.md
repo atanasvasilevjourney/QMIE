@@ -68,3 +68,31 @@ QMIE scan (closed 1H/4H)
 Using this MCP as a "did the entry print?" check is the wrong
 tool: its RSI/ADX will not match the visualizer, so a mismatch
 would look like a bug when it is just a different library.
+
+## AI-ruled overlay on a QMIE setup
+
+MCP is a **confirm/skip** layer after QMIE already graded A/A+.
+It does not become an 8th scoring component.
+
+```
+QMIE A/A+ alert
+  → MCP yahoo_price + get_technical_analysis + get_multi_timeframe_analysis
+  → python -m improve.setup_review --mcp-json mcp.json
+  → CONFIRM | CONFLICT | INCOMPLETE
+  → visualizer on the chart link (still manual)
+```
+
+Cursor command: `/qmie-setup`. Gates (fixed, not LLM vibe):
+
+- QMIE directional A/A+
+- MCP recommendation same side (HOLD fails)
+- MCP HTF same side
+- MCP RSI not extreme against the trade
+- News/Reddit never gate
+
+## Backtest
+
+| What | Command / tool | Writes `docs/backtest-baseline.md`? |
+|---|---|---|
+| **QMIE signals** | `python -m backtest.run --split 2025-01-01 --min-adx 20 ...` | Yes, when you freeze OOS |
+| **MCP generic strategies** | `backtest_strategy` / `walk_forward_backtest_strategy` | **No** — different math |

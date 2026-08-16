@@ -173,6 +173,12 @@ cd python && python -m improve.review
 
 Or ask the Cursor agent `/qmie-review`. It will not write `.env`.
 
+On an A/A+ alert, `/qmie-setup` pulls TradingView MCP live TA (if the
+server is enabled) through a **fixed** confirm/skip checklist
+(`python -m improve.setup_review`). That does not change scores.
+Backtest QMIE signals with `python -m backtest.run`, not MCP
+`backtest_strategy`. Details: [`docs/tradingview-mcp.md`](docs/tradingview-mcp.md).
+
 The volatility filter (`SIG_MIN_ATR_PCT` / `SIG_MAX_ATR_PCT`) suppresses
 both dead-quiet and chaos regimes — leave defaults unless you have a
 strong opinion.
