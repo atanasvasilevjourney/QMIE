@@ -150,6 +150,7 @@ async def lifespan(app: FastAPI):
         weights=Weights(
             supertrend=s.w_supertrend, ema=s.w_ema, rsi=s.w_rsi,
             adx=s.w_adx, htf=s.w_htf, sr=s.w_sr, vol=s.w_vol,
+            ribbon=s.w_ribbon, structure=s.w_structure, sweep=s.w_sweep,
         ),
         loop_interval_sec=s.scan_loop_interval_sec,
         max_concurrency=s.scan_max_concurrency,

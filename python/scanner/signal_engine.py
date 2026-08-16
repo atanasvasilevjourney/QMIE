@@ -29,7 +29,7 @@ Direction:
    Weighted majority of weighted votes determines side.
    If sides are mixed strongly, score is penalised.
 
-This logic MUST mirror `pine/quant_strategy.pine`.
+This logic MUST mirror `pine/quant_visualizer.pine`.
 """
 from __future__ import annotations
 

@@ -7,11 +7,15 @@ run / test it without you having to re-explain.
 ## What this is
 
 QMIE is a server-side crypto market scanner. It scans ~30 USDT-perp
-symbols on 1H and 4H timeframes, computes a 7-component weighted
-score (Supertrend + EMA200 + RSI + ADX + HTF alignment + S/R room +
-Volatility regime), and dispatches A/A+ signals to Discord and/or
-Telegram with a TradingView chart deep-link. It does **not** execute
-trades. Manual entry only — by design.
+symbols on 1H and 4H timeframes, computes a 10-component weighted
+score (original 7: Supertrend + EMA200 + RSI + ADX + HTF alignment +
+S/R room + Volatility, plus EMA ribbon, BOS/CHoCH structure, liquidity
+sweep), and dispatches A/A+ signals to Discord and/or Telegram with a
+TradingView chart deep-link. It does **not** execute trades. Manual
+entry only — by design.
+
+Status and next sprints: `docs/development-status.md`. Live scanner
+~90%; intended system (scanner + measured edge + live feedback) ~75%.
 
 A companion Pine v6 indicator (`pine/quant_visualizer.pine`) runs the
 same scoring math locally on TradingView so chart plots match server
@@ -30,7 +34,7 @@ qmie/
 │   ├── security.py                   HMAC + idempotency
 │   ├── scanner/                      ← the core
 │   │   ├── indicators.py             Pine-compatible math (RMA, EMA, RSI, ADX, ATR, Supertrend, pivots)
-│   │   ├── signal_engine.py          7-component scoring → A+/A/B/C/REJECT
+│   │   ├── signal_engine.py          10-component scoring → A+/A/B/C/REJECT
 │   │   ├── exchange_clients.py       Binance + Bybit public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
 │   │   ├── dispatcher.py             Dedup + notifier fan-out + TV deep-link
@@ -38,16 +42,18 @@ qmie/
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        109 pytest tests, 74% coverage
+│   ├── tests/                        155 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
-├── docs/architecture.md              How things fit + scaling cliffs
+├── docs/
+│   ├── architecture.md               How things fit + scaling cliffs
+│   └── development-status.md         Completeness score + sprint plan
 ├── README.md
-└── REVIEW.md                         Audit findings + test summary
+└── REVIEW.md                         Audit findings (partially stale; see status doc)
 ```
 
 ## Running
@@ -66,7 +72,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 109 tests, ~2s
+pytest -v                              # 155 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 

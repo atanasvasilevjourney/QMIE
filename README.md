@@ -7,6 +7,11 @@ in real time and pushes alerts to Discord and Telegram. You execute
 manually — no automated brokers, no API keys for trading, no prop-firm
 guardrails to break.
 
+**Status (Aug 2026):** live scanner ~90% of a shippable alert product;
+intended system (scanner + measured edge + live feedback) ~75%. See
+[`docs/development-status.md`](docs/development-status.md) for the
+breakdown, known bugs, and the recommended sprint order.
+
 ---
 
 ## What it does
@@ -15,9 +20,10 @@ Every time a 1H or 4H bar closes (configurable), the server:
 
 1. Pulls the latest 300 candles for each symbol in your universe
    (default: 30 USDT-perpetuals on Binance Futures)
-2. Computes a 7-component weighted score (Supertrend + EMA200 + RSI
-   + ADX + HTF alignment + S/R room + Volatility) — math identical
-   to the Pine visualizer
+2. Computes a 10-component weighted score (original 7: Supertrend +
+   EMA200 + RSI + ADX + HTF + S/R + Volatility, plus EMA ribbon,
+   market structure, liquidity sweep) — math identical to the Pine
+   visualizer. Weights currently total 128, not 100.
 3. Grades each signal A+ / A / B / C / REJECT
 4. Dispatches the qualifying ones to Discord and/or Telegram with
    a one-click TradingView chart deep-link
@@ -41,9 +47,10 @@ setup visually, you make the entry decision yourself.
 * No "AI" — no neural nets, no LLM trading, no reinforcement learning.
   Just deterministic indicator math, which means it's auditable and
   every signal is reproducible from the candle data alone.
-* No backtest engine bundled. Backtesting Pine on TradingView's strategy
-  tester is unreliable (repainting). Use a proper Python backtester
-  with the same `scanner/signal_engine.py` logic if you want stats.
+* No order execution. The Python backtest harness (`python/backtest/`)
+  measures historical hit rate of the same `compute_signal` engine;
+  it does not place trades. Pine's strategy tester is still unreliable
+  (repainting) — use the Python runner, not TradingView, for stats.
 
 ---
 
@@ -62,7 +69,7 @@ qmie/
 │   ├── scanner/
 │   │   ├── exchange_clients.py        Binance + Bybit public REST
 │   │   ├── indicators.py              Pine-compatible math
-│   │   ├── signal_engine.py           7-component scoring
+│   │   ├── signal_engine.py           10-component scoring
 │   │   ├── symbol_universe.py         static + auto top-N volume
 │   │   ├── scheduler.py               bar-close-aware loop
 │   │   └── dispatcher.py              dedup + notifier fan-out
@@ -76,7 +83,7 @@ qmie/
 │   └── docker-compose.yml
 └── docs/
     ├── architecture.md                what runs where, why
-    └── deployment.md                  ops runbook
+    └── development-status.md          completeness score + next sprints
 ```
 
 ---
@@ -110,7 +117,7 @@ Three knobs in `.env`:
 |---|---|
 | `SCAN_MIN_ALERT_GRADE` | `A+` only (very rare), `A` (default), `B` (noisier), `C` (firehose) |
 | `SCAN_TIMEFRAMES` | More TFs = more signals. `4h` only is the cleanest. `1h,4h` is balanced. |
-| `W_*` weights | Re-weight the seven components if you want stronger HTF bias, less RSI, etc. They sum to 100; rebalance whole-numbers. |
+| `W_*` weights | Re-weight the ten components. Defaults sum to **128** (original 7 = 100, plus ribbon 10 + structure 10 + sweep 8). Rebalance all of them together. |
 
 The volatility filter (`SIG_MIN_ATR_PCT` / `SIG_MAX_ATR_PCT`) suppresses
 both dead-quiet and chaos regimes — leave defaults unless you have a
