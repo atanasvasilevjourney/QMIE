@@ -98,6 +98,7 @@ qmie/
 │   ├── baseline.yaml                  frozen live knobs
 │   └── reviews/                       dated one-variable proposals
 ├── .cursor/                           review agent / skill / /qmie-review
+├── web/                               QMIE Desk — cyberpunk React + R3F UI
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
@@ -124,6 +125,15 @@ curl -s localhost:8080/health | jq
 curl -s localhost:8080/universe | jq
 curl -s localhost:8080/allocation | jq    # last ranked swing book
 ```
+
+**Operator desk UI** (optional; API on `:8080`):
+
+```bash
+cd web && npm install && npm run dev
+# → http://localhost:5173  (proxies /qmie → :8080)
+```
+
+See [`web/README.md`](web/README.md).
 
 The first 1H or 4H bar close after startup should trigger a scan pass —
 watch the logs (`docker logs -f qmie`) and you'll see the scan

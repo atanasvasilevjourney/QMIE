@@ -1,0 +1,45 @@
+import type { AllocationPlan } from '../types'
+import { Empty, PanelShell } from './RadarPanel'
+
+export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
+  const slots = plan?.slots ?? []
+  return (
+    <PanelShell
+      title="Ranked Book"
+      subtitle={
+        plan?.timeframe
+          ? `TF ${plan.timeframe} · considered ${plan.considered ?? 0}${plan.regime ? ` · ${plan.regime}` : ''}`
+          : plan?.note || 'no_scan_yet'
+      }
+    >
+      <div className="space-y-2">
+        {slots.map((slot, i) => {
+          const r = slot.result
+          return (
+            <div
+              key={`${r?.symbol}-${i}`}
+              className="flex items-center justify-between rounded-xl border border-white/5 bg-gradient-to-r from-cyan/5 to-magenta/5 px-3 py-2"
+            >
+              <div>
+                <div className="font-display text-xs tracking-wider text-white">
+                  #{slot.rank ?? i + 1} {r?.symbol || '—'}
+                </div>
+                <div className="font-mono text-[10px] text-chrome/55">
+                  {r?.side} · {r?.grade} · {slot.cluster || '—'}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-sm text-cyan">{slot.weight_pct?.toFixed?.(1) ?? '—'}%</div>
+                <div className="font-mono text-[10px] text-chrome/40">suggested</div>
+              </div>
+            </div>
+          )
+        })}
+        {!slots.length && <Empty>No allocation slots — wait for a scan pass</Empty>}
+      </div>
+      <p className="mt-3 font-mono text-[10px] text-chrome/45">
+        weight_pct is a risk budget for you — QMIE never places orders.
+      </p>
+    </PanelShell>
+  )
+}
