@@ -86,6 +86,7 @@ class ScannerScheduler:
         self.sig_funding_rate_threshold = sig_funding_rate_threshold
         self.alloc_cfg = alloc_cfg or AllocConfig(mode="all")
         self.last_allocation: Optional[AllocationPlan] = None
+        self._last_rotation_key: Optional[tuple] = None
 
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
@@ -169,8 +170,16 @@ class ScannerScheduler:
         async def scan_one(sym: str) -> Optional[ScanResult]:
             async with self.sem:
                 try:
+                    is_rotation = (self.alloc_cfg.mode or "").lower() == "rotation"
+                    min_bars = 220
+                    if is_rotation:
+                        min_bars = max(
+                            self.alloc_cfg.norm_length + 2,
+                            self.alloc_cfg.ma_length,
+                            2,
+                        )
                     df = await self.client.fetch_klines(sym, tf, limit=300)
-                    if df is None or len(df) < 220:
+                    if df is None or len(df) < min_bars:
                         return None
                     htf_df = None
                     if htf:
@@ -189,43 +198,58 @@ class ScannerScheduler:
                             daily_df = await self.client.fetch_klines(sym, "1d", limit=250)
                         except Exception:
                             daily_df = None
-                    res = compute_signal(
-                        df, symbol=sym, timeframe=tf,
-                        htf_df=htf_df, daily_df=daily_df, weights=self.weights,
-                    )
-                    if res is None:
-                        return None
-                    # Volatility regime gate
-                    if not (self.sig_min_atr_pct <= res.atr_pct <= self.sig_max_atr_pct):
-                        return None
-                    # ADX trend-strength gate (0 = disabled)
-                    if self.sig_min_adx > 0 and res.adx_value < self.sig_min_adx:
-                        logger.debug(
-                            "ADX gate suppressed %s %s (adx=%.1f < %.1f)",
-                            sym, res.side, res.adx_value, self.sig_min_adx,
+                    res = None
+                    if len(df) >= 220:
+                        res = compute_signal(
+                            df, symbol=sym, timeframe=tf,
+                            htf_df=htf_df, daily_df=daily_df, weights=self.weights,
                         )
-                        return None
-                    # Funding rate directional filter (crowded-side suppression)
+                    gated = False
+                    if res is None:
+                        gated = True
+                    else:
+                        if not (self.sig_min_atr_pct <= res.atr_pct <= self.sig_max_atr_pct):
+                            gated = True
+                        if self.sig_min_adx > 0 and res.adx_value < self.sig_min_adx:
+                            logger.debug(
+                                "ADX gate suppressed %s %s (adx=%.1f < %.1f)",
+                                sym, res.side, res.adx_value, self.sig_min_adx,
+                            )
+                            gated = True
                     try:
                         premium = await self.client.fetch_premium_index(sym)
                         fr = float(premium.get("lastFundingRate", 0) or 0)
-                        res.funding_rate = fr
+                        if res is not None:
+                            res.funding_rate = fr
                         threshold = self.sig_funding_rate_threshold
-                        if res.side == "BUY" and fr > threshold:
-                            logger.info(
-                                "Funding filter suppressed BUY %s (rate=%.4f%%)",
-                                sym, fr * 100,
-                            )
-                            return None
-                        if res.side == "SELL" and fr < -threshold:
-                            logger.info(
-                                "Funding filter suppressed SELL %s (rate=%.4f%%)",
-                                sym, fr * 100,
-                            )
-                            return None
+                        if res is not None:
+                            if res.side == "BUY" and fr > threshold:
+                                logger.info(
+                                    "Funding filter suppressed BUY %s (rate=%.4f%%)",
+                                    sym, fr * 100,
+                                )
+                                gated = True
+                            if res.side == "SELL" and fr < -threshold:
+                                logger.info(
+                                    "Funding filter suppressed SELL %s (rate=%.4f%%)",
+                                    sym, fr * 100,
+                                )
+                                gated = True
                     except Exception as exc:
                         logger.warning("Could not fetch funding rate for %s: %s", sym, exc)
-                        # Fail open — don't suppress signal if API fails
+                    if is_rotation:
+                        from .rotation import attach_rotation_metrics, stub_scan
+                        if res is None:
+                            res = stub_scan(sym, tf, df)
+                        attach_rotation_metrics(
+                            res, df["close"],
+                            norm_length=self.alloc_cfg.norm_length,
+                            ma_length=self.alloc_cfg.ma_length,
+                            ma_type=self.alloc_cfg.ma_type,
+                        )
+                        return res
+                    if gated or res is None:
+                        return None
                     return res
                 except Exception as e:
                     logger.warning("scan %s/%s failed: %s", sym, tf, e)
@@ -242,7 +266,8 @@ class ScannerScheduler:
                 self.stats["errors"] += 1
 
         to_dispatch: list[ScanResult]
-        if self.alloc_cfg.mode == "ranked":
+        mode = (self.alloc_cfg.mode or "all").lower()
+        if mode == "ranked":
             plan = allocate(results, self.alloc_cfg, timeframe=tf)
             self.last_allocation = plan
             to_dispatch = [s.result for s in plan.slots]
@@ -250,6 +275,27 @@ class ScannerScheduler:
                 "Allocation tf=%s slots=%d considered=%d",
                 tf, len(plan.slots), plan.considered,
             )
+        elif mode == "rotation":
+            plan = allocate(results, self.alloc_cfg, timeframe=tf)
+            self.last_allocation = plan
+            key = (plan.regime, tuple(
+                (s.result.symbol, round(s.weight_pct, 2)) for s in plan.slots
+            ))
+            if key == self._last_rotation_key:
+                to_dispatch = []
+                logger.info(
+                    "ARS tf=%s regime=%s unchanged (no alert)",
+                    tf, plan.regime,
+                )
+            else:
+                self._last_rotation_key = key
+                to_dispatch = [s.result for s in plan.slots]
+                logger.info(
+                    "ARS tf=%s regime=%s defensive=%s slots=%d",
+                    tf, plan.regime, plan.defensive, len(plan.slots),
+                )
+                if plan.regime in ("CASH", "PAXG") and not plan.slots:
+                    await self._notify_rotation_text(plan)
         else:
             to_dispatch = results
             self.last_allocation = allocate(
@@ -277,3 +323,19 @@ class ScannerScheduler:
         self.stats["last_pass_at"] = int(time.time())
         logger.info("Scan pass tf=%s completed in %.2fs (symbols=%d)",
                     tf, elapsed, len(symbols))
+
+    async def _notify_rotation_text(self, plan: AllocationPlan) -> None:
+        scores = ", ".join(
+            f"{r['symbol']}={r['norm_score']}"
+            for r in (plan.rotation_scores or [])[:8]
+        )
+        why = f" ({plan.defensive})" if plan.defensive else ""
+        msg = (
+            f"ARS rotation → {plan.regime}{why} · {plan.timeframe}"
+            + (f" · {scores}" if scores else "")
+        )
+        notifiers = getattr(self.dispatcher, "notifiers", []) or []
+        await asyncio.gather(
+            *(n.send_text(msg) for n in notifiers if getattr(n, "enabled", True)),
+            return_exceptions=True,
+        )

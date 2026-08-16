@@ -100,6 +100,8 @@ class TVSignal(BaseModel):
     alloc_rank:    Optional[int] = None         # 1 = highest conviction in this book
     alloc_weight_pct: Optional[float] = None    # suggested notional % of the 100-pt book
     alloc_cluster: Optional[str] = None         # BTC / ETH / SOL / OTHER
+    alloc_regime:  Optional[str] = None         # LIVE / CASH / PAXG
+    norm_score:    Optional[float] = None       # ARS lookback ROC %
 
     @field_validator("price", "signal_price", "stop_loss", "take_profit", mode="before")
     @classmethod

@@ -37,6 +37,9 @@ Sprint 1 has an OOS number.
 - [x] Pine dashboard: daily-trend row + alert JSON field
 - [x] Ranked asset allocation (`ALLOC_MODE=ranked`): top N long/short,
       cluster cap, suggested weights on Discord/Telegram; `GET /allocation`
+- [x] ARS-style rotation (`ALLOC_MODE=rotation`): lookback ROC, cash
+      threshold, dual allocation, second BTC-weak defensive mode
+      (`cash` / `paxg` / `paxg_then_cash`); `pine/asset_rotation.pine`
 - [x] One-variable review CLI + Cursor agent (`python -m improve.review`,
       `strategy/goals.yaml`) — proposes, does not trade or write `.env`
 

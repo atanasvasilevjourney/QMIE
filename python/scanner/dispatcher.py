@@ -72,8 +72,9 @@ class SignalDispatcher:
     async def dispatch(self, result: ScanResult) -> bool:
         """Return True if dispatched, False if filtered/duplicate."""
         grade = _to_grade(result.grade)
-        if _GRADE_RANK.get(grade, 0) < _GRADE_RANK.get(self.min_alert_grade, 3):
-            return False
+        if not result.force_dispatch:
+            if _GRADE_RANK.get(grade, 0) < _GRADE_RANK.get(self.min_alert_grade, 3):
+                return False
 
         if self.max_per_day > 0:
             ts = result.timestamp
@@ -122,6 +123,8 @@ class SignalDispatcher:
             alloc_rank=result.alloc_rank,
             alloc_weight_pct=result.alloc_weight_pct,
             alloc_cluster=result.alloc_cluster,
+            alloc_regime=result.alloc_regime,
+            norm_score=result.norm_score,
         )
 
         # Persist (idempotent by idempotency_key)
@@ -140,6 +143,8 @@ class SignalDispatcher:
         sig_dict["alloc_rank"] = result.alloc_rank
         sig_dict["alloc_weight_pct"] = result.alloc_weight_pct
         sig_dict["alloc_cluster"] = result.alloc_cluster
+        sig_dict["alloc_regime"] = result.alloc_regime
+        sig_dict["norm_score"] = result.norm_score
 
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)

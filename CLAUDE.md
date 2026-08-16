@@ -25,7 +25,8 @@ alerts.
 
 ```
 qmie/
-├── pine/quant_visualizer.pine        ← TradingView indicator
+├── pine/quant_visualizer.pine        ← TradingView scoring indicator
+├── pine/asset_rotation.pine          ← ARS-style rotation companion
 ├── python/
 │   ├── main.py                       FastAPI app
 │   ├── config.py                     Pydantic Settings (env)
@@ -37,7 +38,8 @@ qmie/
 │   │   ├── signal_engine.py          10-component scoring → A+/A/B/C/REJECT
 │   │   ├── exchange_clients.py       Binance + Bybit public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
-│   │   ├── allocator.py              Ranked swing book (top N + cluster)
+│   │   ├── allocator.py              Ranked swing book + ARS rotation
+│   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
 │   │   ├── dispatcher.py             Dedup + notifier fan-out + TV deep-link
 │   │   └── symbol_universe.py        Static list + auto-top-N by volume
 │   ├── journal.py                    Manual fills vs alerts
@@ -45,7 +47,7 @@ qmie/
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        176 pytest tests (CI installs requests+pyarrow for backtest)
+│   ├── tests/                        212 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
@@ -77,7 +79,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 196 tests; CI also installs requests+pyarrow
+pytest -v                              # 212 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 

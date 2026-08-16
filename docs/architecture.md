@@ -51,6 +51,12 @@ those slots reach the dispatcher. `GET /allocation` returns the last
 plan. Suggested `weight_pct` is a risk budget for the human — still
 no orders.
 
+When `ALLOC_MODE=rotation`, ranking is lookback ROC only (no RSI/MACD).
+The book is the strongest name at 100% (or 50/50 top-two if dual).
+Defensive 1: all scores below `ALLOC_NORM_THRESHOLD` → CASH.
+Defensive 2: BTC weak → `cash` / `paxg` / `paxg_then_cash`. Alerts fire
+only on a switch. Companion: `pine/asset_rotation.pine`.
+
 The weekly review loop (`python -m improve.review`) reads the journal
 against `strategy/goals.yaml` and proposes **one** knob. It never
 writes `.env`.

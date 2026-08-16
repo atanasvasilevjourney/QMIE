@@ -376,3 +376,63 @@ class TestRankedDispatch:
             await scheduler._scan_pass("1h")
 
         assert set(dispatched) == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+
+
+class TestRotationDispatch:
+    @pytest.mark.asyncio
+    async def test_rotation_alerts_only_on_switch(self):
+        import pandas as pd
+
+        from scanner.allocator import AllocConfig
+
+        lasts = {"ETHUSDT": 120.0, "SOLUSDT": 110.0, "BTCUSDT": 101.0}
+
+        async def fake_fetch(sym, tf, limit=300):
+            n = 80
+            last = lasts[sym]
+            idx = pd.date_range("2024-01-01", periods=n, freq="1D")
+            close = pd.Series([100.0] * (n - 1) + [last], index=idx)
+            return pd.DataFrame(
+                {"open": close, "high": close, "low": close, "close": close, "volume": 1.0},
+                index=idx,
+            )
+
+        client = MagicMock()
+        client.fetch_klines = fake_fetch
+        client.fetch_premium_index = AsyncMock(return_value={"lastFundingRate": 0.0})
+
+        dispatched: list[str] = []
+        dispatcher = MagicMock()
+        dispatcher.notifiers = []
+
+        async def capture(res):
+            dispatched.append(res.symbol)
+            return True
+
+        dispatcher.dispatch = capture
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1d"],
+            htf_map={"1d": "1w"},
+            alloc_cfg=AllocConfig(
+                mode="rotation",
+                dual=False,
+                defensive2="off",
+                cluster_max=0,
+                norm_length=20,
+                ma_length=10,
+            ),
+        )
+        await scheduler._scan_pass("1d")
+        first = list(dispatched)
+        await scheduler._scan_pass("1d")
+
+        assert first == ["ETHUSDT"]
+        assert dispatched == ["ETHUSDT"]
+        assert scheduler.last_allocation.regime == "LIVE"
+

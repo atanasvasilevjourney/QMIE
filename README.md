@@ -63,7 +63,8 @@ setup visually, you make the entry decision yourself.
 ```
 qmie/
 ├── pine/
-│   └── quant_visualizer.pine          chart indicator (companion to scanner)
+│   ├── quant_visualizer.pine          chart indicator (companion to scanner)
+│   └── asset_rotation.pine            ARS-style rotation (ALLOC_MODE=rotation)
 ├── python/
 │   ├── main.py                        FastAPI entry
 │   ├── config.py                      pydantic settings
@@ -76,7 +77,7 @@ qmie/
 │   │   ├── signal_engine.py           10-component scoring
 │   │   ├── symbol_universe.py         static + auto top-N volume
 │   │   ├── scheduler.py               bar-close-aware loop
-│   │   ├── allocator.py               ranked swing book (top N, cluster cap)
+│   │   ├── allocator.py               ranked swing book + ARS rotation
 │   │   └── dispatcher.py              dedup + notifier fan-out
 │   ├── improve/
 │   │   └── review.py                  one-variable weekly review (no .env writes)
@@ -146,10 +147,15 @@ Three knobs in `.env`:
 | `SCAN_TIMEFRAMES` | More TFs = more signals. `4h` only is the cleanest. `1h,4h` is balanced. |
 | `W_*` weights | Re-weight the ten components. Defaults sum to **128** (original 7 = 100, plus ribbon 10 + structure 10 + sweep 8). Rebalance all of them together. |
 
-| `ALLOC_MODE` | `ranked` (default): top N long + top N short per TF. `all`: every grade that passes `SCAN_MIN_ALERT_GRADE`. |
-| `ALLOC_TOP_LONG` / `ALLOC_TOP_SHORT` | Slots in the swing book (default 3 / 3). |
+| `ALLOC_MODE` | `ranked` (default): top N long + top N short per TF. `all`: firehose. `rotation`: ARS lookback ROC into the strongest name (or CASH). |
+| `ALLOC_TOP_LONG` / `ALLOC_TOP_SHORT` | Slots in the swing book (default 3 / 3). Ignored in rotation unless dual. |
 | `ALLOC_CLUSTER_MAX` | Max names per correlated cluster (BTC / ETH / SOL / OTHER). `1` default; `0` = unlimited. |
 | `ALLOC_WEIGHTING` | `rank` (n, n-1, …, 1) or `equal` inside each side. |
+| `ALLOC_NORM_LENGTH` | Rotation lookback bars for ROC (default 20). |
+| `ALLOC_NORM_THRESHOLD` | If every ROC is below this %, rotate to CASH (defensive 1). |
+| `ALLOC_DUAL` | `true`: 50/50 the top two names that clear the threshold. |
+| `ALLOC_DEFENSIVE2` | BTC-weak overlay: `off`, `cash`, `paxg`, `paxg_then_cash`. |
+| `ALLOC_MA_FILTER` | If true, a name must also trade above its MA to be eligible. |
 
 Suggested `weight_pct` is a 100-point risk budget for **you**. QMIE still does not place orders.
 

@@ -334,3 +334,28 @@ class TestDailyTrendPropagation:
         assert received[0].alloc_rank == 1
         assert received[0].alloc_weight_pct == pytest.approx(25.0)
         assert received[0].alloc_cluster == "BTC"
+
+
+    @pytest.mark.asyncio
+    async def test_force_dispatch_bypasses_min_grade(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = _make_result(grade="REJECT")
+        result.force_dispatch = True
+        result.norm_score = 6.5
+        result.alloc_regime = "LIVE"
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        assert await dispatcher.dispatch(result) is True
+        assert len(received) == 1
+        assert received[0].norm_score == pytest.approx(6.5)
+        assert received[0].alloc_regime == "LIVE"

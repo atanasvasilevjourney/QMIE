@@ -28,6 +28,15 @@
 # double ETH-beta. Discord shows `#rank · weight% · cluster`. Suggested
 # size is a 100-point risk budget, not an order.
 #
+# Asset rotation (ARS-style) — ALLOC_MODE=rotation
+# ------------------------------------------------
+# Alternative book: rank the universe by lookback ROC only (no RSI/MACD).
+# Hold the strongest name at 100%, or 50/50 top-two if ALLOC_DUAL=true.
+# Defensive 1: all ROC < ALLOC_NORM_THRESHOLD → CASH.
+# Defensive 2 (BTC weak): ALLOC_DEFENSIVE2=cash|paxg|paxg_then_cash|off.
+# Alerts fire only when the held name / regime changes. Chart companion:
+# `pine/asset_rotation.pine`. Still no orders.
+#
 # Loop
 # ----
 # 1. Scanner fires ranked A/A+ alerts 24/7 (Docker Compose, not Railway).

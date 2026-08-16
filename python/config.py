@@ -109,12 +109,22 @@ class Settings(BaseSettings):
     journal_min_fills:   int = 30
 
     # ─── Ranked asset allocation (which alerts to take, suggested size) ─
-    alloc_mode:        str = "ranked"   # ranked | all
+    alloc_mode:        str = "ranked"   # ranked | all | rotation
     alloc_top_long:    int = 3
     alloc_top_short:   int = 3
     alloc_min_grade:   str = "A"
     alloc_weighting:   str = "rank"     # rank | equal
     alloc_cluster_max: int = 1          # 0 = unlimited
+    # ARS-style rotation (ALLOC_MODE=rotation)
+    alloc_norm_length:    int = 20
+    alloc_norm_threshold: float = 0.0   # ROC %; all below → cash
+    alloc_ma_filter:      bool = False
+    alloc_ma_type:        str = "ema"   # ema | sma | wma | rma
+    alloc_ma_length:      int = 50
+    alloc_dual:           bool = False  # 50/50 top-2
+    alloc_defensive2:     str = "cash"  # off | cash | paxg | paxg_then_cash
+    alloc_btc_symbol:     str = "BTCUSDT"
+    alloc_paxg_symbol:    str = "PAXGUSDT"
 
     @property
     def webhook_allowlist(self) -> list[str]:
@@ -166,6 +176,18 @@ class Settings(BaseSettings):
             warnings.append(
                 f"SCAN_DATA_SOURCE={self.scan_data_source!r} not supported; "
                 "expected binance or bybit."
+            )
+        if self.alloc_mode.lower() not in ("ranked", "all", "rotation"):
+            warnings.append(
+                f"ALLOC_MODE={self.alloc_mode!r} invalid; "
+                "expected ranked, all, or rotation."
+            )
+        if self.alloc_defensive2.lower() not in (
+            "off", "cash", "paxg", "paxg_then_cash",
+        ):
+            warnings.append(
+                f"ALLOC_DEFENSIVE2={self.alloc_defensive2!r} invalid; "
+                "expected off, cash, paxg, or paxg_then_cash."
             )
         return warnings
 

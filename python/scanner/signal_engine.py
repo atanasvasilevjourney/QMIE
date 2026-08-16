@@ -75,6 +75,10 @@ class ScanResult:
     alloc_rank:    Optional[int] = None
     alloc_weight_pct: Optional[float] = None
     alloc_cluster: Optional[str] = None
+    alloc_regime:  Optional[str] = None   # LIVE / CASH / PAXG (rotation mode)
+    norm_score:    Optional[float] = None  # ARS lookback ROC %
+    ma_ok:         Optional[bool] = None
+    force_dispatch: bool = False           # rotation switch: bypass min grade
 
 
 @dataclass

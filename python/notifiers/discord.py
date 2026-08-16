@@ -145,6 +145,16 @@ class DiscordNotifier(Notifier):
                 "value": f"#{alloc_rank} · {wtxt} · {cluster}",
                 "inline": True,
             })
+        ns = getattr(sig, "norm_score", None)
+        if ns is not None:
+            fields.append({
+                "name": "ARS score",
+                "value": f"{ns:+.2f}% lookback",
+                "inline": True,
+            })
+        regime = getattr(sig, "alloc_regime", None)
+        if regime:
+            fields.append({"name": "ARS regime", "value": regime, "inline": True})
 
         # Score + grade
         if sig.score is not None:

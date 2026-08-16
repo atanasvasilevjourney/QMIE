@@ -99,6 +99,12 @@ class TelegramNotifier(Notifier):
             cluster = getattr(sig, "alloc_cluster", None) or "—"
             wtxt = f"{w:.1f}%" if w is not None else "—"
             lines.append(kv("Ranked", f"#{alloc_rank} · {wtxt} · {cluster}"))
+        ns = getattr(sig, "norm_score", None)
+        if ns is not None:
+            lines.append(kv("ARS", f"{ns:+.2f}% lookback"))
+        regime = getattr(sig, "alloc_regime", None)
+        if regime:
+            lines.append(kv("Regime", regime))
         if sig.stop_loss is not None:
             lines.append(kv("SL", _fmt_price(sig.stop_loss, ac)))
         if sig.take_profit is not None:

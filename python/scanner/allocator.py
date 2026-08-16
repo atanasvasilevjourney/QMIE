@@ -40,12 +40,22 @@ def cluster_of(symbol: str) -> str:
 
 @dataclass
 class AllocConfig:
-    mode: str = "ranked"          # ranked | all
+    mode: str = "ranked"          # ranked | all | rotation
     top_long: int = 3
     top_short: int = 3
     min_grade: str = "A"
     weighting: str = "rank"       # rank | equal
     cluster_max: int = 1          # 0 = unlimited
+    # ARS-style rotation (used when mode == "rotation")
+    norm_length: int = 20
+    norm_threshold: float = 0.0   # ROC %; all below → cash (defensive 1)
+    ma_filter: bool = False
+    ma_type: str = "ema"          # ema | sma | wma | rma
+    ma_length: int = 50
+    dual: bool = False            # 50/50 top-2 when both clear the threshold
+    defensive2: str = "cash"      # off | cash | paxg | paxg_then_cash
+    btc_symbol: str = "BTCUSDT"
+    paxg_symbol: str = "PAXGUSDT"
 
 
 @dataclass
@@ -63,12 +73,20 @@ class AllocationPlan:
     slots: list[AllocSlot] = field(default_factory=list)
     considered: int = 0
     skipped_grade: int = 0
+    mode: str = "ranked"
+    regime: str = "LIVE"                 # LIVE | CASH | PAXG
+    defensive: Optional[str] = None      # None | threshold | btc_weak
+    rotation_scores: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
             "timeframe": self.timeframe,
+            "mode": self.mode,
+            "regime": self.regime,
+            "defensive": self.defensive,
             "considered": self.considered,
             "skipped_grade": self.skipped_grade,
+            "rotation_scores": self.rotation_scores,
             "slots": [
                 {
                     "rank": s.rank,
@@ -77,6 +95,7 @@ class AllocationPlan:
                     "cluster": s.cluster,
                     "grade": s.result.grade,
                     "score": s.result.score,
+                    "norm_score": s.result.norm_score,
                     "weight_pct": s.weight_pct,
                     "price": s.result.price,
                     "stop_loss": s.result.stop_loss,
@@ -127,6 +146,9 @@ def allocate(
     *,
     timeframe: str = "",
 ) -> AllocationPlan:
+    if (cfg.mode or "").lower() == "rotation":
+        return _allocate_rotation(results, cfg, timeframe=timeframe)
+
     considered = [r for r in results if r.side in ("BUY", "SELL")]
     skipped = sum(1 for r in considered if not _grade_ok(r.grade, cfg.min_grade))
     eligible = [r for r in considered if _grade_ok(r.grade, cfg.min_grade)]
@@ -169,4 +191,52 @@ def allocate(
         slots=slots,
         considered=len(considered),
         skipped_grade=skipped,
+        mode=cfg.mode,
+    )
+
+
+def _allocate_rotation(
+    results: list[ScanResult],
+    cfg: AllocConfig,
+    *,
+    timeframe: str,
+) -> AllocationPlan:
+    from .rotation import decide_rotation
+
+    decision = decide_rotation(
+        results,
+        threshold=cfg.norm_threshold,
+        ma_filter=cfg.ma_filter,
+        dual=cfg.dual,
+        defensive2=cfg.defensive2,
+        btc_symbol=cfg.btc_symbol,
+        paxg_symbol=cfg.paxg_symbol,
+        cluster_max=cfg.cluster_max,
+    )
+    n = len(decision.winners)
+    weights = _side_weights(n, "equal", 100.0)
+    slots: list[AllocSlot] = []
+    for i, r in enumerate(decision.winners):
+        # Long-only capital rotation: holding the strongest name.
+        if r.side not in ("BUY", "SELL"):
+            r.side = "BUY"
+        r.force_dispatch = True
+        slots.append(AllocSlot(
+            result=r, rank=i + 1, side="BUY",
+            cluster=cluster_of(r.symbol), weight_pct=weights[i],
+        ))
+    for slot in slots:
+        slot.result.alloc_rank = slot.rank
+        slot.result.alloc_weight_pct = slot.weight_pct
+        slot.result.alloc_cluster = slot.cluster
+        slot.result.alloc_regime = decision.regime
+    return AllocationPlan(
+        timeframe=timeframe,
+        slots=slots,
+        considered=len(results),
+        skipped_grade=0,
+        mode="rotation",
+        regime=decision.regime,
+        defensive=decision.defensive,
+        rotation_scores=decision.scores,
     )

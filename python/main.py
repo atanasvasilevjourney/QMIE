@@ -171,6 +171,15 @@ async def lifespan(app: FastAPI):
             min_grade=s.alloc_min_grade,
             weighting=s.alloc_weighting,
             cluster_max=s.alloc_cluster_max,
+            norm_length=s.alloc_norm_length,
+            norm_threshold=s.alloc_norm_threshold,
+            ma_filter=s.alloc_ma_filter,
+            ma_type=s.alloc_ma_type,
+            ma_length=s.alloc_ma_length,
+            dual=s.alloc_dual,
+            defensive2=s.alloc_defensive2,
+            btc_symbol=s.alloc_btc_symbol,
+            paxg_symbol=s.alloc_paxg_symbol,
         ),
     )
     await scheduler.start()
