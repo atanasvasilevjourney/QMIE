@@ -1,0 +1,47 @@
+import type { SignalRow } from '../types'
+import { Empty, PanelShell } from './RadarPanel'
+
+export function SignalsPanel({
+  signals,
+  selectedId,
+  onSelect,
+}: {
+  signals: SignalRow[]
+  selectedId?: number | null
+  onSelect: (s: SignalRow) => void
+}) {
+  return (
+    <PanelShell title="Live Signals" subtitle="persisted A/A+/B/C alerts · ranked book may filter">
+      <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+        {signals.map((s) => {
+          const active = selectedId === s.id
+          const buy = (s.side || '').toUpperCase() === 'BUY'
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onSelect(s)}
+              className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                active
+                  ? 'border-cyan/50 bg-cyan/10'
+                  : 'border-white/5 bg-white/[0.02] hover:border-cyan/25'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-display text-xs tracking-wider text-white">{s.symbol}</span>
+                <span className={`font-mono text-[11px] ${buy ? 'text-lime' : 'text-magenta'}`}>
+                  {s.side || '—'} · {s.grade || '—'}
+                </span>
+              </div>
+              <div className="mt-1 flex justify-between font-mono text-[10px] text-chrome/55">
+                <span>#{s.id} · score {s.score ?? '—'}</span>
+                <span>{s.signal_price ?? '—'}</span>
+              </div>
+            </button>
+          )
+        })}
+        {!signals.length && <Empty>No signals yet — scan or POST /webhook</Empty>}
+      </div>
+    </PanelShell>
+  )
+}

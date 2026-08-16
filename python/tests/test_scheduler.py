@@ -124,6 +124,118 @@ class TestSchedulerTick:
             mod.time.time = orig
 
 
+class TestRadarPass:
+    """Daily Trend Radar fires independently of SCAN_TIMEFRAMES."""
+
+    @pytest.fixture
+    def fake_components(self):
+        client = MagicMock()
+        client.fetch_klines = AsyncMock(return_value=None)
+        universe = MagicMock()
+        universe.get = AsyncMock(return_value=["BTCUSDT"])
+        dispatcher = MagicMock()
+        dispatcher.dispatch = AsyncMock(return_value=False)
+        return client, universe, dispatcher
+
+    @pytest.fixture
+    def bull_daily(self, bull_trend_df):
+        import pandas as pd
+        df = bull_trend_df.copy()
+        df.index = pd.date_range("2024-01-01", periods=len(df), freq="1D", tz="UTC")
+        return df
+
+    async def test_radar_pass_builds_snapshot(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            weights=Weights(),
+            radar_enabled=True,
+        )
+        ok = await scheduler._radar_pass(notify=False)
+        assert ok is True
+        assert scheduler.last_radar is not None
+        assert scheduler.last_radar.count >= 1
+        assert scheduler.last_radar.status in ("ready", "incomplete")
+        assert scheduler.stats["radar_passes"] == 1
+        client.fetch_klines.assert_called()
+        assert client.fetch_klines.call_args.args[1] == "1d"
+
+    async def test_radar_tick_fires_after_daily_grace(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            weights=Weights(),
+            radar_enabled=True,
+        )
+        now = int(time.time())
+        day_boundary = (now // 86400) * 86400
+        scheduler._last_radar_seen = day_boundary - 86400
+        hour_boundary = (now // 3600) * 3600
+        scheduler._last_seen["1h"] = hour_boundary
+        import scanner.scheduler as mod
+        orig = mod.time.time
+        try:
+            mod.time.time = lambda: day_boundary + 10
+            await scheduler._tick()
+        finally:
+            mod.time.time = orig
+        assert scheduler.stats["radar_passes"] == 1
+        assert scheduler.last_radar is not None
+        assert scheduler._last_radar_seen == day_boundary
+
+    async def test_radar_total_failure_keeps_previous(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            radar_enabled=True,
+        )
+        assert await scheduler._radar_pass(notify=False) is True
+        prev = scheduler.last_radar
+        # Next pass: all fetches fail
+        client.fetch_klines = AsyncMock(side_effect=RuntimeError("boom"))
+        ok = await scheduler._radar_pass(notify=False)
+        assert ok is False
+        assert scheduler.last_radar is prev
+
+    async def test_request_radar_once_coalesces(self, fake_components, bull_daily):
+        client, universe, dispatcher = fake_components
+        client.fetch_klines = AsyncMock(return_value=bull_daily)
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            radar_enabled=True,
+        )
+        # Hold the lock so a concurrent request reports already_running
+        await scheduler._radar_lock.acquire()
+        try:
+            r = await scheduler.request_radar_once(notify=False)
+            assert r.get("already_running") is True
+        finally:
+            scheduler._radar_lock.release()
+
+
 class TestDailyDfRouting:
     """Verify that scan_one passes the correct daily_df to compute_signal."""
 
