@@ -270,3 +270,42 @@ class TestDailyTrendPropagation:
         assert len(received) == 1
         sig = received[0]
         assert getattr(sig, "daily_trend", None) == "bullish"
+
+    @pytest.mark.asyncio
+    async def test_funding_rate_included_in_notifier_signal(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = ScanResult(
+            symbol="BTCUSDT",
+            timeframe="1h",
+            timestamp=pd.Timestamp("2026-01-01 12:00:00", tz="UTC"),
+            side="BUY",
+            grade="A",
+            score=85.0,
+            price=100.0,
+            stop_loss=95.0,
+            take_profit=110.0,
+            atr_value=1.5,
+            atr_pct=1.5,
+            rsi_value=55.0,
+            adx_value=30.0,
+            htf_aligned=True,
+            nearest_res=2.0,
+            nearest_sup=1.5,
+            daily_trend="bullish",
+            funding_rate=0.0002,
+        )
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        await dispatcher.dispatch(result)
+        assert len(received) == 1
+        assert getattr(received[0], "funding_rate", None) == pytest.approx(0.0002)

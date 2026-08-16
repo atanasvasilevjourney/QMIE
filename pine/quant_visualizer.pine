@@ -107,6 +107,13 @@ htfAgreementCalc() =>
 htfDir = request.security(syminfo.tickerid, htfRes, htfAgreementCalc()[1],
      lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
 
+// Daily trend (EMA200 on 1D) — same rule as server daily_trend
+dClose = request.security(syminfo.tickerid, "D", close[1],
+     lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
+dEma   = request.security(syminfo.tickerid, "D", ta.ema(close, 200)[1],
+     lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
+dailyTrend = na(dEma) ? "unknown" : dClose > dEma ? "bullish" : dClose < dEma ? "bearish" : "unknown"
+
 // ─── Pivot S/R ─────────────────────────────────────────────────────────
 ph = ta.pivothigh(high, pivotLen, pivotLen)
 pl = ta.pivotlow(low,   pivotLen, pivotLen)
@@ -402,7 +409,7 @@ color C_BULL    = #26a69a
 color C_BEAR    = #ef5350
 color C_NEUTRAL = #2a2d35
 
-var table dash = table.new(position.top_right, 2, 15,
+var table dash = table.new(position.top_right, 2, 16,
      bgcolor = C_BG, frame_color = C_NEUTRAL, frame_width = 1,
      border_color = C_NEUTRAL, border_width = 1)
 
@@ -458,6 +465,9 @@ if showPanel and (barstate.islastconfirmedhistory or barstate.islast)
     table.cell(dash, 0,14, "Suggested",    text_color=C_LABEL, text_size=size.small)
     table.cell(dash, 1,14, "SL " + str.tostring(sl, format.mintick) + " · TP " + str.tostring(tp, format.mintick), text_color=C_TEXT, text_size=size.small)
 
+    table.cell(dash, 0,15, "Daily",        text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 1,15, dailyTrend,     text_color= dailyTrend == "bullish" ? C_BULL : dailyTrend == "bearish" ? C_BEAR : C_TEXT, text_size=size.small)
+
 // ─── Alerts (server-compatible JSON) ───────────────────────────────────
 // Mirrors `models.TVSignal`. Send to your /webhook with HMAC if you want.
 buildAlertJson(string sideStr, string gradeStr) =>
@@ -478,7 +488,8 @@ buildAlertJson(string sideStr, string gradeStr) =>
      "\"adx\":"             + str.tostring(adxVal, "#.00") + "," +
      "\"atr\":"             + str.tostring(atrVal, "#.0000") + "," +
      "\"timestamp\":\""     + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ssZ", "UTC") + "\"," +
-     "\"bar_time\":"        + str.tostring(time) +
+     "\"bar_time\":"        + str.tostring(time) + "," +
+     "\"daily_trend\":\""   + dailyTrend + "\"" +
      "}"
 
 if emitAlert and barstate.isconfirmed and isFreshBuy

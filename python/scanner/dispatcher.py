@@ -117,6 +117,8 @@ class SignalDispatcher:
             timestamp=result.timestamp.isoformat(),
             bar_time=bar_ms,
             reason=result.reason,
+            daily_trend=result.daily_trend,
+            funding_rate=result.funding_rate,
         )
 
         # Persist (idempotent by idempotency_key)
@@ -131,6 +133,7 @@ class SignalDispatcher:
         sig_dict = sig.model_dump()
         sig_dict["chart_url"] = chart_url
         sig_dict["daily_trend"] = result.daily_trend
+        sig_dict["funding_rate"] = result.funding_rate
 
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)

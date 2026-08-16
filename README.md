@@ -108,6 +108,19 @@ The first 1H or 4H bar close after startup should trigger a scan pass —
 watch the logs (`docker logs -f qmie`) and you'll see the scan
 complete and any A/A+ grade alerts go out.
 
+When you take a trade, journal it against the alert id from `GET /signals`:
+
+```bash
+curl -s localhost:8080/signals | jq '.[0].id'
+curl -s -X POST localhost:8080/journal \
+  -H 'content-type: application/json' \
+  -d '{"signal_id":1,"fill_price":65000,"size":0.01,"notes":"took the A"}'
+curl -s -X PATCH localhost:8080/journal/1 \
+  -H 'content-type: application/json' \
+  -d '{"exit_price":66200}'
+curl -s localhost:8080/journal/stats
+```
+
 ---
 
 ## Customising signal quality
@@ -129,27 +142,21 @@ strong opinion.
 ## What you should still build
 
 This is a complete signal-generation system. It is **not** a complete
-trading system. Things you still need to do yourself or extend:
+trading system. Journaling fills is now built in (`POST /journal`).
+What remains:
 
-1. **Trade journaling**: log every manual entry (price, size, why) so
-   you can compare actual P&L against the signal universe stats. The
-   `/signals` endpoint gives you the audit trail of what was alerted;
-   you need to track what you *acted on*.
+1. **Walk-forward write-up**: run `python -m backtest.run` with a frozen
+   `--split` and paste the table into `docs/backtest-baseline.md`. Set
+   `JOURNAL_OOS_WIN_PCT` from that A/A+ OOS win rate so live drift
+   alerts have a baseline (needs ≥ 30 closed journal fills).
 
-2. **Performance attribution**: build a small notebook that joins
-   `signals` table with your manual fills to compute hit rate per
-   grade, per timeframe, per symbol. The whole point of the grading
-   system is to verify it predicts edge — assume nothing, measure it.
-
-3. **Position sizing discipline**: a server that fires 10 A-grade
+2. **Position sizing discipline**: a server that fires 10 A-grade
    alerts per day cannot tell you which 3 to take. You need an
    external rule (e.g. max 2 concurrent, max 1 per asset cluster
-   ETH/SOL/AVAX, no entries in last hour of session, etc.).
+   ETH/SOL/AVAX). `SIG_MAX_SIGNALS_PER_SYMBOL_PER_DAY` only caps alerts.
 
-4. **Walk-forward validation of the scoring engine**: refit the
-   weights against your own historical fill data once you have ≥ 100
-   trades. The defaults are reasonable but not optimal for any
-   particular market regime.
+3. **Do not refit weights** on the same sample you use to report hit
+   rate. Measure first (Sprint 1).
 
 ---
 

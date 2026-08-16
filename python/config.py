@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     sig_min_adx: float = 0.0               # ADX trend-strength gate (0 = disabled, 20 = recommended)
     sig_funding_rate_threshold: float = 0.001  # suppress BUY when rate > +threshold, SELL when < -threshold (0.001 = 0.1%/8h)
 
+    # ─── Journal / live-vs-OOS drift (manual fills, no execution) ────────
+    # Set JOURNAL_OOS_WIN_PCT after Sprint 1 (e.g. 52.0). Until then, no drift alert.
+    journal_oos_win_pct: Optional[float] = None
+    journal_drift_pts:   float = 5.0
+    journal_min_fills:   int = 30
+
     @property
     def webhook_allowlist(self) -> list[str]:
         return [ip.strip() for ip in self.webhook_allow_ips.split(",") if ip.strip()]

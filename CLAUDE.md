@@ -42,7 +42,7 @@ qmie/
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        155 pytest tests (CI installs requests+pyarrow for backtest)
+│   ├── tests/                        176 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
@@ -72,7 +72,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 155 tests; CI also installs requests+pyarrow
+pytest -v                              # 176 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 

@@ -171,6 +171,24 @@ class Position(BaseModel):
     raw:           dict = Field(default_factory=dict)
 
 
+class JournalCreate(BaseModel):
+    """Manual fill against a persisted scanner alert. No broker call."""
+    model_config = ConfigDict(extra="forbid")
+
+    signal_id:  int
+    fill_price: float
+    size:       float
+    exit_price: Optional[float] = None
+    notes:      Optional[str] = None
+
+
+class JournalClose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exit_price: float
+    notes:      Optional[str] = None
+
+
 class HealthReport(BaseModel):
     status:        Literal["ok", "degraded", "down"]
     uptime_sec:    float

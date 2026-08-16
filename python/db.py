@@ -2,10 +2,9 @@
 QMIE — Persistence Layer
 ========================
 Async SQLite (via aiosqlite) for:
-  - signals received
-  - orders placed (intents)
-  - broker responses
-  - daily PnL snapshot (used by RiskManager)
+  - signals received (scanner alerts)
+  - fills (manual journal against those alerts)
+  - leftover orders / daily_pnl tables from the broker edition (unused)
 
 Lightweight by design. Swap the URL to Postgres for prod scale.
 """
@@ -15,7 +14,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import aiosqlite
 
@@ -37,9 +36,27 @@ CREATE TABLE IF NOT EXISTS signals (
     signal_price    REAL,
     stop_loss       REAL,
     take_profit     REAL,
+    daily_trend     TEXT,
+    funding_rate    REAL,
     raw             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_signals_symbol_time ON signals(symbol, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS fills (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    signal_id    INTEGER NOT NULL,
+    fill_price   REAL NOT NULL,
+    size         REAL NOT NULL,
+    exit_price   REAL,
+    notes        TEXT,
+    realized_r   REAL,
+    outcome      TEXT NOT NULL,
+    FOREIGN KEY (signal_id) REFERENCES signals(id)
+);
+CREATE INDEX IF NOT EXISTS ix_fills_signal ON fills(signal_id);
+CREATE INDEX IF NOT EXISTS ix_fills_outcome ON fills(outcome);
 
 CREATE TABLE IF NOT EXISTS orders (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,6 +87,10 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
 """
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class Database:
     def __init__(self, url: str):
         if not url.startswith("sqlite"):
@@ -82,7 +103,17 @@ class Database:
     async def init(self) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.executescript(SCHEMA)
+            await self._migrate(db)
             await db.commit()
+
+    async def _migrate(self, db: aiosqlite.Connection) -> None:
+        """Add columns that CREATE TABLE IF NOT EXISTS will not alter."""
+        async with db.execute("PRAGMA table_info(signals)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "daily_trend" not in cols:
+            await db.execute("ALTER TABLE signals ADD COLUMN daily_trend TEXT")
+        if "funding_rate" not in cols:
+            await db.execute("ALTER TABLE signals ADD COLUMN funding_rate REAL")
 
     async def health_check(self) -> bool:
         try:
@@ -96,23 +127,36 @@ class Database:
 
     # ─── Signals ─────────────────────────────────────────────────────────
     async def insert_signal(self, sig: TVSignal) -> int:
-        now = datetime.now(timezone.utc).isoformat()
+        now = _now()
+        daily_trend = getattr(sig, "daily_trend", None)
+        funding_rate = getattr(sig, "funding_rate", None)
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute(
                 """
                 INSERT OR IGNORE INTO signals
                 (received_at, idempotency_key, strategy, event, symbol, side,
-                 grade, score, signal_price, stop_loss, take_profit, raw)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 grade, score, signal_price, stop_loss, take_profit,
+                 daily_trend, funding_rate, raw)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (now, sig.idempotency_key, sig.strategy, sig.event.value,
                  sig.symbol, sig.side.value if sig.side else None,
                  sig.grade.value if sig.grade else None, sig.score,
                  sig.signal_price, sig.stop_loss, sig.take_profit,
+                 daily_trend, funding_rate,
                  json.dumps(sig.model_dump(mode="json"))),
             )
             await db.commit()
             return cur.lastrowid or 0
+
+    async def get_signal(self, signal_id: int) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM signals WHERE id = ?", (signal_id,)
+            ) as cur:
+                row = await cur.fetchone()
+                return dict(row) if row else None
 
     async def recent_signals(self, limit: int = 50) -> list[dict]:
         async with aiosqlite.connect(self.path) as db:
@@ -123,9 +167,118 @@ class Database:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
 
-    # ─── Orders ──────────────────────────────────────────────────────────
+    # ─── Fills (manual journal) ──────────────────────────────────────────
+    async def insert_fill(
+        self,
+        *,
+        signal_id: int,
+        fill_price: float,
+        size: float,
+        exit_price: Optional[float],
+        notes: Optional[str],
+        realized_r: Optional[float],
+        outcome: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                """
+                INSERT INTO fills
+                (created_at, updated_at, signal_id, fill_price, size,
+                 exit_price, notes, realized_r, outcome)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (now, now, signal_id, fill_price, size,
+                 exit_price, notes, realized_r, outcome),
+            )
+            await db.commit()
+            fill_id = cur.lastrowid or 0
+        row = await self.get_fill(fill_id)
+        return row or {"id": fill_id}
+
+    async def get_fill(self, fill_id: int) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM fills WHERE id = ?", (fill_id,)
+            ) as cur:
+                row = await cur.fetchone()
+                return dict(row) if row else None
+
+    async def update_fill_exit(
+        self,
+        fill_id: int,
+        *,
+        exit_price: float,
+        realized_r: Optional[float],
+        outcome: str,
+        notes: Optional[str],
+    ) -> dict[str, Any]:
+        now = _now()
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                UPDATE fills
+                   SET updated_at = ?, exit_price = ?, realized_r = ?,
+                       outcome = ?, notes = ?
+                 WHERE id = ?
+                """,
+                (now, exit_price, realized_r, outcome, notes, fill_id),
+            )
+            await db.commit()
+        row = await self.get_fill(fill_id)
+        return row or {"id": fill_id}
+
+    async def recent_fills(self, limit: int = 50) -> list[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT f.*, s.symbol, s.side, s.grade
+                FROM fills f
+                JOIN signals s ON s.id = f.signal_id
+                ORDER BY f.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
+    async def journal_stats(self, *, grades: tuple[str, ...] | None = None) -> dict[str, Any]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            sql = """
+                SELECT f.outcome, f.realized_r, s.grade
+                FROM fills f
+                JOIN signals s ON s.id = f.signal_id
+                """
+            params: list[Any] = []
+            if grades:
+                placeholders = ",".join("?" * len(grades))
+                sql += f" WHERE s.grade IN ({placeholders})"
+                params.extend(grades)
+            async with db.execute(sql, params) as cur:
+                rows = [dict(r) for r in await cur.fetchall()]
+
+        closed = [r for r in rows if r.get("outcome") not in (None, "OPEN")]
+        wins = [r for r in closed if r.get("outcome") == "WIN"]
+        win_pct = round(100.0 * len(wins) / len(closed), 1) if closed else 0.0
+        r_vals = [float(r["realized_r"]) for r in closed if r.get("realized_r") is not None]
+        avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
+        return {
+            "fills": len(rows),
+            "closed": len(closed),
+            "wins": len(wins),
+            "losses": len(closed) - len(wins),
+            "win_pct": win_pct,
+            "avg_realized_r": avg_r,
+            "grades": list(grades) if grades else "all",
+        }
+
+    # ─── Orders (unused in scanner edition; kept for schema compatibility) ─
     async def insert_order(self, intent: OrderIntent, status: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = _now()
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
                 """
@@ -154,7 +307,7 @@ class Database:
             )
             await db.commit()
 
-    # ─── Daily PnL (RiskManager) ─────────────────────────────────────────
+    # ─── Daily PnL (unused in scanner edition) ───────────────────────────
     async def get_or_create_today(self, starting_eq: float) -> dict[str, Any]:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         async with aiosqlite.connect(self.path) as db:

@@ -37,6 +37,15 @@ curl -s localhost:8080/universe | jq
 The first 1H or 4H close after startup (plus 5s grace) triggers a scan.
 `POST /scan/once?timeframe=1h` forces a pass without waiting.
 
+Journal a fill (no broker):
+
+```bash
+curl -s -X POST localhost:8080/journal \
+  -H 'content-type: application/json' \
+  -d '{"signal_id":1,"fill_price":65000,"size":0.01}'
+curl -s localhost:8080/journal/stats
+```
+
 ## 3. Binance geo / egress
 
 - HTTP 451 from fapi → region blocked. Set `SCAN_DATA_SOURCE=bybit`.

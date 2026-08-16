@@ -4,7 +4,7 @@ Source of truth for *what to do next*. Completeness research:
 `docs/development-status.md` (2026-08-16).
 
 **Current score:** live scanner ~90% · intended system (scanner +
-measured edge + live feedback) ~75%.
+measured edge + live feedback) ~80% (journal landed; OOS write-up still open).
 
 Do **not** add an 11th scoring component or re-open execution until
 Sprint 1 has an OOS number.
@@ -30,11 +30,11 @@ Sprint 1 has an OOS number.
 - [x] Trailing-stop variant vs fixed 1.5/2.5 ATR on the same signals
 
 ## Sprint 2 — Live loop (Phase 4, no broker)
-- [ ] `POST /journal` + `fills` table (signal_id, fill, size, exit)
-- [ ] Persist `daily_trend` and `funding_rate` on `signals`
-- [ ] Alert when live A/A+ win rate (from journal, n≥30) drifts >5 pts
-      vs OOS baseline
-- [ ] Pine dashboard: daily-trend + new component rows
+- [x] `POST /journal` + `fills` table (signal_id, fill, size, exit)
+- [x] Persist `daily_trend` and `funding_rate` on `signals`
+- [x] Alert when live A/A+ win rate (from journal, n≥30) drifts >5 pts
+      vs OOS baseline (`JOURNAL_OOS_WIN_PCT`; silent until that is set)
+- [x] Pine dashboard: daily-trend row + alert JSON field
 
 ## Sprint 3 — Hardening (only if Sprint 1 shows edge)
 - [ ] HTTP tests for `/health`, `/webhook`, `/scan/once`
