@@ -87,7 +87,17 @@ export default function App() {
               className="grid gap-4 lg:grid-cols-12"
             >
               <div className="lg:col-span-5">
-                <Scene3D radar={desk.radar} />
+                <div className="mb-3">
+                  <p className="font-display text-[11px] tracking-[0.35em] text-magenta uppercase">
+                    Ops viewport
+                  </p>
+                  <h2 className="font-display text-xl tracking-wide text-white md:text-2xl">
+                    Signal <span className="text-cyan">Universe</span>
+                  </h2>
+                </div>
+                <div className="h-[min(62vh,560px)] min-h-[420px]">
+                  <Scene3D radar={desk.radar} signalCount={desk.signals.length} />
+                </div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
                   <MiniStat label="Signals" value={desk.signals.length} tone="text-cyan" />
