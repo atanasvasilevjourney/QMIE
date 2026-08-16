@@ -29,6 +29,9 @@ TradingView server if one appears later.
    HyperLiquid, no "place this trade".
 4. **Do not `npx -y` other MCP servers.** Do not point this config
    at pro.cryptosieve.com unless the operator asks for that remote.
+5. **Cannot push QMIE → Pine alerts.** Visual verify = Discord
+   deep-link + `quant_visualizer.pine` labels on the same bar.
+   Pine `alert()` can POST to `/webhook`; that is chart → server.
 
 ## If tools are missing
 

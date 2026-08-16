@@ -39,4 +39,32 @@ package's own backtests — a second opinion next to QMIE alerts.
   QMIE weights from MCP output.
 - **Not the scanner.** QMIE remains the source of truth for A/A+
   alerts (`compute_signal` on closed 1H/4H bars).
+- **Not a Pine alert bridge.** This MCP does not log into TradingView,
+  does not fire Pine `alert()`, and cannot inject markers onto a
+  retail chart. TradingView has no HTTP API for that. Do not use it
+  to "send QMIE signals to Pine."
 - **Not execution.** The MCP does not place orders. Neither does QMIE.
+
+## How to visually verify a QMIE entry (already built)
+
+Pine alerts flow **chart → server**, not server → chart.
+
+```
+QMIE scan (closed 1H/4H)
+  → Discord/Telegram + TradingView deep-link
+  → you open the chart with `pine/quant_visualizer.pine`
+  → same 7-component math plots ▲/▼ on that bar
+```
+
+1. Add `pine/quant_visualizer.pine` to the chart once.
+2. When Discord/Telegram fires, click the chart URL
+   (`tv_chart_url()` → `symbol=BINANCE:BTCUSDT.P&interval=240`).
+3. Confirm the visualizer label and dashboard match the alert
+   (side, grade, score). That is the visual entry check.
+4. Optional: Pine `alert()` on bar close can POST JSON to QMIE
+   `/webhook` (HMAC) as a *redundant* copy of what the chart saw.
+   That is the opposite direction of "server pushes to Pine."
+
+Using this MCP as a "did the entry print?" check is the wrong
+tool: its RSI/ADX will not match the visualizer, so a mismatch
+would look like a bug when it is just a different library.
