@@ -83,7 +83,8 @@ qmie/
 │   └── docker-compose.yml
 └── docs/
     ├── architecture.md                what runs where, why
-    └── development-status.md          completeness score + next sprints
+    ├── development-status.md          completeness score + next sprints
+    └── deployment.md                  ops runbook
 ```
 
 ---

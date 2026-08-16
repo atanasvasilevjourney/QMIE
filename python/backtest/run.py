@@ -171,6 +171,26 @@ def main(argv=None):
         print(f"\n{label} ({len(subset)} signals):")
         print(pd.DataFrame(rows).set_index("Grade").to_string())
 
+        if "trail_outcome" in subset.columns:
+            t_closed = subset[subset["trail_outcome"].isin(["WIN", "LOSS"])]
+            if not t_closed.empty:
+                t_rows = []
+                for g in grade_order:
+                    g_df = t_closed[t_closed["grade"] == g]
+                    if len(g_df) == 0:
+                        continue
+                    win_rate = (g_df["trail_outcome"] == "WIN").mean()
+                    avg_r = g_df["trail_realized_r"].mean()
+                    t_rows.append({
+                        "Grade": g,
+                        "Closed": len(g_df),
+                        "Trail Win %": f"{100 * win_rate:.1f}%",
+                        "Trail E[R]": f"{avg_r:+.3f}",
+                        "Avg bars": f"{g_df['trail_bars'].mean():.1f}",
+                    })
+                print(f"\n{label} ATR-trailing stop ({len(t_closed)} closed):")
+                print(pd.DataFrame(t_rows).set_index("Grade").to_string())
+
     if len(df_out):
         split_date = date.fromisoformat(args.split) if args.split else None
         if split_date:

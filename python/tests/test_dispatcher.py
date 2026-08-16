@@ -173,6 +173,52 @@ class TestDispatch:
         assert ok is False
 
 
+class TestDailyCap:
+    async def test_caps_after_n_alerts_same_symbol_same_day(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=2,
+        )
+        r1 = _make_result()
+        r2 = _make_result()
+        r2.timestamp = r1.timestamp + pd.Timedelta(hours=4)
+        r3 = _make_result()
+        r3.timestamp = r1.timestamp + pd.Timedelta(hours=8)
+        assert await d.dispatch(r1) is True
+        assert await d.dispatch(r2) is True
+        assert await d.dispatch(r3) is False
+        assert len(n.sent) == 2
+
+    async def test_cap_zero_means_unlimited(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=0,
+        )
+        for i in range(6):
+            r = _make_result()
+            r.timestamp = r.timestamp + pd.Timedelta(hours=i)
+            assert await d.dispatch(r) is True
+        assert len(n.sent) == 6
+
+    async def test_cap_is_per_symbol(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=1,
+        )
+        btc = _make_result()
+        eth = _make_result()
+        eth.symbol = "ETHUSDT"
+        assert await d.dispatch(btc) is True
+        assert await d.dispatch(eth) is True
+        assert len(n.sent) == 2
+
+
 class TestDailyTrendPropagation:
     @pytest.mark.asyncio
     async def test_daily_trend_included_in_notifier_signal(self):

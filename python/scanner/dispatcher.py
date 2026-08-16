@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from collections import defaultdict
+from datetime import timezone
 
 from db import Database
 from models import AssetClass, EventType, Grade, Side, TVSignal
@@ -57,18 +58,37 @@ class SignalDispatcher:
         idem: IdempotencyStore,
         min_alert_grade: Grade = Grade.A,
         tv_chart_prefix: str = "BINANCE",
+        max_signals_per_symbol_per_day: int = 4,
     ):
         self.db = db
         self.notifiers = notifiers
         self.idem = idem
         self.min_alert_grade = min_alert_grade
         self.tv_prefix = tv_chart_prefix
+        self.max_per_day = max_signals_per_symbol_per_day
+        # (utc_date_iso, symbol) → count of alerts already dispatched that day
+        self._day_counts: dict[tuple[str, str], int] = defaultdict(int)
 
     async def dispatch(self, result: ScanResult) -> bool:
         """Return True if dispatched, False if filtered/duplicate."""
         grade = _to_grade(result.grade)
         if _GRADE_RANK.get(grade, 0) < _GRADE_RANK.get(self.min_alert_grade, 3):
             return False
+
+        if self.max_per_day > 0:
+            ts = result.timestamp
+            if getattr(ts, "tzinfo", None) is None:
+                day = ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
+            else:
+                day = ts.tz_convert(timezone.utc).date().isoformat()
+            key = (day, result.symbol.upper())
+            if self._day_counts[key] >= self.max_per_day:
+                logger.info(
+                    "Daily cap suppressed %s %s (%d/%d on %s)",
+                    result.symbol, result.side, self._day_counts[key],
+                    self.max_per_day, day,
+                )
+                return False
 
         # Build a stable key: symbol|tf|side|bar_close_ts
         bar_ms = int(result.timestamp.value // 1_000_000)
@@ -119,6 +139,8 @@ class SignalDispatcher:
             *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
             return_exceptions=True,
         )
+        if self.max_per_day > 0:
+            self._day_counts[key] += 1
         logger.info(
             "ALERT %s %s %s %s score=%.1f price=%.6f",
             result.symbol, result.timeframe, result.side, result.grade,

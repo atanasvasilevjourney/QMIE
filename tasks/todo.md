@@ -19,16 +19,15 @@ Sprint 1 has an OOS number.
       `.env.example`, `main.py` `Weights(...)`. Validator target ~128
 - [x] Doc sync: README, CLAUDE.md, architecture.md = 10-component;
       fix `quant_strategy.pine` typo; status doc added
-- [ ] `docs/deployment.md` runbook (still missing; README no longer claims it)
-- [ ] Enforce or delete `sig_max_signals_per_symbol_per_day`
-      (currently unused)
+- [x] `docs/deployment.md` runbook
+- [x] Enforce `sig_max_signals_per_symbol_per_day` (0 = unlimited)
 
 ## Sprint 1 — Prove or kill the grading hypothesis
 - [ ] Canonical walk-forward run (10 symbols, 1h+4h, split 2025-01-01,
-      ADX≥20, ATR% 0.4–4.0)
+      ADX≥20, ATR% 0.4–4.0) — running
 - [ ] `docs/backtest-baseline.md` with IS/OOS table (no parquet in git)
 - [ ] Decision: keep / cut ribbon+structure+sweep based on OOS expectancy
-- [ ] Trailing-stop variant vs fixed 1.5/2.5 ATR on the same signals
+- [x] Trailing-stop variant vs fixed 1.5/2.5 ATR on the same signals
 
 ## Sprint 2 — Live loop (Phase 4, no broker)
 - [ ] `POST /journal` + `fills` table (signal_id, fill, size, exit)

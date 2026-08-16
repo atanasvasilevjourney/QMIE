@@ -137,6 +137,7 @@ async def lifespan(app: FastAPI):
         idem=state.idem,
         min_alert_grade=min_grade,
         tv_chart_prefix=s.tv_chart_prefix,
+        max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
     )
     state.dispatcher = dispatcher
 

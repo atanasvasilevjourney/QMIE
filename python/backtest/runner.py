@@ -40,6 +40,9 @@ class BacktestResult:
     realized_r: Optional[float]  # +rr_ratio on WIN, -1.0 on LOSS, None on OPEN
     mae_r: Optional[float]    # max adverse excursion in R units (how far against us)
     mfe_r: Optional[float]    # max favorable excursion in R units (how far in our favour)
+    trail_outcome: Optional[str] = None       # WIN / LOSS / OPEN under ATR trail
+    trail_bars: Optional[int] = None
+    trail_realized_r: Optional[float] = None  # (exit - entry) / risk, signed
 
 
 def _evaluate_outcome(
@@ -93,6 +96,54 @@ def _evaluate_outcome(
     return "OPEN", None, mae, mfe
 
 
+def _evaluate_trailing(
+    df: pd.DataFrame,
+    signal_idx: int,
+    side: str,
+    entry: float,
+    stop_loss: float,
+    max_lookahead: int = MAX_LOOKAHEAD,
+) -> tuple[str, Optional[int], Optional[float]]:
+    """ATR-distance trailing stop on the same signal.
+
+    Trail distance = original risk (|entry - stop_loss|). Stop only ratchets
+    in the trade's favour. Check the *prior* stop against this bar first
+    (conservative: no same-bar ratchet-then-survive).
+
+    Returns (outcome, bars, realized_r). WIN if exit is profitable vs entry.
+    """
+    risk = abs(entry - stop_loss)
+    if risk <= 0:
+        return "OPEN", None, None
+
+    stop = stop_loss
+    extreme = entry
+
+    for offset in range(1, max_lookahead + 1):
+        i = signal_idx + offset
+        if i >= len(df):
+            break
+        bar_high = float(df["high"].iloc[i])
+        bar_low = float(df["low"].iloc[i])
+
+        if side == "BUY":
+            if bar_low <= stop:
+                realized = (stop - entry) / risk
+                outcome = "WIN" if realized > 0 else "LOSS"
+                return outcome, offset, round(realized, 3)
+            extreme = max(extreme, bar_high)
+            stop = max(stop, extreme - risk)
+        else:
+            if bar_high >= stop:
+                realized = (entry - stop) / risk
+                outcome = "WIN" if realized > 0 else "LOSS"
+                return outcome, offset, round(realized, 3)
+            extreme = min(extreme, bar_low)
+            stop = min(stop, extreme + risk)
+
+    return "OPEN", None, None
+
+
 def run_backtest(
     symbol: str,
     tf: str,
@@ -139,6 +190,9 @@ def run_backtest(
         outcome, bars_to, mae_r, mfe_r = _evaluate_outcome(
             df_base, i, sig.side, sig.price, sig.take_profit, sig.stop_loss
         )
+        trail_out, trail_bars, trail_r = _evaluate_trailing(
+            df_base, i, sig.side, sig.price, sig.stop_loss
+        )
 
         risk = abs(sig.price - sig.stop_loss)
         reward = abs(sig.take_profit - sig.price)
@@ -169,6 +223,9 @@ def run_backtest(
             realized_r=realized_r,
             mae_r=mae_r,
             mfe_r=mfe_r,
+            trail_outcome=trail_out,
+            trail_bars=trail_bars,
+            trail_realized_r=trail_r,
         ))
 
     return results
@@ -181,5 +238,6 @@ def results_to_dataframe(results: list[BacktestResult]) -> pd.DataFrame:
             "symbol", "timeframe", "timestamp", "side", "grade", "score",
             "daily_trend", "entry", "stop_loss", "take_profit", "atr_pct", "adx_value",
             "rr_ratio", "outcome", "bars_to_outcome", "realized_r", "mae_r", "mfe_r",
+            "trail_outcome", "trail_bars", "trail_realized_r",
         ])
     return pd.DataFrame([vars(r) for r in results])
