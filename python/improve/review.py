@@ -33,6 +33,14 @@ class Knob:
 # the current baseline is the only proposal for this cycle.
 KNOB_CATALOG: tuple[Knob, ...] = (
     Knob(
+        "scan_timeframes",
+        "1h,4h",
+        "4h",
+        "Drop 1h alerts. Frozen TMA OOS: 4h A/A+ PF 1.61 / E[R] +0.309; "
+        "1h A/A+ PF 1.14 dilutes the pooled book under PF 1.3. "
+        "Do not also change ADX in the same cycle.",
+    ),
+    Knob(
         "sig_min_adx",
         0.0,
         20.0,

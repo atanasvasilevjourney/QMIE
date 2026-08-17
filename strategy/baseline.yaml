@@ -12,6 +12,7 @@ alloc_norm_threshold: 0.0
 alloc_ma_filter: false
 alloc_dual: false
 alloc_defensive2: cash
+scan_timeframes: 1h,4h
 scan_min_alert_grade: A
 sig_min_adx: 0.0
 sig_min_atr_pct: 0.10
