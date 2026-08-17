@@ -20,7 +20,7 @@ Every time a 1H or 4H bar closes (configurable), the server:
 
 1. Pulls the latest 300 candles for each symbol in your universe
    (default: 30 USDT-perpetuals on Binance Futures)
-2. Computes a 7-component weighted score (Supertrend + EMA200 + RSI +
+2. Computes a 7-component weighted score (Triple EMA 9/90/199 + EMA199 + RSI +
    ADX + HTF + S/R + Volatility) — math identical to the Pine
    visualizer. Weights currently total 100.
 3. Grades each signal A+ / A / B / C / REJECT
@@ -32,7 +32,7 @@ Every time a 1H or 4H bar closes (configurable), the server:
 5. Persists every signal in SQLite for audit and later analysis
 
 The companion **Pine visualizer indicator** runs locally on whatever
-chart you open in TradingView, showing the same Supertrend + EMA + S/R
+chart you open in TradingView, showing the same Triple EMA 9/90/199 + S/R
 plots and the same dashboard. When the server alerts `BUY BTCUSDT 4H A
 87/100`, you click the chart link, the indicator confirms the same
 setup visually, you make the entry decision yourself.

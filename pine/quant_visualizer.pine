@@ -10,8 +10,7 @@
 //  Manual entry only — that's the whole design.
 //
 //  Plots:
-//    • Supertrend (10/3) primary line, regime-coloured
-//    • EMA 200 macro filter
+//    • Triple EMA 9 / 90 / 199 stack (replaces Supertrend + EMA200)
 //    • Pivot S/R levels (last 6 each side)
 //    • Buy / Sell labels on signal bars
 //
@@ -45,8 +44,8 @@ g_viz    = "❸ Visualization"
 g_alert  = "❹ Alerts"
 
 // Weights (must match server config)
-wST  = input.int(20, "Supertrend Weight",     group=g_core, minval=0, maxval=100)
-wEMA = input.int(15, "EMA200 Weight",         group=g_core, minval=0, maxval=100)
+wST  = input.int(20, "TMA stack Weight (EMA 9/90/199)", group=g_core, minval=0, maxval=100)
+wEMA = input.int(15, "EMA199 Weight",         group=g_core, minval=0, maxval=100)
 wRSI = input.int(15, "RSI Weight",            group=g_core, minval=0, maxval=100)
 wADX = input.int(15, "ADX Weight",            group=g_core, minval=0, maxval=100)
 wHTF = input.int(20, "HTF Weight",            group=g_core, minval=0, maxval=100)
@@ -65,8 +64,8 @@ maxATRpct = input.float(8.00, "Max ATR%", group=g_filter, step=0.10)
 slMult = input.float(1.5, "SL × ATR", group=g_core, step=0.1)
 tpMult = input.float(2.5, "TP × ATR", group=g_core, step=0.1)
 
-showST    = input.bool(true,  "Show Supertrend",   group=g_viz)
-showEMA   = input.bool(true,  "Show EMA 200",      group=g_viz)
+showST    = input.bool(true,  "Show Triple EMA (9/90/199)", group=g_viz)
+showEMA   = input.bool(true,  "Show EMA 199",      group=g_viz)
 showSR    = input.bool(true,  "Show S/R levels",   group=g_viz)
 showLabel = input.bool(true,  "Show signal label", group=g_viz)
 showPanel = input.bool(true,  "Show dashboard",    group=g_viz)
@@ -75,21 +74,14 @@ emitAlert = input.bool(true, "Emit A/A+ alert on bar close", group=g_alert)
 emitDailyBreakout = input.bool(true, "Daily close: long trend-start breakout", group=g_alert)
 
 // ─── Indicator math (Pine v6, all global scope) ────────────────────────
-// Triple Supertrend
-[st1, dir1] = ta.supertrend(3.0, 10)
-[st2, dir2] = ta.supertrend(2.0, 11)
-[st3, dir3] = ta.supertrend(1.0, 12)
-
-// Use Pine convention: dir = -1 means uptrend (price > st). Normalise to
-// our +1 = up convention to match the server.
-toUp(d) => d == -1 ? 1 : -1
-d1 = toUp(dir1)
-d2 = toUp(dir2)
-d3 = toUp(dir3)
+// Triple EMA stack (replaces Supertrend + EMA200)
+ema9   = ta.ema(close, 9)
+ema90  = ta.ema(close, 90)
+ema199 = ta.ema(close, 199)
+d1 = ema9 > ema90 ? 1 : ema9 < ema90 ? -1 : 0
+d2 = ema9 > ema199 ? 1 : ema9 < ema199 ? -1 : 0
+d3 = ema90 > ema199 ? 1 : ema90 < ema199 ? -1 : 0
 agreement = d1 + d2 + d3
-
-// EMA 200 macro filter
-ema200 = ta.ema(close, 200)
 
 // RSI
 rsiVal  = ta.rsi(close, 14)
@@ -123,22 +115,22 @@ isTrendStartLong = timeframe.isdaily and rggState == "GREEN" and rggState[1] != 
 
 // HTF data (non-repainting via lookahead_on + [1])
 htfClose = request.security(syminfo.tickerid, htfRes, close[1],   lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
-htfEma   = request.security(syminfo.tickerid, htfRes, ta.ema(close, 200)[1], lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
+htfEma   = request.security(syminfo.tickerid, htfRes, ta.ema(close, 199)[1], lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
 
-// HTF triple-ST agreement, computed at the HTF context
-htfAgreementCalc() =>
-    [_l1, dA] = ta.supertrend(3.0, 10)
-    [_l2, dB] = ta.supertrend(2.0, 11)
-    [_l3, dC] = ta.supertrend(1.0, 12)
-    (dA == -1 ? 1 : -1) + (dB == -1 ? 1 : -1) + (dC == -1 ? 1 : -1)
+// HTF triple-EMA agreement, computed at the HTF context
+htfTmaCalc() =>
+    e9 = ta.ema(close, 9)
+    e90 = ta.ema(close, 90)
+    e199 = ta.ema(close, 199)
+    (e9 > e90 ? 1 : e9 < e90 ? -1 : 0) + (e9 > e199 ? 1 : e9 < e199 ? -1 : 0) + (e90 > e199 ? 1 : e90 < e199 ? -1 : 0)
 
-htfDir = request.security(syminfo.tickerid, htfRes, htfAgreementCalc()[1],
+htfDir = request.security(syminfo.tickerid, htfRes, htfTmaCalc()[1],
      lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
 
-// Daily trend (EMA200 on 1D) — same rule as server daily_trend
+// Daily trend (EMA199 on 1D) — same slow TMA as the server
 dClose = request.security(syminfo.tickerid, "D", close[1],
      lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
-dEma   = request.security(syminfo.tickerid, "D", ta.ema(close, 200)[1],
+dEma   = request.security(syminfo.tickerid, "D", ta.ema(close, 199)[1],
      lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
 dailyTrend = na(dEma) ? "unknown" : dClose > dEma ? "bullish" : dClose < dEma ? "bearish" : "unknown"
 
@@ -183,16 +175,15 @@ dSup  = (not na(supPx) and atrVal > 0) ? (close - supPx) / atrVal : 99.0
 // ─── Component scores (mirror server signal_engine.py) ─────────────────
 sign(x) => x > 0 ? 1 : x < 0 ? -1 : 0
 
-// 1. Supertrend
-// agreement ∈ {-3,-1,+1,+3}: ±3 = all three agree, ±1 = 2/3 majority.
-// We score 2/3 partial agreement at 1/3 strength so it isn't dropped.
+// 1. Triple EMA stack (9 / 90 / 199)
+// Full stack ±3 = all three pairs agree; ±1 = 2/3 majority (1/3 strength).
 stD = agreement >=  1 ?  1 : agreement <= -1 ? -1 : 0
 stContrib = math.abs(agreement) / 3.0
 stScore = math.round(stD * wST * stContrib)
 
-// 2. EMA200
-emaDist = math.abs(close - ema200) / ema200 * 50
-emaD    = close > ema200 ? 1 : close < ema200 ? -1 : 0
+// 2. EMA199 macro (close vs slow TMA)
+emaDist = math.abs(close - ema199) / ema199 * 50
+emaD    = close > ema199 ? 1 : close < ema199 ? -1 : 0
 emaC    = math.max(0.5, math.min(1.0, emaDist))
 emaScore = math.round(emaD * wEMA * emaC)
 
@@ -283,10 +274,9 @@ tp = side == "BUY"  ? close + tpMult * atrVal :
      side == "SELL" ? close - tpMult * atrVal : close
 
 // ─── Plots ─────────────────────────────────────────────────────────────
-plot(showEMA ? ema200 : na, "EMA 200",   color=color.new(color.orange, 0), linewidth=2)
-plot(showST  ? st1    : na, "Supertrend",
-     color = d1 == 1 ? color.new(#26a69a, 0) : color.new(#ef5350, 0),
-     linewidth = 2)
+plot(showST  ? ema9   : na, "EMA 9",   color=color.new(#00f0ff, 0), linewidth=2)
+plot(showST  ? ema90  : na, "EMA 90",  color=color.new(#ff2bd6, 0), linewidth=2)
+plot(showEMA ? ema199 : na, "EMA 199", color=color.new(color.orange, 0), linewidth=2)
 
 // S/R lines as thin price-coordinate horizontal lines for the last bar.
 // We draw labels on confirmed bars only.
@@ -370,10 +360,10 @@ if showPanel and (barstate.islastconfirmedhistory or barstate.islast)
     table.cell(dash, 0, 1, "Score",        text_color=C_LABEL, text_size=size.small)
     table.cell(dash, 1, 1, str.tostring(score, "#.0") + " / 100", text_color=C_TEXT, text_size=size.small)
 
-    table.cell(dash, 0, 2, "Supertrend",   text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 0, 2, "TMA 9/90/199", text_color=C_LABEL, text_size=size.small)
     table.cell(dash, 1, 2, str.tostring(stScore),  text_color=cellOf(stScore, wST),  text_size=size.small)
 
-    table.cell(dash, 0, 3, "EMA200",       text_color=C_LABEL, text_size=size.small)
+    table.cell(dash, 0, 3, "EMA199",       text_color=C_LABEL, text_size=size.small)
     table.cell(dash, 1, 3, str.tostring(emaScore), text_color=cellOf(emaScore, wEMA), text_size=size.small)
 
     table.cell(dash, 0, 4, "RSI",          text_color=C_LABEL, text_size=size.small)

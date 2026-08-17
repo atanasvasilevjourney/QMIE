@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     # Min grade to ALERT on. REJECT/C/B can be set if you want noisier flow.
     scan_min_alert_grade: str = "A"        # A+ | A | B | C | REJECT
 
-    # ─── Signal engine weights (sum=100: ST20+EMA15+RSI15+ADX15+HTF20+SR10+VOL5) ─
+    # ─── Signal engine weights (sum=100: TMA20+EMA199 15+RSI15+ADX15+HTF20+SR10+VOL5) ─
     w_supertrend: int = 20
     w_ema:        int = 15
     w_rsi:        int = 15
