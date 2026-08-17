@@ -55,6 +55,9 @@ export type SignalRow = {
   timeframe?: string
   received_at?: string
   daily_trend?: string
+  strategy?: string
+  reason?: string
+  setup_type?: string
 }
 
 /** Flat slot shape from AllocationPlan.as_dict() — not nested under `result`. */

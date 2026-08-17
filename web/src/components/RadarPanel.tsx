@@ -22,7 +22,8 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
       <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
       <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
       <p className="mt-3 font-mono text-[10px] leading-relaxed text-chrome/50">
-        NOT an entry · NOT a QMIE A/A+ grade · MANUAL ONLY · wait for ranked alert
+        Daily GREY→GREEN / coil-UP also dispatch as BREAKOUT LONG on Live Signals.
+        Manual only — not an A/A+ grade. Confirm on the 1D visualizer before clicking.
       </p>
     </PanelShell>
   )

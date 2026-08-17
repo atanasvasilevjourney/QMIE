@@ -17,6 +17,8 @@ import logging
 from collections import defaultdict
 from datetime import timezone
 
+import pandas as pd
+
 from db import Database
 from models import AssetClass, EventType, Grade, Side, TVSignal
 from notifiers.base import Notifier
@@ -35,13 +37,47 @@ def _to_grade(s: str) -> Grade:
     except: return Grade.REJECT
 
 
+def trend_start_to_tvsignal(item: dict) -> TVSignal:
+    """Map a radar long-trend-start row to the inbound TVSignal shape."""
+    bar_time = item.get("bar_time")
+    bar_ms = None
+    if bar_time is not None:
+        ts = pd.Timestamp(bar_time)
+        if not pd.isna(ts):
+            bar_ms = int(ts.value // 1_000_000)
+    sl = item.get("coil_low") if item.get("breakout") == "UP" else None
+    if sl is not None:
+        try:
+            sl = float(sl)
+        except (TypeError, ValueError):
+            sl = None
+    return TVSignal(
+        strategy="QMIE-DailyBreakout",
+        event=EventType.ENTRY,
+        symbol=str(item.get("symbol") or ""),
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.BUY,
+        signal_price=item.get("price"),
+        stop_loss=sl,
+        adx=item.get("adx"),
+        timestamp=str(bar_time) if bar_time else None,
+        bar_time=bar_ms,
+        reason=item.get("reason") or "trend_start_long",
+        trend="bullish",
+        daily_trend="bullish",
+        setup_type="breakout",
+        action="buy",
+    )
+
+
 def tv_chart_url(symbol: str, timeframe: str, prefix: str = "BINANCE") -> str:
     """Build a TradingView chart deep-link.
     e.g. https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT.P&interval=240
     """
     interval_map = {"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30",
                     "1h":"60","2h":"120","4h":"240","6h":"360","12h":"720",
-                    "1d":"D","1w":"W"}
+                    "1d":"D","d":"D","1w":"W","w":"W"}
     interval = interval_map.get(timeframe.lower(), "240")
     sym = symbol.upper()
     if not sym.endswith(".P") and prefix.upper() == "BINANCE":
@@ -159,5 +195,34 @@ class SignalDispatcher:
             "ALERT %s %s %s %s score=%.1f price=%.6f",
             result.symbol, result.timeframe, result.side, result.grade,
             result.score, result.price,
+        )
+        return True
+
+    async def dispatch_inbound(self, sig: TVSignal) -> bool:
+        """Persist + fan-out an already-built TVSignal (Pine webhook or daily breakout).
+
+        Bypasses A/A+ min-grade — caller decides what is actionable.
+        Still idempotent and still never places orders.
+        """
+        if await self.idem.seen_or_mark(sig.idempotency_key):
+            return False
+        try:
+            await self.db.insert_signal(sig)
+        except Exception:
+            logger.exception("DB insert_signal failed (non-fatal)")
+
+        tf = sig.timeframe or "1d"
+        chart_url = tv_chart_url(sig.symbol, tf, self.tv_prefix)
+        sig_dict = sig.model_dump()
+        sig_dict["chart_url"] = chart_url
+        notify_sig = TVSignal.model_validate(sig_dict)
+        await asyncio.gather(
+            *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
+            return_exceptions=True,
+        )
+        logger.info(
+            "INBOUND %s %s %s %s reason=%s",
+            sig.symbol, tf, sig.side.value if sig.side else "-",
+            sig.strategy, sig.reason,
         )
         return True

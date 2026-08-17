@@ -261,3 +261,50 @@ class TestSnapshotAndDigest:
         if row.is_tight_coil:
             assert row.breakout is None
             assert row.color == "GREY"
+
+
+class TestLongTrendStarts:
+    def test_green_flip_today_is_long(self):
+        from scanner.radar import iter_long_trend_starts
+        rows = [{
+            "symbol": "ETHUSDT",
+            "color": "GREEN",
+            "days_in_state": 1,
+            "state_censored": False,
+            "breakout": None,
+            "price": 3000.0,
+            "adx": 28.0,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+        }]
+        out = iter_long_trend_starts(rows)
+        assert len(out) == 1
+        assert out[0]["side"] == "BUY"
+        assert out[0]["reason"] == "trend_start_long"
+        assert out[0]["setup_type"] == "breakout"
+
+    def test_stale_green_ignored(self):
+        from scanner.radar import iter_long_trend_starts
+        rows = [{
+            "symbol": "ETHUSDT",
+            "color": "GREEN",
+            "days_in_state": 8,
+            "state_censored": False,
+            "breakout": None,
+            "price": 3000.0,
+        }]
+        assert iter_long_trend_starts(rows) == []
+
+    def test_coil_breakout_up_is_long(self):
+        from scanner.radar import iter_long_trend_starts
+        rows = [{
+            "symbol": "SOLUSDT",
+            "color": "GREEN",
+            "days_in_state": 4,
+            "state_censored": False,
+            "breakout": "UP",
+            "coil_low": 140.0,
+            "price": 155.0,
+        }]
+        out = iter_long_trend_starts(rows)
+        assert len(out) == 1
+        assert "coil_breakout_up" in out[0]["reason"]

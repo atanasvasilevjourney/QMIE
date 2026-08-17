@@ -102,6 +102,10 @@ class DiscordNotifier(Notifier):
         colour = SIDE_OVERLAY.get(side, base) if sig.event.value == "entry" else base
 
         title_action = "BUY SIGNAL" if side is Side.BUY else "SELL SIGNAL"
+        if getattr(sig, "setup_type", None) == "breakout" or (
+            sig.strategy or ""
+        ).lower().find("dailybreakout") >= 0:
+            title_action = "BREAKOUT LONG — TREND START" if side is Side.BUY else "BREAKOUT SHORT"
         if sig.event.value in ("exit", "close"):
             title_action = "EXIT"
         title = f"{title_action} — {sig.symbol}"
@@ -156,7 +160,12 @@ class DiscordNotifier(Notifier):
         if regime:
             fields.append({"name": "ARS regime", "value": regime, "inline": True})
 
-        # Score + grade
+        if sig.reason:
+            fields.append({
+                "name": "Setup",
+                "value": str(sig.reason).replace("_", " "),
+                "inline": True,
+            })
         if sig.score is not None:
             grade_str = sig.grade.value if sig.grade else "—"
             emoji = GRADE_EMOJI.get(grade_str, "")

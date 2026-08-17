@@ -58,6 +58,7 @@ class TestSchedulerTick:
         universe = MagicMock()
         universe.get = AsyncMock(return_value=["BTCUSDT"])
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
         dispatcher.dispatch = AsyncMock(return_value=False)
         return client, universe, dispatcher
 
@@ -134,6 +135,7 @@ class TestRadarPass:
         universe = MagicMock()
         universe.get = AsyncMock(return_value=["BTCUSDT"])
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
         dispatcher.dispatch = AsyncMock(return_value=False)
         return client, universe, dispatcher
 
@@ -278,6 +280,7 @@ class TestDailyDfRouting:
         universe = MagicMock()
         universe.get = AsyncMock(return_value=["BTCUSDT"])
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
         dispatcher.dispatch = AsyncMock(return_value=False)
 
         scheduler = ScannerScheduler(
@@ -327,6 +330,7 @@ class TestDailyDfRouting:
         universe = MagicMock()
         universe.get = AsyncMock(return_value=["BTCUSDT"])
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
         dispatcher.dispatch = AsyncMock(return_value=False)
 
         scheduler = ScannerScheduler(
@@ -396,6 +400,7 @@ class TestRankedDispatch:
 
         dispatched: list[str] = []
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
 
         async def capture(res):
             dispatched.append(res.symbol)
@@ -467,6 +472,7 @@ class TestRankedDispatch:
 
         dispatched: list[str] = []
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
 
         async def capture(res):
             dispatched.append(res.symbol)
@@ -515,6 +521,7 @@ class TestRotationDispatch:
 
         dispatched: list[str] = []
         dispatcher = MagicMock()
+        dispatcher.dispatch_inbound = AsyncMock(return_value=False)
         dispatcher.notifiers = []
 
         async def capture(res):

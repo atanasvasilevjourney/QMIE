@@ -11,11 +11,15 @@ export function SignalsPanel({
   onSelect: (s: SignalRow) => void
 }) {
   return (
-    <PanelShell title="Live Signals" subtitle="persisted A/A+/B/C alerts · ranked book may filter">
+    <PanelShell title="Live Signals" subtitle="A/A+ scanner + daily breakout longs · ranked book may filter grades">
       <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
         {signals.map((s) => {
           const active = selectedId === s.id
           const buy = (s.side || '').toUpperCase() === 'BUY'
+          const breakout =
+            (s.strategy || '').includes('DailyBreakout') ||
+            s.setup_type === 'breakout' ||
+            (s.reason || '').includes('trend_start')
           return (
             <button
               key={s.id}
@@ -24,17 +28,28 @@ export function SignalsPanel({
               className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
                 active
                   ? 'border-cyan/50 bg-cyan/10'
-                  : 'border-white/5 bg-white/[0.02] hover:border-cyan/25'
+                  : breakout
+                    ? 'border-amber/30 bg-amber/5 hover:border-amber/50'
+                    : 'border-white/5 bg-white/[0.02] hover:border-cyan/25'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-display text-xs tracking-wider text-white">{s.symbol}</span>
+                <span className="font-display text-xs tracking-wider text-white">
+                  {s.symbol}
+                  {breakout && (
+                    <span className="ml-2 font-mono text-[9px] tracking-widest text-amber">
+                      BREAKOUT
+                    </span>
+                  )}
+                </span>
                 <span className={`font-mono text-[11px] ${buy ? 'text-lime' : 'text-magenta'}`}>
-                  {s.side || '—'} · {s.grade || '—'}
+                  {breakout ? 'LONG TREND START' : `${s.side || '—'} · ${s.grade || '—'}`}
                 </span>
               </div>
               <div className="mt-1 flex justify-between font-mono text-[10px] text-chrome/55">
-                <span>#{s.id} · score {s.score ?? '—'}</span>
+                <span>
+                  #{s.id} · {s.timeframe || s.strategy || 'score'} {s.score ?? ''}
+                </span>
                 <span>{s.signal_price ?? '—'}</span>
               </div>
             </button>
