@@ -6,11 +6,11 @@ for the scan timeframe and (optionally) one for the higher
 timeframe, compute a directional signal with grade.
 
 Scoring (sum=100 directional + 5 vol bonus):
-   Supertrend (triple-confluence) ............... 20
-   EMA200 macro filter ........................... 15
+   Triple EMA stack (9 / 90 / 199) ............... 20
+   EMA199 macro filter (close vs slow EMA) ....... 15
    RSI zone + direction ........................... 15
    ADX trend strength ............................ 15
-   HTF alignment ................................. 20
+   HTF alignment (same TMA on HTF) ............... 20
    S/R distance (room to move) ................... 10
    Volatility regime (ATR%) ....................... 5
 
@@ -38,8 +38,8 @@ import numpy as np
 import pandas as pd
 
 from .indicators import (
-    adx, atr, ema, recent_sr_zones, rsi, supertrend,
-    triple_supertrend_dir, nearest_sr_distance,
+    adx, atr, ema, recent_sr_zones, rsi,
+    triple_ema_dir, nearest_sr_distance,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,32 +125,28 @@ def compute_signal(
     last_close = float(close.iloc[-1])
     last_ts = df.index[-1]
 
-    # ─── 1. Supertrend (triple) ──────────────────────────────────────────
-    d1, d2, d3, agreement, st_line, st_dir_series = triple_supertrend_dir(df)
-    if len(st_line) == 0:
+    # ─── 1. Triple EMA stack (9 / 90 / 199) ──────────────────────────────
+    d1, d2, d3, agreement, e_fast, e_mid, e_slow = triple_ema_dir(close)
+    if len(e_slow) == 0 or pd.isna(e_slow.iloc[-1]):
         return None
-    st_dir_last = int(st_dir_series.iloc[-1])
     # Direction = sign(agreement); contribution scales with magnitude.
-    # agreement ∈ {-3,-1,+1,+3} (impossible to be ±2 with three ±1 votes).
-    #   ±3 → all three agree → full strength (1.0)
-    #   ±1 → 2/3 majority   → partial   (1/3)
-    if agreement >= 1:    st_d, st_c = +1, abs(agreement) / 3.0
-    elif agreement <= -1: st_d, st_c = -1, abs(agreement) / 3.0
-    else:                 st_d, st_c =  0, 0.0
-    st_score = _component(st_d, weights.supertrend, st_c)
+    # Full stack ±3 → full strength; 2/3 majority ±1 → 1/3 strength.
+    if agreement >= 1:
+        tma_d, tma_c = +1, abs(agreement) / 3.0
+    elif agreement <= -1:
+        tma_d, tma_c = -1, abs(agreement) / 3.0
+    else:
+        tma_d, tma_c = 0, 0.0
+    st_score = _component(tma_d, weights.supertrend, tma_c)
 
-    # ─── 2. EMA200 ───────────────────────────────────────────────────────
-    e200 = ema(close, 200)
-    e200_last = float(e200.iloc[-1])
-    if pd.isna(e200_last):
-        return None
-    if last_close > e200_last:
-        ema_d, ema_c = +1, min(1.0, abs(last_close - e200_last) / e200_last * 50)
-    elif last_close < e200_last:
-        ema_d, ema_c = -1, min(1.0, abs(last_close - e200_last) / e200_last * 50)
+    # ─── 2. EMA199 macro filter (close vs slow TMA) ──────────────────────
+    e199_last = float(e_slow.iloc[-1])
+    if last_close > e199_last:
+        ema_d, ema_c = +1, min(1.0, abs(last_close - e199_last) / e199_last * 50)
+    elif last_close < e199_last:
+        ema_d, ema_c = -1, min(1.0, abs(last_close - e199_last) / e199_last * 50)
     else:
         ema_d, ema_c = 0, 0.0
-    # Cap contribution at 1.0 — distance bonus is tiny anyway
     ema_score = _component(ema_d, weights.ema, max(0.5, ema_c))
 
     # ─── 3. RSI zone + direction ────────────────────────────────────────
@@ -190,19 +186,17 @@ def compute_signal(
     htf_aligned: Optional[bool] = None
     htf_d, htf_c = 0, 0.0
     if htf_df is not None and len(htf_df) >= 220:
-        # On HTF: are we above EMA200 AND triple-ST in same direction?
-        htf_ema = ema(htf_df["close"], 200)
-        if not pd.isna(htf_ema.iloc[-1]):
+        # On HTF: TMA stack same direction AND close above/below EMA199.
+        _, _, _, htf_agree, _, _, htf_slow = triple_ema_dir(htf_df["close"])
+        if len(htf_slow) and not pd.isna(htf_slow.iloc[-1]):
             htf_close = float(htf_df["close"].iloc[-1])
-            _, _, _, htf_agree, _, _ = triple_supertrend_dir(htf_df)
-            htf_above_ema = htf_close > float(htf_ema.iloc[-1])
-            # Use the same partial-agreement threshold as base TF
+            htf_above_ema = htf_close > float(htf_slow.iloc[-1])
             if htf_agree >= 1 and htf_above_ema:
                 htf_d, htf_c = +1, abs(htf_agree) / 3.0
-                htf_aligned = (st_d == +1)
+                htf_aligned = (tma_d == +1)
             elif htf_agree <= -1 and not htf_above_ema:
                 htf_d, htf_c = -1, abs(htf_agree) / 3.0
-                htf_aligned = (st_d == -1)
+                htf_aligned = (tma_d == -1)
             else:
                 htf_d, htf_c = 0, 0.0
                 htf_aligned = False
@@ -270,16 +264,16 @@ def compute_signal(
     else:
         sl = tp = last_close
 
-    # ─── Daily trend (EMA200 on 1D) ──────────────────────────────────────
+    # ─── Daily trend (EMA199 on 1D — same slow TMA) ──────────────────────
     daily_trend = "unknown"
-    if daily_df is not None and len(daily_df) >= 200:
-        d_ema200 = ema(daily_df["close"], 200)
-        d_e200_last = float(d_ema200.iloc[-1])
+    if daily_df is not None and len(daily_df) >= 199:
+        d_ema199 = ema(daily_df["close"], 199)
+        d_e199_last = float(d_ema199.iloc[-1])
         d_close_last = float(daily_df["close"].iloc[-1])
-        if not pd.isna(d_e200_last):
-            if d_close_last > d_e200_last:
+        if not pd.isna(d_e199_last):
+            if d_close_last > d_e199_last:
                 daily_trend = "bullish"
-            elif d_close_last < d_e200_last:
+            elif d_close_last < d_e199_last:
                 daily_trend = "bearish"
 
     return ScanResult(
@@ -300,15 +294,18 @@ def compute_signal(
         nearest_res=round(d_res if d_res != float("inf") else 99.0, 2),
         nearest_sup=round(d_sup if d_sup != float("inf") else 99.0, 2),
         components={
-            "supertrend": st_score, "ema": ema_score, "rsi": rsi_score,
+            "tma": st_score, "ema": ema_score, "rsi": rsi_score,
             "adx": adx_score, "htf": htf_score, "sr": sr_score,
-            "vol": vol_score, "st_dir": st_dir_last, "agreement": agreement,
+            "vol": vol_score, "agreement": agreement,
+            "tma_fast": round(float(e_fast.iloc[-1]), 8),
+            "tma_mid": round(float(e_mid.iloc[-1]), 8),
+            "tma_slow": round(e199_last, 8),
             "rsi_now": round(rsi_now, 1), "adx_now": round(adx_now, 1),
             "atr_pct": round(atr_pct, 3),
             "d_res_atr": round(d_res, 2) if d_res != float("inf") else 99.0,
             "d_sup_atr": round(d_sup, 2) if d_sup != float("inf") else 99.0,
         },
-        reason=_explain(side, st_d, ema_d, rsi_d, adx_d, htf_d, sr_d),
+        reason=_explain(side, tma_d, ema_d, rsi_d, adx_d, htf_d, sr_d),
         daily_trend=daily_trend,
     )
 
@@ -325,8 +322,8 @@ def _grade_for(score: float, side: str) -> str:
 def _explain(side: str, st: int, ema_: int, rsi_: int, adx_: int,
              htf_: int, sr_: int) -> str:
     bits = []
-    if st  != 0: bits.append(f"ST{'+' if st  > 0 else '-'}")
-    if ema_!= 0: bits.append(f"EMA{'+' if ema_> 0 else '-'}")
+    if st  != 0: bits.append(f"TMA{'+' if st  > 0 else '-'}")
+    if ema_!= 0: bits.append(f"EMA199{'+' if ema_> 0 else '-'}")
     if rsi_!= 0: bits.append(f"RSI{'+' if rsi_> 0 else '-'}")
     if adx_!= 0: bits.append(f"ADX{'+' if adx_> 0 else '-'}")
     if htf_!= 0: bits.append(f"HTF{'+' if htf_> 0 else '-'}")

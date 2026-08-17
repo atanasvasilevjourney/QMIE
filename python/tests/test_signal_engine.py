@@ -23,7 +23,7 @@ class TestComputeSignal:
         assert sig is not None
         assert sig.side == "BUY"
         # Bull regime: directional components must vote bull
-        assert sig.components["supertrend"] > 0
+        assert sig.components["tma"] > 0
         assert sig.components["ema"] > 0
         assert sig.components["adx"] >= 0      # ADX may be neutral early in trend
         # No HTF / S/R on simple linear fixture; score is bounded.
@@ -34,7 +34,7 @@ class TestComputeSignal:
         sig = compute_signal(bear_trend_df, symbol="X", timeframe="1h")
         assert sig is not None
         assert sig.side == "SELL"
-        assert sig.components["supertrend"] < 0
+        assert sig.components["tma"] < 0
         assert sig.components["ema"] < 0
         assert sig.grade != "REJECT" or sig.score > 30   # at least directional
 
@@ -78,16 +78,12 @@ class TestComputeSignal:
         assert with_htf.score >= no_htf.score
         assert with_htf.htf_aligned is True
 
-    def test_partial_supertrend_agreement_scored(self, bull_trend_df):
-        """Regression test for the 'triple-ST scoring drops 2/3 majority'
-        bug. After fix, agreement of ±1 should produce a non-zero
-        supertrend component score."""
+    def test_partial_tma_agreement_scored(self, bull_trend_df):
+        """2/3 TMA stack (agreement ±1) must still produce a non-zero tma score."""
         sig = compute_signal(bull_trend_df, symbol="X", timeframe="1h")
-        # In a strong uptrend agreement is +3, but we still verify the
-        # general property: if agreement != 0, supertrend score != 0
-        assert sig.components["agreement"] in (-3, -1, 1, 3)
+        assert sig.components["agreement"] != 0
         if sig.components["agreement"] != 0:
-            assert sig.components["supertrend"] != 0
+            assert sig.components["tma"] != 0
 
 
 class TestGrade:
@@ -133,8 +129,9 @@ class TestCutComponents:
         }
         sig = compute_signal(bull_trend_df, symbol="X", timeframe="1h")
         assert sig is not None
-        extra = {"ribbon", "structure", "sweep"}
+        extra = {"ribbon", "structure", "sweep", "supertrend"}
         assert extra.isdisjoint(sig.components.keys())
+        assert "tma" in sig.components
 
 
 # ─── Daily trend tests ───────────────────────────────────────────────────
@@ -181,7 +178,7 @@ class TestDailyTrend:
         assert result.daily_trend == "unknown"
 
     def test_unknown_when_insufficient_daily_data(self, bull_trend_df):
-        """daily_df with < 200 rows → daily_trend == 'unknown' (EMA can't seed)."""
+        """daily_df with < 199 rows → daily_trend == 'unknown' (EMA199 can't seed)."""
         daily = _make_daily_df(150, close=100.0)
         result = compute_signal(
             bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
@@ -189,18 +186,18 @@ class TestDailyTrend:
         assert result is not None
         assert result.daily_trend == "unknown"
 
-    def test_unknown_at_exactly_199_rows(self, bull_trend_df):
-        """199 rows is one short of minimum → daily_trend == 'unknown'."""
-        daily = _make_daily_df(199, close=100.0)
+    def test_unknown_at_exactly_198_rows(self, bull_trend_df):
+        """198 rows is one short of EMA199 → daily_trend == 'unknown'."""
+        daily = _make_daily_df(198, close=100.0)
         result = compute_signal(
             bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily
         )
         assert result is not None
         assert result.daily_trend == "unknown"
 
-    def test_computes_at_exactly_200_rows(self, bull_trend_df):
-        """Exactly 200 rows is the minimum accepted — must not return 'unknown'."""
-        daily = _make_daily_df(200, close=100.0)
+    def test_computes_at_exactly_199_rows(self, bull_trend_df):
+        """Exactly 199 rows seeds EMA199 — must not return 'unknown'."""
+        daily = _make_daily_df(199, close=100.0)
         daily.iloc[-1, daily.columns.get_loc("close")] = 200.0
         result = compute_signal(
             bull_trend_df, symbol="BTCUSDT", timeframe="1h", daily_df=daily

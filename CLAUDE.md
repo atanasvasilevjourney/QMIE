@@ -8,7 +8,7 @@ run / test it without you having to re-explain.
 
 QMIE is a server-side crypto market scanner. It scans ~30 USDT-perp
 symbols on 1H and 4H timeframes, computes a 7-component weighted
-score (Supertrend + EMA200 + RSI + ADX + HTF alignment + S/R room +
+score (Triple EMA 9/90/199 + EMA199 + RSI + ADX + HTF alignment + S/R room +
 Volatility), and dispatches A/A+ signals to Discord and/or Telegram with a
 TradingView chart deep-link. It does **not** execute trades. Manual
 entry only — by design.
@@ -103,11 +103,10 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `ta.rma`. Changing this will silently desync the visualizer from
    the server.
 
-3. **Triple-Supertrend agreement is in {±1, ±3}, never ±2.** The
-   scoring threshold is `>= 1` so 2/3 majority signals are counted
-   at 1/3 strength. A previous version had `>= 2` which silently
-   dropped these — that is a regression we never want again. See
-   `test_partial_supertrend_agreement_scored`.
+3. **TMA stack agreement is scored at `>= 1`.** Votes are EMA9 vs 90,
+   9 vs 199, 90 vs 199. Full stack ±3 is full strength; 2/3 majority
+   ±1 is 1/3 strength. Do not raise the threshold to `>= 2` — that
+   drops partial stacks. See `test_partial_tma_agreement_scored`.
 
 4. **Closed-bar discipline.** The scheduler only fires 5s after a
    bar close, never mid-bar. Don't lower the grace window without
@@ -122,9 +121,9 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    chooses which alerts to fire and a suggested book weight. Changing
    `ALLOC_MODE` must not grow a broker path.
 
-7. **Scoring is seven components summing to 100.** EMA ribbon,
-   BOS/CHoCH structure, and liquidity sweep were cut. Do not put them
-   back without a frozen OOS that shows they help. See
+7. **Scoring is seven components summing to 100.** Trend stack is
+   Triple EMA (9/90/199) + close-vs-EMA199 (not Supertrend / EMA200).
+   BOS/CHoCH structure and liquidity sweep stay cut. See
    `test_cut_components_not_in_score`.
 
 8. **TradingView MCP is not the scanner.** `.cursor/mcp.json` launches

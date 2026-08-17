@@ -74,6 +74,43 @@ def ema(series: pd.Series, length: int) -> pd.Series:
     return series.ewm(span=length, adjust=False, min_periods=length).mean()
 
 
+def _pair_dir(a: float, b: float) -> int:
+    if not np.isfinite(a) or not np.isfinite(b):
+        return 0
+    if a > b:
+        return 1
+    if a < b:
+        return -1
+    return 0
+
+
+def triple_ema_dir(
+    close: pd.Series,
+    *,
+    fast: int = 9,
+    mid: int = 90,
+    slow: int = 199,
+) -> tuple[int, int, int, int, pd.Series, pd.Series, pd.Series]:
+    """Triple EMA stack votes: 9 vs 90, 9 vs 199, 90 vs 199.
+
+    agreement = d1+d2+d3. Full stack 9>90>199 → +3; inverse → -3.
+    Partial (2/3) → ±1. Equal pair can theoretically yield ±2.
+    """
+    e_fast = ema(close, fast)
+    e_mid = ema(close, mid)
+    e_slow = ema(close, slow)
+    if len(close) == 0 or pd.isna(e_slow.iloc[-1]):
+        empty = pd.Series(dtype=float)
+        return 0, 0, 0, 0, empty, empty, empty
+    f = float(e_fast.iloc[-1])
+    m = float(e_mid.iloc[-1])
+    s = float(e_slow.iloc[-1])
+    d1 = _pair_dir(f, m)
+    d2 = _pair_dir(f, s)
+    d3 = _pair_dir(m, s)
+    return d1, d2, d3, d1 + d2 + d3, e_fast, e_mid, e_slow
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ATR — Pine `ta.atr(length)` ≡ RMA(TR, length)
 # ═══════════════════════════════════════════════════════════════════════

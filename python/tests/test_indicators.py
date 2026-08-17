@@ -196,6 +196,27 @@ class TestTripleSupertrend:
         assert len(line) == 0
 
 
+class TestTripleEma:
+    def test_uptrend_full_stack(self, bull_trend_df):
+        from scanner.indicators import triple_ema_dir
+        d1, d2, d3, agree, e9, e90, e199 = triple_ema_dir(bull_trend_df["close"])
+        assert agree == d1 + d2 + d3
+        assert agree == 3
+        assert e9.iloc[-1] > e90.iloc[-1] > e199.iloc[-1]
+
+    def test_downtrend_full_stack(self, bear_trend_df):
+        from scanner.indicators import triple_ema_dir
+        _, _, _, agree, *_ = triple_ema_dir(bear_trend_df["close"])
+        assert agree == -3
+
+    def test_nan_slow_returns_zeros(self):
+        from scanner.indicators import triple_ema_dir
+        s = pd.Series([1.0] * 50)
+        d1, d2, d3, agree, e_fast, e_mid, e_slow = triple_ema_dir(s)
+        assert (d1, d2, d3, agree) == (0, 0, 0, 0)
+        assert len(e_slow) == 0
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  Pivots & S/R
 # ════════════════════════════════════════════════════════════════════════
