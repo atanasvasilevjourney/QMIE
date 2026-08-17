@@ -25,7 +25,7 @@ import time
 from typing import Any, Optional
 
 from .allocator import AllocConfig, AllocationPlan, allocate
-from .dispatcher import SignalDispatcher
+from .dispatcher import SignalDispatcher, trend_start_to_tvsignal
 from .exchange_clients import ExchangeClient
 from .radar import (
     RadarConfig,
@@ -35,6 +35,7 @@ from .radar import (
     classify_symbol,
     empty_radar_snapshot,
     format_radar_digest,
+    iter_long_trend_starts,
 )
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
@@ -82,6 +83,7 @@ class ScannerScheduler:
         alloc_cfg: Optional[AllocConfig] = None,
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
+        radar_dispatch_trend_start: bool = True,
     ):
         self.client = client
         self.universe = universe
@@ -101,6 +103,7 @@ class ScannerScheduler:
 
         # Daily Trend Radar (independent of SCAN_TIMEFRAMES)
         self.radar_enabled = radar_enabled
+        self.radar_dispatch_trend_start = radar_dispatch_trend_start
         self.radar_cfg = radar_cfg or RadarConfig()
         try:
             self.radar_cfg.validate()
@@ -488,6 +491,9 @@ class ScannerScheduler:
                 len(snap.breakouts), snap.status,
             )
 
+            if self.radar_dispatch_trend_start:
+                await self._dispatch_trend_start_longs(snap)
+
             coverage = (
                 100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
             )
@@ -514,6 +520,22 @@ class ScannerScheduler:
                     coverage, cfg.min_coverage_pct,
                 )
             return True
+
+    async def _dispatch_trend_start_longs(self, snap: RadarSnapshot) -> int:
+        """Fan out closed-1D long trend-start / coil-UP as inbound signals."""
+        items = iter_long_trend_starts(snap.rows)
+        n = 0
+        for item in items:
+            try:
+                sig = trend_start_to_tvsignal(item)
+                ok = await self.dispatcher.dispatch_inbound(sig)
+                if ok:
+                    n += 1
+            except Exception:
+                logger.exception("daily breakout dispatch failed for %s", item.get("symbol"))
+        if n:
+            logger.info("Trend Radar dispatched %d daily breakout long(s)", n)
+        return n
 
     async def _notify_rotation_text(self, plan: AllocationPlan) -> None:
         scores = ", ".join(

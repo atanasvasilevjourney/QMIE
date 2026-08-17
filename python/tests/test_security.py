@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from security import IdempotencyStore, verify_age, verify_signature
+from security import IdempotencyStore, verify_age, verify_signature, verify_webhook_token
 
 
 SECRET = "test-secret-32-bytes-or-so-yes-yes"
@@ -52,6 +52,17 @@ class TestVerifySignature:
         result = verify_signature(SECRET, body, sig)
         # Just pin the contract — either passes or fails consistently.
         assert isinstance(result, bool)
+
+
+class TestWebhookToken:
+    def test_matching_token_passes(self):
+        assert verify_webhook_token(SECRET, SECRET) is True
+
+    def test_wrong_token_fails(self):
+        assert verify_webhook_token(SECRET, "nope") is False
+
+    def test_missing_token_fails(self):
+        assert verify_webhook_token(SECRET, None) is False
 
 
 # ════════════════════════════════════════════════════════════════════════

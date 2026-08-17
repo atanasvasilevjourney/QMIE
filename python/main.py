@@ -38,13 +38,13 @@ from db import Database
 from models import Grade, JournalClose, JournalCreate, TVSignal
 from notifiers import DiscordNotifier, Notifier, TelegramNotifier
 from scanner.allocator import AllocConfig
-from scanner.dispatcher import SignalDispatcher, tv_chart_url
+from scanner.dispatcher import SignalDispatcher
 from scanner.exchange_clients import get_client
 from scanner.radar import RadarConfig, empty_radar_snapshot
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
-from security import IdempotencyStore, verify_signature
+from security import IdempotencyStore, verify_signature, verify_webhook_token
 from journal import JournalError, close_fill, create_fill, drift_message
 
 
@@ -184,6 +184,7 @@ async def lifespan(app: FastAPI):
             paxg_symbol=s.alloc_paxg_symbol,
         ),
         radar_enabled=s.radar_enabled,
+        radar_dispatch_trend_start=s.radar_dispatch_trend_start,
         radar_cfg=RadarConfig(
             adx_length=s.radar_adx_length,
             enter_adx=s.radar_enter_adx,
@@ -411,13 +412,18 @@ async def patch_journal(fill_id: int, body: JournalClose) -> dict[str, Any]:
 @app.post("/webhook")
 async def webhook(
     request: Request,
+    token: str | None = None,
     x_qmie_signature: str | None = Header(default=None, alias="X-QMIE-Signature"),
     x_qmie_timestamp: str | None = Header(default=None, alias="X-QMIE-Timestamp"),
 ) -> dict[str, Any]:
     """Optional ingress for Pine-side alerts (e.g. from the visualizer
-    indicator). Re-broadcasts to the same notifier fan-out."""
+    indicator). Re-broadcasts to the same notifier fan-out.
+
+    TradingView cannot send HMAC headers. Put ``?token=WEBHOOK_SECRET``
+    on the webhook URL, or send ``X-QMIE-Signature``.
+    """
     s = state.settings
-    if s is None or state.idem is None:
+    if s is None or state.dispatcher is None:
         raise HTTPException(503, "service_starting")
 
     body = await request.body()
@@ -425,7 +431,8 @@ async def webhook(
         raise HTTPException(400, "empty_body")
 
     if s.webhook_require_hmac:
-        if not verify_signature(s.webhook_secret, body, x_qmie_signature):
+        token_ok = verify_webhook_token(s.webhook_secret, token)
+        if not token_ok and not verify_signature(s.webhook_secret, body, x_qmie_signature):
             raise HTTPException(401, "bad_signature")
     if x_qmie_timestamp:
         try:
@@ -444,25 +451,8 @@ async def webhook(
     except ValidationError as e:
         raise HTTPException(422, e.errors())
 
-    if await state.idem.seen_or_mark(sig.idempotency_key):
-        return {"ok": True, "duplicate": True}
-
-    if state.db:
-        try: await state.db.insert_signal(sig)
-        except Exception: logger.exception("DB insert failed")
-
-    # Inject TV deep link for fan-out
-    sig_dict = sig.model_dump()
-    sig_dict["chart_url"] = tv_chart_url(
-        sig.symbol, sig.timeframe or "4h", s.tv_chart_prefix,
-    )
-    notify_sig = TVSignal.model_validate(sig_dict)
-
-    await asyncio.gather(
-        *(n.send_signal(notify_sig, None) for n in state.notifiers if n.enabled),
-        return_exceptions=True,
-    )
-    return {"ok": True, "queued": False, "broadcast": True}
+    dispatched = await state.dispatcher.dispatch_inbound(sig)
+    return {"ok": True, "duplicate": not dispatched, "broadcast": dispatched}
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────

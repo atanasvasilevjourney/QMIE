@@ -517,3 +517,33 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
         _cap("Extended RED (chase risk)", items, len(snap.late_stage_red))
 
     return "\n".join(lines)
+
+
+DAILY_BREAKOUT_STRATEGY = "QMIE-DailyBreakout"
+
+
+def iter_long_trend_starts(rows: list) -> list[dict[str, Any]]:
+    """Closed daily longs: GREY→GREEN today (trend start) and/or coil breakout UP.
+
+    Manual-entry candidates only — not a QMIE A/A+ grade.
+    """
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = r.as_dict() if hasattr(r, "as_dict") else dict(r)
+        reasons: list[str] = []
+        days = int(d.get("days_in_state") or 0)
+        if (
+            d.get("color") == "GREEN"
+            and days == 1
+            and not d.get("state_censored")
+        ):
+            reasons.append("trend_start_long")
+        if d.get("breakout") == "UP":
+            reasons.append("coil_breakout_up")
+        if not reasons:
+            continue
+        d["reason"] = "+".join(reasons)
+        d["setup_type"] = "breakout"
+        d["side"] = "BUY"
+        out.append(d)
+    return out

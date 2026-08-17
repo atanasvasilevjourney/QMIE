@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 from models import Grade
-from scanner.dispatcher import SignalDispatcher, tv_chart_url
+from scanner.dispatcher import SignalDispatcher, trend_start_to_tvsignal, tv_chart_url
 from scanner.signal_engine import ScanResult
 
 
@@ -86,6 +86,10 @@ class TestTVChartUrl:
 
     def test_1d_uses_D(self):
         url = tv_chart_url("BTCUSDT", "1d", "BINANCE")
+        assert "interval=D" in url
+
+    def test_pine_daily_period_maps_to_D(self):
+        url = tv_chart_url("BTCUSDT", "D", "BINANCE")
         assert "interval=D" in url
 
     def test_bybit_prefix_no_perp_suffix(self):
@@ -359,3 +363,53 @@ class TestDailyTrendPropagation:
         assert len(received) == 1
         assert received[0].norm_score == pytest.approx(6.5)
         assert received[0].alloc_regime == "LIVE"
+
+
+class TestDailyBreakoutInbound:
+    def test_trend_start_maps_to_buy_1d(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "ETHUSDT",
+            "price": 3000.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+            "reason": "trend_start_long",
+            "breakout": None,
+        })
+        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.side.value == "BUY"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "breakout"
+        assert sig.reason == "trend_start_long"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_inbound_persists_and_notifies(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        db = _DummyDB()
+        dispatcher = SignalDispatcher(
+            db=db,
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        sig = trend_start_to_tvsignal({
+            "symbol": "ETHUSDT",
+            "price": 3000.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+            "reason": "trend_start_long",
+            "breakout": "UP",
+            "coil_low": 2900.0,
+        })
+        assert await dispatcher.dispatch_inbound(sig) is True
+        assert db.inserts == 1
+        assert len(received) == 1
+        assert received[0].chart_url
+        assert "interval=D" in received[0].chart_url
+        # duplicate bar is dropped
+        assert await dispatcher.dispatch_inbound(sig) is False

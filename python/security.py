@@ -35,6 +35,17 @@ def verify_signature(secret: str, body: bytes, provided: Optional[str]) -> bool:
     return hmac.compare_digest(expected, provided.strip())
 
 
+def verify_webhook_token(secret: str, token: Optional[str]) -> bool:
+    """TradingView cannot send HMAC headers. Allow ?token=WEBHOOK_SECRET on the URL."""
+    if not token or not secret:
+        return False
+    a = token.strip().encode()
+    b = secret.encode()
+    if len(a) != len(b):
+        return False
+    return hmac.compare_digest(a, b)
+
+
 def verify_age(timestamp: Optional[float], max_age_sec: int) -> bool:
     """Reject stale signals — signed-then-stored replays."""
     if timestamp is None:

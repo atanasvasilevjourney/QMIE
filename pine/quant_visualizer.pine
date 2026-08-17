@@ -24,6 +24,14 @@
 //    • alert.freq_once_per_bar_close — fires only on confirmed bars
 //    • JSON payload mirrors `models.TVSignal`
 //      so you can wire this to /webhook for redundant alerting
+//    • On a 1D chart, GREY→GREEN (ADX/DMI hysteresis matching Trend Radar)
+//      also fires a BREAKOUT LONG / TREND START alert (manual entry only)
+//
+//  TradingView webhook (daily breakout):
+//    1. Add this indicator to a Daily chart
+//    2. Create Alert → condition "alert() function calls only" → Once per bar close
+//    3. Webhook URL: https://YOUR_HOST/webhook?token=WEBHOOK_SECRET
+//    4. Message: {{alert_message}}
 // ════════════════════════════════════════════════════════════════════════
 indicator("QMIE Visualizer", shorttitle="QMIE", overlay=true,
      max_lines_count = 500,
@@ -63,7 +71,8 @@ showSR    = input.bool(true,  "Show S/R levels",   group=g_viz)
 showLabel = input.bool(true,  "Show signal label", group=g_viz)
 showPanel = input.bool(true,  "Show dashboard",    group=g_viz)
 
-emitAlert = input.bool(true, "Emit alert on bar close", group=g_alert)
+emitAlert = input.bool(true, "Emit A/A+ alert on bar close", group=g_alert)
+emitDailyBreakout = input.bool(true, "Daily close: long trend-start breakout", group=g_alert)
 
 // ─── Indicator math (Pine v6, all global scope) ────────────────────────
 // Triple Supertrend
@@ -89,6 +98,28 @@ rsiPrev = rsiVal[1]
 // ATR + ADX (use ta.dmi which returns DI+/DI−/ADX)
 atrVal = ta.atr(14)
 [plusDI, minusDI, adxVal] = ta.dmi(14, 14)
+
+// Daily RGG hysteresis — same enter/exit as python/scanner/radar.py
+enterAdx = 25.0
+exitAdx  = 20.0
+var string rggState = "GREY"
+if na(adxVal)
+    rggState := rggState
+else if rggState == "GREY"
+    if adxVal >= enterAdx
+        rggState := plusDI > minusDI ? "GREEN" : minusDI > plusDI ? "RED" : rggState
+else if rggState == "GREEN"
+    if adxVal < exitAdx
+        rggState := "GREY"
+    else if minusDI > plusDI and adxVal >= enterAdx
+        rggState := "RED"
+else if rggState == "RED"
+    if adxVal < exitAdx
+        rggState := "GREY"
+    else if plusDI > minusDI and adxVal >= enterAdx
+        rggState := "GREEN"
+
+isTrendStartLong = timeframe.isdaily and rggState == "GREEN" and rggState[1] != "GREEN"
 
 // HTF data (non-repainting via lookahead_on + [1])
 htfClose = request.security(syminfo.tickerid, htfRes, close[1],   lookahead=barmerge.lookahead_on, gaps=barmerge.gaps_off, ignore_invalid_symbol=true)
@@ -305,6 +336,14 @@ if showLabel and barstate.isconfirmed and isFreshSell
          yloc = yloc.abovebar,
          size = size.small)
 
+if showLabel and emitDailyBreakout and barstate.isconfirmed and isTrendStartLong
+    label.new(bar_index, low, "▲ BREAKOUT\nTREND START",
+         color = color.new(#ffb020, 0),
+         textcolor = color.black,
+         style = label.style_label_up,
+         yloc = yloc.belowbar,
+         size = size.normal)
+
 // ─── Dashboard panel ───────────────────────────────────────────────────
 color C_BG      = #0f1117
 color C_HEADER  = #1e88e5
@@ -392,3 +431,31 @@ if emitAlert and barstate.isconfirmed and isFreshBuy
     alert(buildAlertJson("BUY", grade), alert.freq_once_per_bar_close)
 if emitAlert and barstate.isconfirmed and isFreshSell
     alert(buildAlertJson("SELL", grade), alert.freq_once_per_bar_close)
+
+buildDailyBreakoutJson() =>
+    "{" +
+     "\"strategy\":\"QMIE-DailyBreakout\"," +
+     "\"event\":\"entry\"," +
+     "\"symbol\":\""        + syminfo.ticker + "\"," +
+     "\"asset_class\":\"CRYPTO\"," +
+     "\"timeframe\":\"1d\"," +
+     "\"side\":\"BUY\"," +
+     "\"signal_price\":"    + str.tostring(close) + "," +
+     "\"stop_loss\":"       + str.tostring(close - slMult * atrVal) + "," +
+     "\"take_profit\":"     + str.tostring(close + tpMult * atrVal) + "," +
+     "\"adx\":"             + str.tostring(adxVal, "#.00") + "," +
+     "\"atr\":"             + str.tostring(atrVal, "#.0000") + "," +
+     "\"trend\":\"bullish\"," +
+     "\"daily_trend\":\"bullish\"," +
+     "\"reason\":\"trend_start_long\"," +
+     "\"setup_type\":\"breakout\"," +
+     "\"action\":\"buy\"," +
+     "\"timestamp\":\""     + str.format_time(time, "yyyy-MM-dd'T'HH:mm:ssZ", "UTC") + "\"," +
+     "\"bar_time\":"        + str.tostring(time) +
+     "}"
+
+if emitDailyBreakout and barstate.isconfirmed and isTrendStartLong
+    alert(buildDailyBreakoutJson(), alert.freq_once_per_bar_close)
+
+alertcondition(isTrendStartLong, title="Daily breakout long (trend start)",
+     message="QMIE daily close: long trend start / breakout — manual entry only")
