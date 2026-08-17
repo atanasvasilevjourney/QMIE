@@ -25,3 +25,4 @@ Do not put service startup in the environment update script — start them in th
 - **Secrets:** Discord/Telegram webhooks and `WEBHOOK_SECRET` are optional for desk UI + journal. HMAC webhook posts need a matching secret from `python/.env`.
 - **Signal-only:** Never add broker/execution paths. Desk JOURNAL is manual fill logging only.
 - **Shadow MCP:** `.cursor/mcp.json` TradingView MCP is not the scanner; do not retune `W_*` from it (`docs/tradingview-mcp.md`).
+- **Frozen OOS:** `docs/backtest-baseline.md` is the TMA 9/90/199 walk-forward. Re-run with `python -m backtest.run --start 2024-01-01 --split 2025-01-01 --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0` (Vision cache, not `fapi`). Do not retune `W_*` on that sample. One-knob proposal: `strategy/reviews/2026-08-17.md` (`SCAN_TIMEFRAMES=4h`, not applied).

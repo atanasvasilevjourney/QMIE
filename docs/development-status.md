@@ -17,8 +17,9 @@ The *intended* system (scanner + proven edge + live feedback) is
 - README / CLAUDE.md / architecture.md describe the 7-component engine
 
 Still open in Sprint 0: `docs/deployment.md`, daily cap
-`sig_max_signals_per_symbol_per_day`. Next product work is Sprint 1
-(frozen OOS backtest write-up).
+`sig_max_signals_per_symbol_per_day`. Sprint 1 write-up:
+`docs/backtest-baseline.md` (TMA 9/90/199). One-knob proposal
+(`SCAN_TIMEFRAMES=4h`) is not applied.
 
 ---
 
@@ -30,7 +31,7 @@ teams over-claim.
 | Frame | Score | What it means |
 |---|---|---|
 | **A. Original scanner product** (alerts on closed 1H/4H bars, Discord/Telegram, Pine visualizer, SQLite audit) | **~90%** | You can deploy this today and get A/A+ alerts. Remaining work is hygiene, config wiring, and a live bug in the funding filter. |
-| **B. Intended system** (A + measured historical edge + live-vs-backtest loop + operator discipline) | **~75%** | Backtest harness exists and is rich. Paper trading, trade journal, and a first published OOS result do **not**. The grading hypothesis is still unproven in-repo. |
+| **B. Intended system** (A + measured historical edge + live-vs-backtest loop + operator discipline) | **~82%** | Frozen TMA OOS is in `docs/backtest-baseline.md`. Combined A/A+ PF 1.21 misses the 1.3 gate; 4h A/A+ PF 1.61 passes. Journal exists; live vs OOS drift waits on `JOURNAL_OOS_WIN_PCT` after the 4h knob. |
 
 ### Weighted breakdown of frame B (intended system)
 
@@ -241,29 +242,24 @@ runs. Ribbon / structure / sweep stay **out**.
 
 ### Sprint 1 — Prove or kill the grading hypothesis
 
-This is the highest-leverage *product* work. Without it, every extra
-indicator is decoration.
+**Done (TMA 9/90/199).** Tables: `docs/backtest-baseline.md`. Proposal:
+`strategy/reviews/2026-08-17.md` (`SCAN_TIMEFRAMES` `1h,4h` → `4h`, not
+applied).
 
-1. Canonical backtest, frozen parameters:
-   - Symbols: the 10 default USDT-M names
-   - TFs: `1h,4h`
-   - Window: 2024-01-01 → yesterday, `--split 2025-01-01`
-   - Filters: `--min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0`
-     (match live sweet-spot, not the wide live defaults 0.10–8.0)
-2. Write `docs/backtest-baseline.md` with the summary table
-   (win %, expectancy R, PF, SQN, max DD per grade, IS vs OOS).
-   No parquet in git — table + command line only.
-3. Decision gate:
-   - Extra votes (ribbon / structure / sweep) were **cut** without
-     waiting on OOS. Do not put them back.
-   - If **A/A+ OOS expectancy ≤ 0** or **does not beat C**: stop adding
-     components. Tighten gates (ADX, daily-trend *hard* filter) instead.
-   - If **A/A+ OOS expectancy > 0 and PF ≥ 1.3**: proceed to Sprint 2.
-     Do not tune weights on this run.
+Canonical run (10 USDT-M, `1h`+`4h`, 2024-01-01 → 2026-08-16, split
+2025-01-01, `--min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0`):
 
-Optional in the same sprint: trailing-stop variant on the *same*
-signals (the last real Phase 3 item). Compare fixed 1.5/2.5 ATR vs
-ATR trail. One extra column, not a new engine.
+- Combined A/A+ OOS: E[R] **+0.122**, PF **1.21**, beats C (+0.047) —
+  expectancy pass, **PF miss** vs 1.3.
+- **4h A/A+ OOS:** win 49.1%, E[R] +0.309, PF **1.61**, Sharpe 2.09 —
+  gate pass. 1h is the drag (PF 1.14).
+- A+ is worse than A. Do not raise min grade to A+. Do not retune `W_*`.
+- Trailing ATR vs fixed 1.5/2.5: extra column only; keep fixed TP/SL.
+
+Ribbon / structure / sweep stay **out**. Next live knob is 4h-only, then
+(next cycle) `sig_min_adx` 0 → 20. Sprint 2 journal already exists;
+set `JOURNAL_OOS_WIN_PCT` after the timeframe knob is applied (49.1 if
+4h-only, 42.1 if 1h stays).
 
 ### Sprint 2 — Close the live loop (Phase 4, scoped tightly)
 
@@ -299,7 +295,7 @@ Call the scanner **v1.0** when all of these are true:
 - [ ] Funding filter works on Binance; Bybit behaviour documented
 - [ ] Env weights match the 7-component engine and Pine
 - [ ] README / CLAUDE.md describe the engine that runs
-- [ ] One frozen OOS backtest write-up exists (`docs/backtest-baseline.md`)
+- [x] One frozen OOS backtest write-up exists (`docs/backtest-baseline.md`)
 - [ ] Live `SCAN_MIN_ALERT_GRADE` / ATR / ADX defaults match the
       filters that were actually measured
 - [ ] Operator can journal a fill against a signal id

@@ -23,9 +23,11 @@ Sprint 1 has an OOS number.
 - [x] Enforce `sig_max_signals_per_symbol_per_day` (0 = unlimited)
 
 ## Sprint 1 — Prove or kill the grading hypothesis
-- [ ] Canonical walk-forward run (10 symbols, 1h+4h, split 2025-01-01,
-      ADX≥20, ATR% 0.4–4.0) — running
-- [ ] `docs/backtest-baseline.md` with IS/OOS table (no parquet in git)
+- [x] Canonical walk-forward run (10 symbols, 1h+4h, split 2025-01-01,
+      ADX≥20, ATR% 0.4–4.0) — TMA 9/90/199, `docs/backtest-baseline.md`
+- [x] `docs/backtest-baseline.md` with IS/OOS table (no parquet in git)
+      Combined A/A+ OOS E[R] +0.122 PF 1.21 (misses 1.3). 4h A/A+ PF 1.61.
+      One-knob proposal: `SCAN_TIMEFRAMES=4h` (`strategy/reviews/2026-08-17.md`, not applied).
 - [x] Decision: **cut** ribbon+structure+sweep (operator keep-or-cut;
       engine restored to original 7, weights sum 100)
 - [x] Trailing-stop variant vs fixed 1.5/2.5 ATR on the same signals

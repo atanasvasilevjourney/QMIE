@@ -90,9 +90,16 @@ def test_pick_knob_skips_already_proposed(tmp_path: Path):
     reviews.mkdir()
     (reviews / "2026-01-01.md").write_text("proposed_knob: sig_min_adx\n")
     used = already_proposed(reviews)
-    from improve.review import KNOB_CATALOG
     knob = pick_knob({"sig_min_adx": 0.0, "alloc_top_long": 3}, used)
-    assert knob is KNOB_CATALOG[1]
+    assert knob is not None
+    assert knob.name == "alloc_top_long"
+
+
+def test_pick_knob_scan_timeframes_first_when_live_default():
+    knob = pick_knob({"scan_timeframes": "1h,4h", "sig_min_adx": 0.0}, set())
+    assert knob is not None
+    assert knob.name == "scan_timeframes"
+    assert knob.to_value == "4h"
 
 
 def test_towards_goal_success():

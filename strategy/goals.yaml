@@ -7,7 +7,7 @@ success:
   max_drawdown_pct: 20.0
   min_expectancy_r: 0.15
   min_win_pct: 48.0
-  # Unset until Sprint 1 writes docs/backtest-baseline.md
+  # Frozen TMA OOS is in docs/backtest-baseline.md (4h A/A+ is the edge).
   target_return_30d_pct: null
 
 failure:
