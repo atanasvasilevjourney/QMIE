@@ -24,6 +24,9 @@ coverage.xml
 .env
 *.env.local
 
+# Local scanner DB
+python/data/
+
 # IDE
 .vscode/
 .idea/
