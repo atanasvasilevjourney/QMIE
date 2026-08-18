@@ -9,6 +9,7 @@ import { SignalsPanel } from './components/SignalsPanel'
 import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
+import { AgentsPanel } from './components/AgentsPanel'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('desk')
@@ -120,6 +121,18 @@ export default function App() {
                   }}
                 />
               </div>
+            </motion.div>
+          )}
+
+          {tab === 'agents' && (
+            <motion.div
+              key="agents"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <AgentsPanel briefing={desk.briefing} loading={desk.loading} />
             </motion.div>
           )}
 

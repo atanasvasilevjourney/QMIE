@@ -18,6 +18,10 @@ const STEPS = [
     body: 'Pine visualizer should match side/grade. Optional MCP setup review on desktop Cursor.',
   },
   {
+    title: 'Agent checklist',
+    body: 'AGENTS tab runs scanner/radar/book/checklist/review in parallel. GO/WATCH/SKIP is an overlay — confirm on the visualizer, then click yourself.',
+  },
+  {
     title: 'Manual fill',
     body: 'Execute yourself. Log fill + exit in JOURNAL so live edge can be measured.',
   },
@@ -26,7 +30,7 @@ const STEPS = [
 export function FlowsPanel() {
   return (
     <PanelShell title="Operator Flows" subtitle="best-path manual trading loop · no broker">
-      <div className="relative grid gap-3 md:grid-cols-5">
+      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-6">
         {STEPS.map((s, i) => (
           <div
             key={s.title}

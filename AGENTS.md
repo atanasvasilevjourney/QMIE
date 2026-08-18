@@ -18,6 +18,7 @@ Do not put service startup in the environment update script — start them in th
 - Python: `cd python && /workspace/.venv/bin/pytest -v` (see `CLAUDE.md`). Coverage optional.
 - Desk UI: `cd web && npm run lint` and `npm run build`.
 - Standard Docker path remains `docker/` + root README.
+- Multi-agent briefing: `GET /agents/briefing` or `cd python && python -m improve.agents` (read-only; GO/WATCH/SKIP is not an order).
 
 ### Cloud gotchas
 

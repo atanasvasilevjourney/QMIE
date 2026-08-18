@@ -1,5 +1,7 @@
 import type {
+  AgentBriefing,
   AllocationPlan,
+  ChecklistCard,
   Health,
   JournalFill,
   JournalStats,
@@ -57,4 +59,6 @@ export const api = {
   }) => sendJson<JournalFill>('/journal', 'POST', payload),
   closeFill: (id: number, exit_price: number, notes?: string) =>
     sendJson<JournalFill>(`/journal/${id}`, 'PATCH', { exit_price, notes }),
+  briefing: () => getJson<AgentBriefing>('/agents/briefing'),
+  checklist: (signalId: number) => getJson<ChecklistCard>(`/agents/checklist/${signalId}`),
 }

@@ -3,6 +3,7 @@ import type { DeskTab } from '../types'
 
 const TABS: { id: DeskTab; label: string; hint: string }[] = [
   { id: 'desk', label: 'DESK', hint: 'Radar + signals' },
+  { id: 'agents', label: 'AGENTS', hint: 'Briefing + checklist' },
   { id: 'book', label: 'BOOK', hint: 'Ranked allocation' },
   { id: 'journal', label: 'JOURNAL', hint: 'Manual fills' },
   { id: 'flows', label: 'FLOWS', hint: 'Operator path' },

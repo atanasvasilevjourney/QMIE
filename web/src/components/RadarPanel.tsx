@@ -15,6 +15,7 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Stat label="GREY" value={radar.grey} tone="chrome" />
         <Stat label="RED" value={radar.red} tone="magenta" />
       </div>
+      <RadarBreadth green={radar.green} grey={radar.grey} red={radar.red} />
       <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `${r.symbol} d${r.days_in_state} ${fmtPct(r.pct_since_flip)}`} />
       <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `${r.symbol} d${r.days_in_state} ${fmtPct(r.pct_since_flip)}`} />
       <Bucket title="Breakouts" rows={radar.breakouts} render={(r) => `${r.symbol} ${r.breakout} ADX${r.adx}`} />
@@ -55,6 +56,20 @@ function Bucket({
         ))}
         {!rows?.length && <Empty>none</Empty>}
       </div>
+    </div>
+  )
+}
+
+function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: number }) {
+  const total = green + grey + red
+  const gp = total ? (100 * green) / total : 0
+  const yp = total ? (100 * grey) / total : 0
+  const rp = total ? (100 * red) / total : 0
+  return (
+    <div className="mb-3 flex h-2 overflow-hidden rounded-full border border-white/10 bg-black/40">
+      <div className="bg-lime" style={{ width: `${gp}%` }} />
+      <div className="bg-chrome/40" style={{ width: `${yp}%` }} />
+      <div className="bg-magenta" style={{ width: `${rp}%` }} />
     </div>
   )
 }
