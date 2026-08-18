@@ -1,0 +1,169 @@
+//@version=6
+// QMIE — Asset Rotation (ARS-style)
+// Companion to ALLOC_MODE=rotation on the server.
+// Lookback ROC only. Not a port of any invite-only script.
+// Does NOT place trades. Alerts on confirmed bar-close switches.
+indicator("QMIE Asset Rotation", shorttitle="QMIE-ARS", overlay=false,
+     max_labels_count=50)
+
+g_core = "Rotation"
+g_def  = "Defensive"
+g_viz  = "Visuals"
+
+normLen    = input.int(20, "Normalization length", minval=2, maxval=200, group=g_core)
+threshold  = input.float(0.0, "Cash threshold (ROC %)", step=0.1, group=g_core)
+useMA      = input.bool(false, "MA filter (close > MA)", group=g_core)
+maType     = input.string("EMA", "MA type", options=["EMA", "SMA", "RMA", "WMA"], group=g_core)
+maLen      = input.int(50, "MA length", minval=2, maxval=400, group=g_core)
+dual       = input.bool(false, "Dual allocation (top 2 × 50%)", group=g_core)
+def2       = input.string("cash", "Second defensive (BTC weak)",
+     options=["off", "cash", "paxg", "paxg_then_cash"], group=g_def)
+btcSym     = input.symbol("BINANCE:BTCUSDT", "BTC symbol", group=g_def)
+paxgSym    = input.symbol("BINANCE:PAXGUSDT", "PAXG symbol", group=g_def)
+
+a1on = input.bool(true, "Enable 1", group=g_core, inline="a1")
+a1   = input.symbol("BINANCE:BTCUSDT", "", group=g_core, inline="a1")
+a2on = input.bool(true, "Enable 2", group=g_core, inline="a2")
+a2   = input.symbol("BINANCE:ETHUSDT", "", group=g_core, inline="a2")
+a3on = input.bool(true, "Enable 3", group=g_core, inline="a3")
+a3   = input.symbol("BINANCE:SOLUSDT", "", group=g_core, inline="a3")
+a4on = input.bool(true, "Enable 4", group=g_core, inline="a4")
+a4   = input.symbol("BINANCE:XRPUSDT", "", group=g_core, inline="a4")
+a5on = input.bool(true, "Enable 5", group=g_core, inline="a5")
+a5   = input.symbol("BINANCE:BNBUSDT", "", group=g_core, inline="a5")
+a6on = input.bool(false, "Enable 6", group=g_core, inline="a6")
+a6   = input.symbol("BINANCE:NEARUSDT", "", group=g_core, inline="a6")
+a7on = input.bool(false, "Enable 7", group=g_core, inline="a7")
+a7   = input.symbol("BINANCE:ADAUSDT", "", group=g_core, inline="a7")
+a8on = input.bool(false, "Enable 8", group=g_core, inline="a8")
+a8   = input.symbol("BINANCE:SUIUSDT", "", group=g_core, inline="a8")
+a9on = input.bool(false, "Enable 9", group=g_core, inline="a9")
+a9   = input.symbol("BINANCE:1000PEPEUSDT", "", group=g_core, inline="a9")
+a10on = input.bool(false, "Enable 10", group=g_core, inline="a10")
+a10   = input.symbol("BINANCE:PAXGUSDT", "", group=g_core, inline="a10")
+
+showTable = input.bool(true, "Show score table", group=g_viz)
+
+maOf(src, len, kind) =>
+    switch kind
+        "SMA" => ta.sma(src, len)
+        "RMA" => ta.rma(src, len)
+        "WMA" => ta.wma(src, len)
+        => ta.ema(src, len)
+
+rocOf(src, len) =>
+    prev = src[len]
+    na(prev) or prev == 0 ? na : 100.0 * (src / prev - 1.0)
+
+f_pack(on, sym) =>
+    c = request.security(sym, timeframe.period, close, lookahead=barmerge.lookahead_off)
+    roc = rocOf(c, normLen)
+    ma = maOf(c, maLen, maType)
+    maOk = na(ma) ? true : c > ma
+    [on, sym, roc, maOk]
+
+[on1, s1, r1, m1] = f_pack(a1on, a1)
+[on2, s2, r2, m2] = f_pack(a2on, a2)
+[on3, s3, r3, m3] = f_pack(a3on, a3)
+[on4, s4, r4, m4] = f_pack(a4on, a4)
+[on5, s5, r5, m5] = f_pack(a5on, a5)
+[on6, s6, r6, m6] = f_pack(a6on, a6)
+[on7, s7, r7, m7] = f_pack(a7on, a7)
+[on8, s8, r8, m8] = f_pack(a8on, a8)
+[on9, s9, r9, m9] = f_pack(a9on, a9)
+[on10, s10, r10, m10] = f_pack(a10on, a10)
+
+btcC = request.security(btcSym, timeframe.period, close, lookahead=barmerge.lookahead_off)
+btcRoc = rocOf(btcC, normLen)
+btcMa = maOf(btcC, maLen, maType)
+btcWeak = (not na(btcRoc) and btcRoc < 0) or (useMA and not na(btcMa) and btcC <= btcMa)
+
+paxgC = request.security(paxgSym, timeframe.period, close, lookahead=barmerge.lookahead_off)
+paxgRoc = rocOf(paxgC, normLen)
+paxgMa = maOf(paxgC, maLen, maType)
+paxgOk = (na(paxgRoc) ? false : paxgRoc >= threshold) and (na(paxgMa) ? true : paxgC > paxgMa)
+
+eligible(on, roc, maOk) =>
+    on and not na(roc) and roc >= threshold and (not useMA or maOk)
+
+bestSym = "CASH"
+bestRoc = -1.0e10
+secSym = "CASH"
+secRoc = -1.0e10
+
+consider(on, sym, roc, maOk) =>
+    string bS = bestSym
+    float bR = bestRoc
+    string sS = secSym
+    float sR = secRoc
+    if eligible(on, roc, maOk)
+        if roc > bR or (roc == bR and sym < bS)
+            sS := bS
+            sR := bR
+            bS := sym
+            bR := roc
+        else if roc > sR or (roc == sR and sym < sS)
+            sS := sym
+            sR := roc
+    [bS, bR, sS, sR]
+
+[bestSym, bestRoc, secSym, secRoc] := consider(on1, s1, r1, m1)
+[bestSym, bestRoc, secSym, secRoc] := consider(on2, s2, r2, m2)
+[bestSym, bestRoc, secSym, secRoc] := consider(on3, s3, r3, m3)
+[bestSym, bestRoc, secSym, secRoc] := consider(on4, s4, r4, m4)
+[bestSym, bestRoc, secSym, secRoc] := consider(on5, s5, r5, m5)
+[bestSym, bestRoc, secSym, secRoc] := consider(on6, s6, r6, m6)
+[bestSym, bestRoc, secSym, secRoc] := consider(on7, s7, r7, m7)
+[bestSym, bestRoc, secSym, secRoc] := consider(on8, s8, r8, m8)
+[bestSym, bestRoc, secSym, secRoc] := consider(on9, s9, r9, m9)
+[bestSym, bestRoc, secSym, secRoc] := consider(on10, s10, r10, m10)
+
+held1 = bestSym
+held2 = ""
+
+if bestSym == "CASH"
+    regime := "CASH"
+    held1 := "CASH"
+
+if def2 != "off" and btcWeak
+    if def2 == "paxg" or def2 == "paxg_then_cash"
+        if paxgOk
+            regime := "PAXG"
+            held1 := paxgSym
+            held2 := ""
+        else
+            regime := "CASH"
+            held1 := "CASH"
+            held2 := ""
+    else
+        regime := "CASH"
+        held1 := "CASH"
+        held2 := ""
+
+if dual and regime == "LIVE" and secSym != "CASH"
+    held2 := secSym
+
+plot(r1, "A1 ROC", color=color.new(color.orange, 0))
+plot(r2, "A2 ROC", color=color.new(color.blue, 0))
+plot(r3, "A3 ROC", color=color.new(color.purple, 0))
+hline(threshold, "Threshold", color=color.gray)
+
+prevHeld = held1[1]
+switched = barstate.isconfirmed and not na(held1) and held1 != prevHeld
+alertcondition(switched, title="ARS rotation",
+     message="QMIE-ARS {{ticker}} → new allocation (see table)")
+
+if showTable and barstate.islast
+    var table t = table.new(position.top_right, 2, 6, border_width=1)
+    table.cell(t, 0, 0, "Regime", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 0, regime, text_color=color.white, bgcolor=regime == "LIVE" ? color.green : color.red)
+    table.cell(t, 0, 1, "Held", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 1, str.tostring(held1), text_color=color.white, bgcolor=color.gray)
+    table.cell(t, 0, 2, "Dual", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 2, held2 == "" ? "—" : held2, text_color=color.white, bgcolor=color.gray)
+    table.cell(t, 0, 3, "Best ROC", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 3, str.tostring(bestRoc, "#.00") + "%", text_color=color.white, bgcolor=color.gray)
+    table.cell(t, 0, 4, "BTC ROC", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 4, str.tostring(btcRoc, "#.00") + "%", text_color=color.white, bgcolor=color.gray)
+    table.cell(t, 0, 5, "BTC weak", text_color=color.white, bgcolor=color.black)
+    table.cell(t, 1, 5, str.tostring(btcWeak), text_color=color.white, bgcolor=color.gray)

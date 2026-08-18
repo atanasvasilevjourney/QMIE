@@ -186,3 +186,51 @@ class TestGetClient:
     def test_case_insensitive(self):
         assert isinstance(get_client("BINANCE"), BinanceClient)
         assert isinstance(get_client("Bybit"), BybitClient)
+
+
+class TestPremiumIndex:
+    async def test_binance_returns_funding_rate(self):
+        c = BinanceClient()
+        payload = {"symbol": "BTCUSDT", "lastFundingRate": "0.0001",
+                   "markPrice": "65000"}
+        fake = _FakeSession([_FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            data = await c.fetch_premium_index("btcusdt.P")
+        assert data["lastFundingRate"] == "0.0001"
+        assert fake.calls[0][1]["symbol"] == "BTCUSDT"
+
+    async def test_binance_5xx_retries_once_then_succeeds(self):
+        c = BinanceClient()
+        payload = {"symbol": "ETHUSDT", "lastFundingRate": "-0.0002"}
+        fake = _FakeSession([_FakeResp(503, {}), _FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            data = await c.fetch_premium_index("ETHUSDT")
+        assert data["lastFundingRate"] == "-0.0002"
+        assert len(fake.calls) == 2
+
+    async def test_binance_4xx_raises_immediately(self):
+        c = BinanceClient()
+        fake = _FakeSession([_FakeResp(400, {"msg": "bad symbol"})])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            with pytest.raises(RuntimeError, match="HTTP 400"):
+                await c.fetch_premium_index("NOPE")
+        assert len(fake.calls) == 1
+
+    async def test_bybit_maps_funding_rate(self):
+        c = BybitClient()
+        payload = {
+            "retCode": 0,
+            "result": {"list": [{"symbol": "BTCUSDT", "fundingRate": "0.0003"}]},
+        }
+        fake = _FakeSession([_FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            data = await c.fetch_premium_index("BTCUSDT")
+        assert data["lastFundingRate"] == pytest.approx(0.0003)
+
+    async def test_bybit_empty_list_returns_zero_rate(self):
+        c = BybitClient()
+        payload = {"retCode": 0, "result": {"list": []}}
+        fake = _FakeSession([_FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            data = await c.fetch_premium_index("BTCUSDT")
+        assert data["lastFundingRate"] == 0.0

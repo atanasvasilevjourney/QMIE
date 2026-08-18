@@ -9,9 +9,12 @@ run / test it without you having to re-explain.
 QMIE is a server-side crypto market scanner. It scans ~30 USDT-perp
 symbols on 1H and 4H timeframes, computes a 7-component weighted
 score (Supertrend + EMA200 + RSI + ADX + HTF alignment + S/R room +
-Volatility regime), and dispatches A/A+ signals to Discord and/or
-Telegram with a TradingView chart deep-link. It does **not** execute
-trades. Manual entry only — by design.
+Volatility), and dispatches A/A+ signals to Discord and/or Telegram with a
+TradingView chart deep-link. It does **not** execute trades. Manual
+entry only — by design.
+
+Status and next sprints: `docs/development-status.md`. Live scanner
+~90%; intended system (scanner + measured edge + live feedback) ~75%.
 
 A companion Pine v6 indicator (`pine/quant_visualizer.pine`) runs the
 same scoring math locally on TradingView so chart plots match server
@@ -21,7 +24,8 @@ alerts.
 
 ```
 qmie/
-├── pine/quant_visualizer.pine        ← TradingView indicator
+├── pine/quant_visualizer.pine        ← TradingView scoring indicator
+├── pine/asset_rotation.pine          ← ARS-style rotation companion
 ├── python/
 │   ├── main.py                       FastAPI app
 │   ├── config.py                     Pydantic Settings (env)
@@ -33,21 +37,31 @@ qmie/
 │   │   ├── signal_engine.py          7-component scoring → A+/A/B/C/REJECT
 │   │   ├── exchange_clients.py       Binance + Bybit public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
+│   │   ├── allocator.py              Ranked swing book + ARS rotation
+│   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
 │   │   ├── dispatcher.py             Dedup + notifier fan-out + TV deep-link
 │   │   └── symbol_universe.py        Static list + auto-top-N by volume
+│   ├── journal.py                    Manual fills vs alerts
+│   ├── improve/review.py             One-variable weekly review
+│   ├── improve/setup_review.py       QMIE + MCP ruled setup overlay
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
-│   ├── tests/                        109 pytest tests, 74% coverage
+│   ├── tests/                        214 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
 │   └── .env.example
+├── strategy/                         goals, baseline knobs, weekly reviews
+├── .cursor/                          qmie-review, tradingview MCP, skills
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml
-├── docs/architecture.md              How things fit + scaling cliffs
+├── docs/
+│   ├── architecture.md               How things fit + scaling cliffs
+│   ├── development-status.md         Completeness score + sprint plan
+│   └── tradingview-mcp.md            Cursor TradingView MCP (shadow stdio)
 ├── README.md
-└── REVIEW.md                         Audit findings + test summary
+└── REVIEW.md                         Audit findings (partially stale; see status doc)
 ```
 
 ## Running
@@ -66,7 +80,7 @@ Health: `curl localhost:8080/health | jq`
 ```bash
 cd python
 pip install -r requirements.txt pytest pytest-asyncio pytest-cov
-pytest -v                              # 109 tests, ~2s
+pytest -v                              # 214 tests; CI also installs requests+pyarrow
 pytest --cov=. --cov-report=term       # with coverage
 ```
 
@@ -102,6 +116,22 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `asyncio.gather(..., return_exceptions=True)` is load-bearing —
    a failing Discord must not break Telegram, and vice versa. See
    `test_notifier_failure_isolated`.
+
+6. **Ranked allocation does not execute.** `allocator.allocate()` only
+   chooses which alerts to fire and a suggested book weight. Changing
+   `ALLOC_MODE` must not grow a broker path.
+
+7. **Scoring is seven components summing to 100.** EMA ribbon,
+   BOS/CHoCH structure, and liquidity sweep were cut. Do not put them
+   back without a frozen OOS that shows they help. See
+   `test_cut_components_not_in_score`.
+
+8. **TradingView MCP is not the scanner.** `.cursor/mcp.json` launches
+   atilaahmettaner/tradingview-mcp (`uvx`, shadow stdio). Use it for
+   live quotes and the ruled overlay (`python -m improve.setup_review`,
+   `/qmie-setup`). Do not retune `W_*` or Pine from it. QMIE signal
+   backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
+
 
 ## Conventions
 

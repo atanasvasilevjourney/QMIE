@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     # Min grade to ALERT on. REJECT/C/B can be set if you want noisier flow.
     scan_min_alert_grade: str = "A"        # A+ | A | B | C | REJECT
 
-    # ─── Signal engine weights (sum=100) ─────────────────────────────────
+    # ─── Signal engine weights (sum=100: ST20+EMA15+RSI15+ADX15+HTF20+SR10+VOL5) ─
     w_supertrend: int = 20
     w_ema:        int = 15
     w_rsi:        int = 15
@@ -98,6 +98,30 @@ class Settings(BaseSettings):
     sig_max_atr_pct: float = 8.0           # too volatile → suppress
     sig_min_adx: float = 0.0               # ADX trend-strength gate (0 = disabled, 20 = recommended)
     sig_funding_rate_threshold: float = 0.001  # suppress BUY when rate > +threshold, SELL when < -threshold (0.001 = 0.1%/8h)
+
+    # ─── Journal / live-vs-OOS drift (manual fills, no execution) ────────
+    # Set JOURNAL_OOS_WIN_PCT after Sprint 1 (e.g. 52.0). Until then, no drift alert.
+    journal_oos_win_pct: Optional[float] = None
+    journal_drift_pts:   float = 5.0
+    journal_min_fills:   int = 30
+
+    # ─── Ranked asset allocation (which alerts to take, suggested size) ─
+    alloc_mode:        str = "ranked"   # ranked | all | rotation
+    alloc_top_long:    int = 3
+    alloc_top_short:   int = 3
+    alloc_min_grade:   str = "A"
+    alloc_weighting:   str = "rank"     # rank | equal
+    alloc_cluster_max: int = 1          # 0 = unlimited
+    # ARS-style rotation (ALLOC_MODE=rotation)
+    alloc_norm_length:    int = 20
+    alloc_norm_threshold: float = 0.0   # ROC %; all below → cash
+    alloc_ma_filter:      bool = False
+    alloc_ma_type:        str = "ema"   # ema | sma | wma | rma
+    alloc_ma_length:      int = 50
+    alloc_dual:           bool = False  # 50/50 top-2
+    alloc_defensive2:     str = "cash"  # off | cash | paxg | paxg_then_cash
+    alloc_btc_symbol:     str = "BTCUSDT"
+    alloc_paxg_symbol:    str = "PAXGUSDT"
 
     @property
     def webhook_allowlist(self) -> list[str]:
@@ -129,6 +153,7 @@ class Settings(BaseSettings):
         """Return list of warnings; called once at startup."""
         warnings = []
         wt = self.weights_total
+        # 100 = ST20 + EMA15 + RSI15 + ADX15 + HTF20 + SR10 + VOL5
         if not (95 <= wt <= 105):
             warnings.append(
                 f"Weights sum to {wt}, expected ~100. Score scale will be off."
@@ -147,6 +172,18 @@ class Settings(BaseSettings):
             warnings.append(
                 f"SCAN_DATA_SOURCE={self.scan_data_source!r} not supported; "
                 "expected binance or bybit."
+            )
+        if self.alloc_mode.lower() not in ("ranked", "all", "rotation"):
+            warnings.append(
+                f"ALLOC_MODE={self.alloc_mode!r} invalid; "
+                "expected ranked, all, or rotation."
+            )
+        if self.alloc_defensive2.lower() not in (
+            "off", "cash", "paxg", "paxg_then_cash",
+        ):
+            warnings.append(
+                f"ALLOC_DEFENSIVE2={self.alloc_defensive2!r} invalid; "
+                "expected off, cash, paxg, or paxg_then_cash."
             )
         return warnings
 

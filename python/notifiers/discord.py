@@ -135,6 +135,27 @@ class DiscordNotifier(Notifier):
                 "inline": True,
             })
 
+        alloc_rank = getattr(sig, "alloc_rank", None)
+        if alloc_rank is not None:
+            w = getattr(sig, "alloc_weight_pct", None)
+            cluster = getattr(sig, "alloc_cluster", None) or "—"
+            wtxt = f"{w:.1f}%" if w is not None else "—"
+            fields.append({
+                "name": "Ranked slot",
+                "value": f"#{alloc_rank} · {wtxt} · {cluster}",
+                "inline": True,
+            })
+        ns = getattr(sig, "norm_score", None)
+        if ns is not None:
+            fields.append({
+                "name": "ARS score",
+                "value": f"{ns:+.2f}% lookback",
+                "inline": True,
+            })
+        regime = getattr(sig, "alloc_regime", None)
+        if regime:
+            fields.append({"name": "ARS regime", "value": regime, "inline": True})
+
         # Score + grade
         if sig.score is not None:
             grade_str = sig.grade.value if sig.grade else "—"

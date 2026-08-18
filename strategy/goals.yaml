@@ -1,0 +1,22 @@
+# QMIE — declared success / failure
+# Used by `python -m improve.review` and the Cursor review agent.
+# These are operator goals, not live-order instructions.
+
+success:
+  min_sharpe: 1.0
+  max_drawdown_pct: 20.0
+  min_expectancy_r: 0.15
+  min_win_pct: 48.0
+  # Unset until Sprint 1 writes docs/backtest-baseline.md
+  target_return_30d_pct: null
+
+failure:
+  sharpe_below: 0.0
+  drawdown_pct: 30.0
+  expectancy_r_below: 0.0
+  win_pct_below: 40.0
+
+review:
+  cadence_days: 7
+  min_closed_fills: 30
+  scientific_method: one_variable

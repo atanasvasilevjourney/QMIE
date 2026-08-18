@@ -26,8 +26,7 @@ class TestComputeSignal:
         assert sig.components["supertrend"] > 0
         assert sig.components["ema"] > 0
         assert sig.components["adx"] >= 0      # ADX may be neutral early in trend
-        assert sig.components["ribbon"] >= 0   # ribbon aligned or neutral
-        # No HTF / S/R / sweep on simple linear fixture; score is bounded.
+        # No HTF / S/R on simple linear fixture; score is bounded.
         # Verify the signal is directionally correct (positive score).
         assert sig.score > 0
 
@@ -110,20 +109,32 @@ class TestGrade:
 class TestWeights:
     def test_default_weights_total(self):
         w = Weights()
-        # 20+15+15+15+20+10+5+10+10+8 = 128
-        assert w.total == 128
+        # 20+15+15+15+20+10+5 = 100
+        assert w.total == 100
 
     def test_custom_weights(self):
-        w = Weights(supertrend=30, ema=10, rsi=10, adx=10, htf=30, sr=5, vol=5,
-                    ribbon=10, structure=10, sweep=8)
-        assert w.total == 128
+        w = Weights(supertrend=30, ema=10, rsi=10, adx=10, htf=30, sr=5, vol=5)
+        assert w.total == 100
 
     def test_weights_can_be_lopsided(self):
         # Engine should still work with non-equal weights, though grades
         # will scale differently. No exception expected.
-        w = Weights(supertrend=50, ema=0, rsi=0, adx=0, htf=50, sr=0, vol=0,
-                    ribbon=0, structure=0, sweep=0)
+        w = Weights(supertrend=50, ema=0, rsi=0, adx=0, htf=50, sr=0, vol=0)
         assert w.total == 100
+
+
+class TestCutComponents:
+    def test_cut_components_not_in_score(self, bull_trend_df):
+        """Ribbon / structure / sweep were cut. They must not vote."""
+        from dataclasses import fields
+        names = {f.name for f in fields(Weights)}
+        assert names == {
+            "supertrend", "ema", "rsi", "adx", "htf", "sr", "vol",
+        }
+        sig = compute_signal(bull_trend_df, symbol="X", timeframe="1h")
+        assert sig is not None
+        extra = {"ribbon", "structure", "sweep"}
+        assert extra.isdisjoint(sig.components.keys())
 
 
 # ─── Daily trend tests ───────────────────────────────────────────────────

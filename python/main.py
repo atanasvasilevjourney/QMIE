@@ -11,10 +11,13 @@ Endpoints:
   GET  /signals               last N dispatched alerts
   GET  /universe              the symbol set the next pass will scan
   POST /scan/once             admin: force an immediate scan pass on a TF
+  GET  /allocation            last ranked-allocation plan (suggested size, not orders)
+  POST /journal               log a manual fill against a signal id
+  GET  /journal               recent fills
+  PATCH /journal/{id}         set exit price on a fill
+  GET  /journal/stats         win rate / R from fills (optional grade filter)
   POST /webhook               OPTIONAL: receive Pine alerts (HMAC) and
                               re-broadcast through the same notifiers.
-                              Useful if you also want to alert from your
-                              chart-side visualizer.
 """
 from __future__ import annotations
 
@@ -30,14 +33,16 @@ from pydantic import ValidationError
 
 from config import Settings, get_settings
 from db import Database
-from models import Grade, TVSignal
+from models import Grade, JournalClose, JournalCreate, TVSignal
 from notifiers import DiscordNotifier, Notifier, TelegramNotifier
+from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher, tv_chart_url
 from scanner.exchange_clients import get_client
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
 from security import IdempotencyStore, verify_signature
+from journal import JournalError, close_fill, create_fill, drift_message
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -137,6 +142,7 @@ async def lifespan(app: FastAPI):
         idem=state.idem,
         min_alert_grade=min_grade,
         tv_chart_prefix=s.tv_chart_prefix,
+        max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
     )
     state.dispatcher = dispatcher
 
@@ -157,6 +163,23 @@ async def lifespan(app: FastAPI):
         sig_max_atr_pct=s.sig_max_atr_pct,
         sig_min_adx=s.sig_min_adx,
         sig_funding_rate_threshold=s.sig_funding_rate_threshold,
+        alloc_cfg=AllocConfig(
+            mode=s.alloc_mode,
+            top_long=s.alloc_top_long,
+            top_short=s.alloc_top_short,
+            min_grade=s.alloc_min_grade,
+            weighting=s.alloc_weighting,
+            cluster_max=s.alloc_cluster_max,
+            norm_length=s.alloc_norm_length,
+            norm_threshold=s.alloc_norm_threshold,
+            ma_filter=s.alloc_ma_filter,
+            ma_type=s.alloc_ma_type,
+            ma_length=s.alloc_ma_length,
+            dual=s.alloc_dual,
+            defensive2=s.alloc_defensive2,
+            btc_symbol=s.alloc_btc_symbol,
+            paxg_symbol=s.alloc_paxg_symbol,
+        ),
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -254,6 +277,85 @@ async def scan_once(timeframe: str = "1h") -> dict[str, Any]:
         raise HTTPException(400, f"timeframe {tf} not in scanner config")
     asyncio.create_task(state.scheduler._scan_pass(tf))
     return {"ok": True, "queued": tf}
+
+
+@app.get("/allocation")
+async def get_allocation() -> dict[str, Any]:
+    """Last ranked-allocation plan: which alerts to take and suggested size.
+    Does not place orders."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    plan = state.scheduler.last_allocation
+    if plan is None:
+        return {
+            "timeframe": None,
+            "considered": 0,
+            "skipped_grade": 0,
+            "slots": [],
+            "note": "no_scan_yet",
+        }
+    return plan.as_dict()
+
+
+async def _maybe_notify_journal_drift() -> None:
+    s = state.settings
+    if s is None or s.journal_oos_win_pct is None or state.db is None:
+        return
+    stats = await state.db.journal_stats(grades=("A+", "A"))
+    msg = drift_message(
+        live_win_pct=float(stats["win_pct"]),
+        baseline=s.journal_oos_win_pct,
+        closed=int(stats["closed"]),
+        min_fills=s.journal_min_fills,
+        pts=s.journal_drift_pts,
+    )
+    if not msg:
+        return
+    logger.warning("%s", msg)
+    await asyncio.gather(
+        *(n.send_text(msg) for n in state.notifiers if n.enabled),
+        return_exceptions=True,
+    )
+
+
+@app.post("/journal")
+async def post_journal(body: JournalCreate) -> dict[str, Any]:
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    try:
+        row = await create_fill(state.db, body)
+    except JournalError as e:
+        raise HTTPException(e.status, e.detail)
+    await _maybe_notify_journal_drift()
+    return row
+
+
+@app.get("/journal")
+async def get_journal(limit: int = 50) -> list[dict[str, Any]]:
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    limit = max(1, min(500, limit))
+    return await state.db.recent_fills(limit=limit)
+
+
+@app.get("/journal/stats")
+async def get_journal_stats(grades: str = "A+,A") -> dict[str, Any]:
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    parsed = tuple(g.strip() for g in grades.split(",") if g.strip()) or None
+    return await state.db.journal_stats(grades=parsed)
+
+
+@app.patch("/journal/{fill_id}")
+async def patch_journal(fill_id: int, body: JournalClose) -> dict[str, Any]:
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    try:
+        row = await close_fill(state.db, fill_id, body)
+    except JournalError as e:
+        raise HTTPException(e.status, e.detail)
+    await _maybe_notify_journal_drift()
+    return row
 
 
 @app.post("/webhook")

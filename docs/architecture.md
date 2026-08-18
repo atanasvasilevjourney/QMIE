@@ -44,6 +44,23 @@
                                    same signal locally
 ```
 
+When `ALLOC_MODE=ranked` (default), the scheduler collects every
+symbol's `ScanResult` for the closed bar, then `allocator.allocate()`
+keeps top N longs and top N shorts (cluster cap, 50/50 books). Only
+those slots reach the dispatcher. `GET /allocation` returns the last
+plan. Suggested `weight_pct` is a risk budget for the human — still
+no orders.
+
+When `ALLOC_MODE=rotation`, ranking is lookback ROC only (no RSI/MACD).
+The book is the strongest name at 100% (or 50/50 top-two if dual).
+Defensive 1: all scores below `ALLOC_NORM_THRESHOLD` → CASH.
+Defensive 2: BTC weak → `cash` / `paxg` / `paxg_then_cash`. Alerts fire
+only on a switch. Companion: `pine/asset_rotation.pine`.
+
+The weekly review loop (`python -m improve.review`) reads the journal
+against `strategy/goals.yaml` and proposes **one** knob. It never
+writes `.env`.
+
 ## Why this shape
 
 ### 1. Server is the source of truth, Pine is the visualizer.
@@ -121,6 +138,10 @@ Critical: `rma()` uses `alpha=1/length, adjust=False`. Plain pandas
 function shape on both server and Pine. If you change it on one side,
 change it on the other in the same commit. Otherwise the chart will
 disagree with the alerts and the user will lose trust.
+
+Default weight total is 100 (ST 20 + EMA 15 + RSI 15 + ADX 15 + HTF 20
++ S/R 10 + vol 5). `Settings.weights_total` and `validate_runtime()`
+expect ~100 so env knobs stay in lockstep with Pine.
 
 The Pine ST `direction` value is `-1` for uptrend (counterintuitive).
 Both sides explicitly invert it to a `+1=up` convention to keep the

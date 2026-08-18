@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from backtest.runner import _evaluate_outcome, run_backtest, results_to_dataframe
+from backtest.runner import _evaluate_outcome, _evaluate_trailing, run_backtest, results_to_dataframe
 
 
 def _make_flat_df(n: int, price: float = 100.0, freq: str = "1h") -> pd.DataFrame:
@@ -85,6 +85,48 @@ class TestEvaluateOutcome:
                                                         entry=100.0, take_profit=200.0, stop_loss=1.0)
         assert outcome == "OPEN"
         assert bars is None
+
+
+class TestEvaluateTrailing:
+    def test_buy_initial_sl_is_loss(self):
+        df = _make_flat_df(20)
+        df.iloc[1, df.columns.get_loc("low")] = 90.0
+        outcome, bars, r = _evaluate_trailing(
+            df, 0, "BUY", entry=100.0, stop_loss=95.0
+        )
+        assert outcome == "LOSS"
+        assert bars == 1
+        assert r == pytest.approx(-1.0)
+
+    def test_buy_ratchet_locks_profit(self):
+        df = _make_flat_df(20)
+        df.iloc[1, df.columns.get_loc("high")] = 108.0
+        df.iloc[2, df.columns.get_loc("low")] = 102.0
+        outcome, bars, r = _evaluate_trailing(
+            df, 0, "BUY", entry=100.0, stop_loss=95.0
+        )
+        assert outcome == "WIN"
+        assert bars == 2
+        assert r == pytest.approx(0.6)
+
+    def test_sell_ratchet_locks_profit(self):
+        df = _make_flat_df(20)
+        df.iloc[1, df.columns.get_loc("low")] = 92.0
+        df.iloc[2, df.columns.get_loc("high")] = 98.0
+        outcome, bars, r = _evaluate_trailing(
+            df, 0, "SELL", entry=100.0, stop_loss=105.0
+        )
+        assert outcome == "WIN"
+        assert r == pytest.approx(0.6)
+
+    def test_open_when_never_hit(self):
+        df = _make_flat_df(20)
+        outcome, bars, r = _evaluate_trailing(
+            df, 0, "BUY", entry=100.0, stop_loss=1.0, max_lookahead=5
+        )
+        assert outcome == "OPEN"
+        assert bars is None
+        assert r is None
 
 
 def test_results_to_dataframe_empty():

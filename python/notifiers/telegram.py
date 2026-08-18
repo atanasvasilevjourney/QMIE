@@ -93,6 +93,18 @@ class TelegramNotifier(Notifier):
         daily_trend = getattr(sig, "daily_trend", None)
         if daily_trend:
             lines.append(kv("Daily Trend", daily_trend.title()))
+        alloc_rank = getattr(sig, "alloc_rank", None)
+        if alloc_rank is not None:
+            w = getattr(sig, "alloc_weight_pct", None)
+            cluster = getattr(sig, "alloc_cluster", None) or "—"
+            wtxt = f"{w:.1f}%" if w is not None else "—"
+            lines.append(kv("Ranked", f"#{alloc_rank} · {wtxt} · {cluster}"))
+        ns = getattr(sig, "norm_score", None)
+        if ns is not None:
+            lines.append(kv("ARS", f"{ns:+.2f}% lookback"))
+        regime = getattr(sig, "alloc_regime", None)
+        if regime:
+            lines.append(kv("Regime", regime))
         if sig.stop_loss is not None:
             lines.append(kv("SL", _fmt_price(sig.stop_loss, ac)))
         if sig.take_profit is not None:

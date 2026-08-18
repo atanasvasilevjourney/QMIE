@@ -95,6 +95,13 @@ class TVSignal(BaseModel):
     contracts:     Optional[str] = None
     reason:        Optional[str] = None
     action:        Optional[str] = None         # buy/sell from {{strategy.order.action}}
+    daily_trend:   Optional[str] = None         # bullish / bearish / unknown
+    funding_rate:  Optional[float] = None       # lastFundingRate at scan time
+    alloc_rank:    Optional[int] = None         # 1 = highest conviction in this book
+    alloc_weight_pct: Optional[float] = None    # suggested notional % of the 100-pt book
+    alloc_cluster: Optional[str] = None         # BTC / ETH / SOL / OTHER
+    alloc_regime:  Optional[str] = None         # LIVE / CASH / PAXG
+    norm_score:    Optional[float] = None       # ARS lookback ROC %
 
     @field_validator("price", "signal_price", "stop_loss", "take_profit", mode="before")
     @classmethod
@@ -169,6 +176,24 @@ class Position(BaseModel):
     avg_price:     float
     unrealized_pnl: Optional[float] = None
     raw:           dict = Field(default_factory=dict)
+
+
+class JournalCreate(BaseModel):
+    """Manual fill against a persisted scanner alert. No broker call."""
+    model_config = ConfigDict(extra="forbid")
+
+    signal_id:  int
+    fill_price: float
+    size:       float
+    exit_price: Optional[float] = None
+    notes:      Optional[str] = None
+
+
+class JournalClose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exit_price: float
+    notes:      Optional[str] = None
 
 
 class HealthReport(BaseModel):

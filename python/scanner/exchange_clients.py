@@ -55,6 +55,10 @@ class ExchangeClient(ABC):
                                        min_quote_volume: float) -> list[str]: ...
 
     @abstractmethod
+    async def fetch_premium_index(self, symbol: str) -> dict:
+        """Return at least ``lastFundingRate`` (float, e.g. 0.0001 = 0.01%/8h)."""
+
+    @abstractmethod
     async def close(self) -> None: ...
 
 
@@ -157,18 +161,29 @@ class BinanceClient(ExchangeClient):
     async def fetch_premium_index(self, symbol: str) -> dict:
         """Fetch current mark price + funding rate via /fapi/v1/premiumIndex."""
         url = f"{self.BASE}/fapi/v1/premiumIndex"
-        params = {"symbol": symbol.upper()}
+        params = {"symbol": symbol.upper().replace(".P", "")}
         sess = await self._s()
-        for attempt in range(2):
+        last_err: Exception | None = None
+        for attempt in (1, 2):
             try:
-                async with sess.get(url, params=params, timeout=self._timeout) as r:
-                    r.raise_for_status()
-                    return await r.json()
-            except Exception as exc:
-                if attempt == 1:
-                    raise
-                await asyncio.sleep(0.25)
-        return {}
+                async with sess.get(url, params=params) as r:
+                    if r.status >= 500:
+                        last_err = RuntimeError(
+                            f"Binance premiumIndex HTTP {r.status}")
+                        await asyncio.sleep(0.25 * attempt)
+                        continue
+                    if r.status >= 400:
+                        text = await r.text()
+                        raise RuntimeError(
+                            f"Binance premiumIndex HTTP {r.status}: {text[:200]}")
+                    data = await r.json()
+                    return data if isinstance(data, dict) else {}
+            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
+                last_err = e
+                await asyncio.sleep(0.25 * attempt)
+                continue
+        raise last_err if last_err else RuntimeError(
+            "Binance premiumIndex: unknown failure")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -249,6 +264,31 @@ class BybitClient(ExchangeClient):
             rows.append((sym, qv))
         rows.sort(key=lambda r: -r[1])
         return [r[0] for r in rows[:top_n]]
+
+    async def fetch_premium_index(self, symbol: str) -> dict:
+        """Map Bybit linear ticker ``fundingRate`` onto Binance-shaped keys."""
+        sym = symbol.upper().replace(".P", "")
+        url = f"{self.BASE}/v5/market/tickers"
+        params = {"category": "linear", "symbol": sym}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                raise RuntimeError(
+                    f"Bybit premiumIndex {sym} HTTP {resp.status}: {text[:200]}")
+            payload = await resp.json()
+        if payload.get("retCode") != 0:
+            raise RuntimeError(
+                f"Bybit error {payload.get('retCode')}: {payload.get('retMsg')}")
+        rows = payload.get("result", {}).get("list", []) or []
+        if not rows:
+            return {"lastFundingRate": 0.0}
+        row = rows[0]
+        try:
+            rate = float(row.get("fundingRate") or 0)
+        except (TypeError, ValueError):
+            rate = 0.0
+        return {"lastFundingRate": rate, "symbol": row.get("symbol", sym)}
 
 
 # ═══════════════════════════════════════════════════════════════════════

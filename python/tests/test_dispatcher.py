@@ -173,6 +173,52 @@ class TestDispatch:
         assert ok is False
 
 
+class TestDailyCap:
+    async def test_caps_after_n_alerts_same_symbol_same_day(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=2,
+        )
+        r1 = _make_result()
+        r2 = _make_result()
+        r2.timestamp = r1.timestamp + pd.Timedelta(hours=4)
+        r3 = _make_result()
+        r3.timestamp = r1.timestamp + pd.Timedelta(hours=8)
+        assert await d.dispatch(r1) is True
+        assert await d.dispatch(r2) is True
+        assert await d.dispatch(r3) is False
+        assert len(n.sent) == 2
+
+    async def test_cap_zero_means_unlimited(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=0,
+        )
+        for i in range(6):
+            r = _make_result()
+            r.timestamp = r.timestamp + pd.Timedelta(hours=i)
+            assert await d.dispatch(r) is True
+        assert len(n.sent) == 6
+
+    async def test_cap_is_per_symbol(self):
+        idem = _InMemIdem()
+        n = _MockNotifier()
+        d = SignalDispatcher(
+            db=_DummyDB(), notifiers=[n], idem=idem,
+            min_alert_grade=Grade.A, max_signals_per_symbol_per_day=1,
+        )
+        btc = _make_result()
+        eth = _make_result()
+        eth.symbol = "ETHUSDT"
+        assert await d.dispatch(btc) is True
+        assert await d.dispatch(eth) is True
+        assert len(n.sent) == 2
+
+
 class TestDailyTrendPropagation:
     @pytest.mark.asyncio
     async def test_daily_trend_included_in_notifier_signal(self):
@@ -224,3 +270,92 @@ class TestDailyTrendPropagation:
         assert len(received) == 1
         sig = received[0]
         assert getattr(sig, "daily_trend", None) == "bullish"
+
+    @pytest.mark.asyncio
+    async def test_funding_rate_included_in_notifier_signal(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = ScanResult(
+            symbol="BTCUSDT",
+            timeframe="1h",
+            timestamp=pd.Timestamp("2026-01-01 12:00:00", tz="UTC"),
+            side="BUY",
+            grade="A",
+            score=85.0,
+            price=100.0,
+            stop_loss=95.0,
+            take_profit=110.0,
+            atr_value=1.5,
+            atr_pct=1.5,
+            rsi_value=55.0,
+            adx_value=30.0,
+            htf_aligned=True,
+            nearest_res=2.0,
+            nearest_sup=1.5,
+            daily_trend="bullish",
+            funding_rate=0.0002,
+        )
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        await dispatcher.dispatch(result)
+        assert len(received) == 1
+        assert getattr(received[0], "funding_rate", None) == pytest.approx(0.0002)
+
+    @pytest.mark.asyncio
+    async def test_alloc_fields_included_in_notifier_signal(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = _make_result()
+        result.alloc_rank = 1
+        result.alloc_weight_pct = 25.0
+        result.alloc_cluster = "BTC"
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        await dispatcher.dispatch(result)
+        assert len(received) == 1
+        assert received[0].alloc_rank == 1
+        assert received[0].alloc_weight_pct == pytest.approx(25.0)
+        assert received[0].alloc_cluster == "BTC"
+
+
+    @pytest.mark.asyncio
+    async def test_force_dispatch_bypasses_min_grade(self):
+        received: list = []
+
+        class _CapturingNotifier:
+            enabled = True
+            async def send_signal(self, sig, broker_resp=None):
+                received.append(sig)
+
+        result = _make_result(grade="REJECT")
+        result.force_dispatch = True
+        result.norm_score = 6.5
+        result.alloc_regime = "LIVE"
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_CapturingNotifier()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        assert await dispatcher.dispatch(result) is True
+        assert len(received) == 1
+        assert received[0].norm_score == pytest.approx(6.5)
+        assert received[0].alloc_regime == "LIVE"
