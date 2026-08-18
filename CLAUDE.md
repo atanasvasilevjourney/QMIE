@@ -45,6 +45,8 @@ qmie/
 │   ├── journal.py                    Manual fills vs alerts
 │   ├── improve/review.py             One-variable weekly review
 │   ├── improve/setup_review.py       QMIE + MCP ruled setup overlay
+│   ├── improve/checklist.py          Native Smart Checklist (no MCP)
+│   ├── improve/agents.py             Five-agent briefing (gather, isolated)
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link

@@ -14,6 +14,8 @@ Endpoints:
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
+  GET  /agents/briefing       five specialist agents in parallel (read-only)
+  GET  /agents/checklist/{id} native Smart Checklist for one stored signal
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -28,6 +30,8 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from typing import Any
+
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -45,6 +49,8 @@ from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
 from security import IdempotencyStore, verify_signature, verify_webhook_token
+from improve.agents import run_briefing
+from improve.checklist import evaluate_native, flatten_signal
 from journal import JournalError, close_fill, create_fill, drift_message
 
 
@@ -269,7 +275,8 @@ async def get_signals(limit: int = 50) -> list[dict[str, Any]]:
     if state.db is None:
         raise HTTPException(503, "db_not_ready")
     limit = max(1, min(500, limit))
-    return await state.db.recent_signals(limit=limit)
+    rows = await state.db.recent_signals(limit=limit)
+    return [flatten_signal(r) for r in rows]
 
 
 @app.get("/universe")
@@ -347,6 +354,41 @@ async def radar_once(notify: bool = False) -> dict[str, Any]:
     if not result.get("ok") and result.get("reason") == "radar_disabled":
         raise HTTPException(400, "radar_disabled")
     return result
+
+
+@app.get("/agents/briefing")
+async def agents_briefing() -> dict[str, Any]:
+    """Five read-only specialist agents. Isolated failures. Never orders."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    signals = await state.db.recent_signals(limit=50)
+    radar = None
+    allocation = None
+    if state.scheduler is not None:
+        if state.scheduler.last_radar is not None:
+            radar = state.scheduler.last_radar.as_dict()
+        if state.scheduler.last_allocation is not None:
+            allocation = state.scheduler.last_allocation.as_dict()
+    return await run_briefing(
+        signals=signals,
+        radar=radar,
+        allocation=allocation,
+        db_path=Path(state.db.path),
+    )
+
+
+@app.get("/agents/checklist/{signal_id}")
+async def agents_checklist(signal_id: int) -> dict[str, Any]:
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    row = await state.db.get_signal(signal_id)
+    if row is None:
+        raise HTTPException(404, "signal_not_found")
+    radar = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        radar = state.scheduler.last_radar.as_dict()
+    return evaluate_native(row, radar=radar).as_dict()
+
 
 async def _maybe_notify_journal_drift() -> None:
     s = state.settings

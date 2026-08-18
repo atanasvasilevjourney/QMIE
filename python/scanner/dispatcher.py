@@ -151,6 +151,8 @@ class SignalDispatcher:
             htf="aligned" if result.htf_aligned else "neutral",
             adx=result.adx_value,
             atr=result.atr_value,
+            rsi=result.rsi_value,
+            atr_pct=result.atr_pct,
             timestamp=result.timestamp.isoformat(),
             bar_time=bar_ms,
             reason=result.reason,

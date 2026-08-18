@@ -125,4 +125,60 @@ export type JournalStats = {
   avg_realized_r?: number | null
 }
 
-export type DeskTab = 'desk' | 'book' | 'journal' | 'flows'
+export type DeskTab = 'desk' | 'book' | 'journal' | 'flows' | 'agents'
+
+export type ChecklistItem = {
+  id: string
+  passed: boolean
+  required: boolean
+  detail: string
+}
+
+export type ChecklistCard = {
+  verdict: 'GO' | 'WATCH' | 'SKIP' | string
+  action: string
+  symbol: string
+  side: string
+  grade: string
+  timeframe: string
+  items: ChecklistItem[]
+  places_orders?: boolean
+}
+
+export type AgentBlock = {
+  agent?: string
+  ok?: boolean
+  headline?: string
+  error?: string
+  note?: string
+  [key: string]: unknown
+}
+
+export type AgentBriefing = {
+  as_of?: string
+  elapsed_ms?: number
+  places_orders?: boolean
+  summary?: {
+    radar_bias?: string
+    checklist_headline?: string
+    scanner_headline?: string
+    review_headline?: string
+  }
+  agents: {
+    scanner?: AgentBlock & { aa_count?: number; grades?: Record<string, number> }
+    radar?: AgentBlock & {
+      bias?: string
+      btc_color?: string | null
+      green?: number
+      grey?: number
+      red?: number
+      breadth_pct?: { green: number; grey: number; red: number }
+    }
+    book?: AgentBlock
+    checklist?: AgentBlock & { cards?: ChecklistCard[]; mix?: Record<string, number> }
+    review?: AgentBlock & {
+      proposed_knob?: string | null
+      applied?: string | null
+    }
+  }
+}

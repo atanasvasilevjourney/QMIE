@@ -211,6 +211,12 @@ Or ask the Cursor agent `/qmie-review`. It will not write `.env`.
 On an A/A+ alert, `/qmie-setup` pulls TradingView MCP live TA (if the
 server is enabled) through a **fixed** confirm/skip checklist
 (`python -m improve.setup_review`). That does not change scores.
+
+The desk **AGENTS** tab runs five isolated specialists
+(`GET /agents/briefing`): scanner, radar breadth, ranked book, native
+Smart Checklist (GO/WATCH/SKIP), and the last review knob. Same
+boundaries: no orders, no `W_*` retune. CLI: `python -m improve.agents`.
+
 Backtest QMIE signals with `python -m backtest.run`, not MCP
 `backtest_strategy`. Details: [`docs/tradingview-mcp.md`](docs/tradingview-mcp.md).
 
