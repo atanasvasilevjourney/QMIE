@@ -5,7 +5,9 @@ Parquet stays local (`python/backtest/results/`, gitignored). This file is
 the canonical table.
 
 **Do not retune `W_*` or EMA lengths on this sample.** The one-variable
-proposal after this run is in [`strategy/reviews/2026-08-17.md`](../strategy/reviews/2026-08-17.md).
+proposal is in [`strategy/reviews/2026-08-17.md`](../strategy/reviews/2026-08-17.md)
+(first freeze) and [`strategy/reviews/2026-08-19.md`](../strategy/reviews/2026-08-19.md)
+(re-print; same knob, still not applied).
 
 ## Engine identity
 
@@ -28,22 +30,31 @@ this table.
 cd python
 pip install -r requirements.txt -r backtest/requirements.txt
 python -m backtest.run \
-  --start 2024-01-01 --split 2025-01-01 \
+  --start 2024-01-01 --end 2026-08-18 --split 2025-01-01 \
   --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0
 ```
+
+`--end` defaults to yesterday. August 2026 Vision monthly zips were
+unpublished at run time, so last bar in the parquet is **2026-07-31**.
 
 Defaults: 10 USDT-M names (`BTCUSDT ETHUSDT SOLUSDT BNBUSDT XRPUSDT
 DOGEUSDT ADAUSDT AVAXUSDT LINKUSDT DOTUSDT`), TFs `1h` `4h`.
 
-| Run | Value |
-|---|---|
-| Window | 2024-01-01 → 2026-08-16 (CLI `--end` = yesterday at run time) |
-| Split | IS `< 2025-01-01` · OOS `≥ 2025-01-01` |
-| Post-filters | ATR% 0.4–4.0, then ADX ≥ 20 (applied after collection) |
-| Raw signals | 137,592 |
-| After ATR | 132,989 (−4,603) |
-| After ADX | 96,146 (−36,843) |
-| Runtime | 2030 s |
+| Run | 2026-08-17 | 2026-08-19 re-print |
+|---|---|---|
+| CLI `--end` | yesterday (2026-08-16) | 2026-08-18 |
+| Data last bar | 2026-07-31 | 2026-07-31 (Aug zip still unpublished) |
+| Split | IS `< 2025-01-01` · OOS `≥ 2025-01-01` | same |
+| Post-filters | ATR% 0.4–4.0, then ADX ≥ 20 | same |
+| Raw signals | 137,592 | **137,592 (identical)** |
+| After ATR | 132,989 (−4,603) | same |
+| After ADX | 96,146 (−36,843) | same |
+| Runtime | 2030 s | 2018 s |
+| Parquet (gitignored) | `backtest_20260817_155852.parquet` | `backtest_20260819_114324.parquet` |
+
+IS/OOS grade tables, 1h vs 4h slices, and gate ablation **matched bit-for-bit**
+on the re-print (same Vision months, same TMA engine at `88d93cb`). Tables
+below are that frozen sample.
 
 Live `.env` at measurement time still used wider gates
 (`SIG_MIN_ADX=0`, `SIG_MIN_ATR_PCT=0.10`, `SIG_MAX_ATR_PCT=8.0`) and
