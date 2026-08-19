@@ -7,6 +7,7 @@ import type {
   JournalStats,
   RadarSnapshot,
   SignalRow,
+  AnalysisCard,
 } from '../types'
 
 const BASE = '/qmie'
@@ -61,4 +62,5 @@ export const api = {
     sendJson<JournalFill>(`/journal/${id}`, 'PATCH', { exit_price, notes }),
   briefing: () => getJson<AgentBriefing>('/agents/briefing'),
   checklist: (signalId: number) => getJson<ChecklistCard>(`/agents/checklist/${signalId}`),
+  analysis: (signalId: number) => getJson<AnalysisCard>(`/agents/analysis/${signalId}`),
 }

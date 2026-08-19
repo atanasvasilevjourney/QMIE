@@ -1,5 +1,13 @@
-import type { AgentBriefing, ChecklistCard, ChecklistItem } from '../types'
+import { useState } from 'react'
+import { api } from '../api/client'
+import type { AgentBriefing, AnalysisCard, ChecklistCard, ChecklistItem } from '../types'
 import { Empty, PanelShell } from './RadarPanel'
+
+type AnalysisState = {
+  loading?: boolean
+  error?: string
+  card?: AnalysisCard
+}
 
 export function AgentsPanel({
   briefing,
@@ -11,7 +19,22 @@ export function AgentsPanel({
   const agents = briefing?.agents
   const radar = agents?.radar
   const checklist = agents?.checklist
+  const analysis = agents?.analysis
   const pct = radar?.breadth_pct ?? { green: 0, grey: 0, red: 0 }
+  const [analyses, setAnalyses] = useState<Record<number, AnalysisState>>({})
+
+  const runAnalysis = async (signalId: number) => {
+    setAnalyses((prev) => ({ ...prev, [signalId]: { loading: true } }))
+    try {
+      const card = await api.analysis(signalId)
+      setAnalyses((prev) => ({ ...prev, [signalId]: { card } }))
+    } catch (e) {
+      setAnalyses((prev) => ({
+        ...prev,
+        [signalId]: { error: e instanceof Error ? e.message : String(e) },
+      }))
+    }
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-12">
@@ -22,8 +45,9 @@ export function AgentsPanel({
         >
           <BreadthBar green={pct.green} grey={pct.grey} red={pct.red} />
           <p className="mt-2 font-mono text-[10px] text-chrome/50">
-            Radar breadth is context (TredScanner FMI analog). Native checklist is TrendSpider Smart
-            Checklist on stored QMIE fields — not a new score, not MCP, not an order.
+            Radar breadth is context. Native checklist is TrendSpider Smart Checklist on stored QMIE
+            fields. Analyze is an on-demand overlay (template or OpenAI) — not a new score, not MCP,
+            not an order. Briefing never calls OpenAI.
           </p>
         </PanelShell>
       </div>
@@ -33,6 +57,11 @@ export function AgentsPanel({
         <AgentCard name="RADAR" body={agents?.radar} extra={radar ? `BTC ${radar.btc_color ?? '—'}` : undefined} />
         <AgentCard name="BOOK" body={agents?.book} />
         <AgentCard name="REVIEW" body={agents?.review} extra={reviewExtra(agents?.review)} />
+        <AgentCard
+          name="ANALYSIS"
+          body={analysis}
+          extra={analysis?.openai_configured ? 'OpenAI key set · on-demand only' : 'template Take · set OPENAI_API_KEY for LLM'}
+        />
       </div>
 
       <div className="lg:col-span-7">
@@ -42,8 +71,13 @@ export function AgentsPanel({
         >
           {loading && !checklist ? <Empty>Running agents…</Empty> : null}
           <div className="space-y-3">
-            {(checklist?.cards ?? []).map((c) => (
-              <ChecklistBlock key={`${c.symbol}-${c.timeframe}-${c.grade}-${c.side}`} card={c} />
+            {(checklist?.cards ?? []).map((c, i) => (
+              <ChecklistBlock
+                key={c.signal_id ?? `${c.symbol}-${c.timeframe}-${c.grade}-${c.side}-${i}`}
+                card={c}
+                analysis={c.signal_id != null ? analyses[c.signal_id] : undefined}
+                onAnalyze={c.signal_id != null ? () => void runAnalysis(c.signal_id as number) : undefined}
+              />
             ))}
             {!checklist?.cards?.length && <Empty>No A/A+ or daily-breakout rows yet</Empty>}
           </div>
@@ -110,7 +144,15 @@ function AgentCard({
   )
 }
 
-function ChecklistBlock({ card }: { card: ChecklistCard }) {
+function ChecklistBlock({
+  card,
+  analysis,
+  onAnalyze,
+}: {
+  card: ChecklistCard
+  analysis?: AnalysisState
+  onAnalyze?: () => void
+}) {
   const tone =
     card.verdict === 'GO' ? 'border-lime/30 bg-lime/5' : card.verdict === 'SKIP' ? 'border-magenta/30 bg-magenta/5' : 'border-amber/30 bg-amber/5'
   const tag =
@@ -129,6 +171,64 @@ function ChecklistBlock({ card }: { card: ChecklistCard }) {
           <CheckLine key={it.id} item={it} />
         ))}
       </div>
+      {onAnalyze ? (
+        <button
+          type="button"
+          onClick={onAnalyze}
+          disabled={analysis?.loading}
+          className="mt-3 rounded-lg border border-cyan/30 bg-cyan/10 px-3 py-1 font-display text-[10px] tracking-[0.2em] text-cyan disabled:opacity-40"
+        >
+          {analysis?.loading ? 'WAIT' : 'ANALYZE'}
+        </button>
+      ) : (
+        <p className="mt-3 font-mono text-[10px] text-chrome/40">No signal id — cannot analyze</p>
+      )}
+      {analysis?.error ? (
+        <p className="mt-2 font-mono text-[10px] text-magenta">{analysis.error}</p>
+      ) : null}
+      {analysis?.card ? <AnalysisBlock card={analysis.card} /> : null}
+    </div>
+  )
+}
+
+function AnalysisBlock({ card }: { card: AnalysisCard }) {
+  const tone =
+    card.status === 'BULLISH' ? 'text-lime' : card.status === 'BEARISH' ? 'text-magenta' : 'text-amber'
+  return (
+    <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={`font-display text-[11px] tracking-[0.22em] ${tone}`}>
+          {card.symbol} Status: {card.status}
+        </span>
+        <span className="font-mono text-[10px] text-chrome/45">
+          {card.source.startsWith('template') ? 'template' : 'openai'} · {card.zone}
+        </span>
+      </div>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full font-mono text-[10px]">
+          <thead>
+            <tr className="text-chrome/45">
+              <th className="py-1 text-left font-normal">Level</th>
+              <th className="py-1 text-left font-normal">Price</th>
+              <th className="py-1 text-left font-normal">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {card.levels.map((lv) => (
+              <tr key={lv.type} className="border-t border-white/5 text-chrome/80">
+                <td className="py-1 pr-2 text-cyan">{lv.type}</td>
+                <td className="py-1 pr-2 text-white">{lv.price}</td>
+                <td className="py-1 text-chrome/60">{lv.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 font-display text-[10px] tracking-[0.2em] text-cyan">TAKE</p>
+      <p className="mt-1 font-mono text-[11px] leading-relaxed text-chrome/80">{card.take}</p>
+      <p className="mt-3 font-display text-[10px] tracking-[0.2em] text-amber">COUNTER</p>
+      <p className="mt-1 font-mono text-[11px] text-chrome/70">{card.counter}</p>
+      <p className="mt-2 font-mono text-[10px] text-chrome/40">{card.note}</p>
     </div>
   )
 }

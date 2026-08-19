@@ -5,7 +5,14 @@ import json
 
 import pytest
 
-from improve.agents import book_agent, checklist_agent, radar_agent, run_briefing, scanner_agent
+from improve.agents import (
+    analysis_agent,
+    book_agent,
+    checklist_agent,
+    radar_agent,
+    run_briefing,
+    scanner_agent,
+)
 from improve.checklist import atr_pct_of, evaluate_native, flatten_signal, radar_color_for
 
 
@@ -50,7 +57,9 @@ def test_go_when_all_native_gates_pass():
     radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
     v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "GO"
-    assert v.as_dict()["places_orders"] is False
+    dumped = v.as_dict()
+    assert dumped["places_orders"] is False
+    assert dumped["signal_id"] == 1
 
 
 def test_skip_when_radar_red_against_buy():
@@ -128,4 +137,27 @@ async def test_briefing_isolates_agent_failure(monkeypatch):
     assert out["agents"]["radar"]["ok"] is False
     assert out["agents"]["scanner"]["ok"] is True
     assert out["agents"]["checklist"]["ok"] is True
+    assert out["agents"]["analysis"]["ok"] is True
+    assert isinstance(out["agents"]["analysis"]["openai_configured"], bool)
     assert "elapsed_ms" in out
+
+
+@pytest.mark.asyncio
+async def test_briefing_isolates_analysis_failure(monkeypatch):
+    def boom(*_a, **_k):
+        raise RuntimeError("analysis status down")
+
+    monkeypatch.setattr("improve.agents.analysis_agent", boom)
+    out = await run_briefing(signals=[_row()], radar=None, allocation=None)
+    assert out["agents"]["analysis"]["ok"] is False
+    assert out["agents"]["scanner"]["ok"] is True
+    assert out["places_orders"] is False
+
+
+def test_analysis_agent_is_status_only(monkeypatch):
+    monkeypatch.setattr("improve.agents.openai_configured", lambda: False)
+    out = analysis_agent()
+    assert out["ok"] is True
+    assert out["openai_configured"] is False
+    assert "Template overlay" in out["headline"]
+    assert "never owns levels" in out["note"]

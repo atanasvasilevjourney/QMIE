@@ -36,6 +36,7 @@ backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
    managed TradingView server appears. Never mix MCP TA into QMIE
    `W_*` or `compute_signal`.
 5. **Do not retune scoring weights** on the sample used to report hit rate. Frozen OOS write-up (`docs/backtest-baseline.md`) first.
+6. **OpenAI Take is not a score.** `GET /agents/analysis/{id}` may color the alert; it must not change `W_*`, grades, or place orders. Inventing gamma / dark-pool / 0DTE tape is out of scope.
 
 ## Workflow
 

@@ -61,6 +61,11 @@ The weekly review loop (`python -m improve.review`) reads the journal
 against `strategy/goals.yaml` and proposes **one** knob. It never
 writes `.env`.
 
+`GET /agents/analysis/{id}` is an optional narrative overlay on a stored
+alert (status + Invalidation / Current / 1R / TP + Take). Prices stay
+scanner ATR geometry even if OpenAI is configured. The briefing poll
+only reports whether `OPENAI_API_KEY` is set.
+
 ## Why this shape
 
 ### 1. Server is the source of truth, Pine is the visualizer.

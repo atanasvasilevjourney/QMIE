@@ -1,7 +1,7 @@
 """
 QMIE multi-agent briefing
 =========================
-Five specialist agents run concurrently (asyncio.gather, return_exceptions).
+Six specialist agents run concurrently (asyncio.gather, return_exceptions).
 A failing radar agent must not break checklist, and vice versa.
 
 Agents:
@@ -10,6 +10,7 @@ Agents:
   book      — ranked slots / clusters (suggested size, not orders)
   checklist — native Smart Checklist on latest A/A+ (and breakouts)
   review    — last strategy/reviews note; does not write a new one
+  analysis  — OpenAI overlay armed/not (never calls OpenAI on the poll)
 
 Never places orders. Never writes .env. Never retunes W_*.
 """
@@ -21,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from improve.analysis import openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from improve.review import (
     DEFAULT_BASELINE,
@@ -31,7 +33,7 @@ from improve.review import (
     load_simple_yaml,
 )
 
-AGENT_NAMES = ("scanner", "radar", "book", "checklist", "review")
+AGENT_NAMES = ("scanner", "radar", "book", "checklist", "review", "analysis")
 
 
 def _now() -> str:
@@ -236,6 +238,24 @@ def review_agent(
     })
 
 
+def analysis_agent() -> dict[str, Any]:
+    """Status only — never call OpenAI on the 12s desk poll."""
+    armed = openai_configured()
+    return _agent_ok("analysis", {
+        "headline": (
+            "OpenAI overlay armed"
+            if armed
+            else "Template overlay (no OPENAI_API_KEY)"
+        ),
+        "openai_configured": armed,
+        "note": (
+            "GET /agents/analysis/{id} writes status + Invalidation / Current / "
+            "T1 / T2 + Take. Prices are scanner ATR SL/TP. LLM never owns levels. "
+            "Not a grade. Not an order."
+        ),
+    })
+
+
 async def run_briefing(
     *,
     signals: list[dict[str, Any]],
@@ -259,6 +279,7 @@ async def run_briefing(
             baseline_path=baseline_path,
             db_path=db_path,
         ),
+        asyncio.to_thread(analysis_agent),
         return_exceptions=True,
     )
     agents: dict[str, Any] = {}
@@ -279,6 +300,7 @@ async def run_briefing(
             "checklist_headline": chk.get("headline"),
             "scanner_headline": (agents.get("scanner") or {}).get("headline"),
             "review_headline": (agents.get("review") or {}).get("headline"),
+            "analysis_headline": (agents.get("analysis") or {}).get("headline"),
         },
         "agents": agents,
     }
