@@ -124,6 +124,17 @@ def test_t1_clamped_when_tp_tighter_than_1r_sell():
     assert by_type["Target 1"] == 49750.0
 
 
+def test_template_missing_sl_does_not_print_none():
+    row = _row(stop_loss=None, take_profit=None)
+    flat = flatten_signal(row)
+    levels = scanner_levels(flat)
+    status, zone, take, _counter = template_take(flat, "WATCH", levels)
+    assert status == "BULLISH"
+    assert zone == "incomplete levels"
+    assert "None" not in take
+    assert "stop_loss" in take
+
+
 def test_template_skip_is_mixed():
     row = _row(grade="B", score=70.0)
     flat = flatten_signal(row)

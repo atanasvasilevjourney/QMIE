@@ -127,6 +127,8 @@ def template_take(flat: dict[str, Any], checklist_verdict: str, levels: list[Lev
     inv = next((lv.price for lv in levels if lv.type == "Invalidation"), None)
     cur = next((lv.price for lv in levels if lv.type == "Current"), None)
     t1 = next((lv.price for lv in levels if lv.type == "Target 1"), None)
+    t2_present = any(lv.type == "Target 2" for lv in levels)
+    t2_bit = " Final at Target 2." if t2_present else ""
     status = "MIXED"
     if checklist_verdict == "SKIP":
         status = "MIXED"
@@ -137,25 +139,33 @@ def template_take(flat: dict[str, Any], checklist_verdict: str, levels: list[Lev
         )
         counter = "Required overlay failed — see Smart Checklist."
         return status, zone, take, counter
+    if inv is None:
+        status = "BEARISH" if side == "SELL" else "BULLISH"
+        zone = "incomplete levels"
+        take = (
+            f"{symbol} {tf} {grade} {side}: scanner stored no stop_loss, so "
+            "invalidation and 1R cannot be drawn. Do not size from this Take. "
+            "Confirm on quant_visualizer.pine. Manual only."
+        )
+        counter = "Missing SL on the stored row — not a full plan."
+        return status, zone, take, counter
     if side == "SELL":
         status = "BEARISH"
-        zone = f"below invalidation {inv}" if inv is not None else "sell setup"
-        bounce = f"{cur} toward {inv}" if cur is not None and inv is not None else "a small bounce into the stop"
+        zone = f"below invalidation {inv}"
         take = (
             f"{side} is the scanner side on {symbol} {tf} {grade} as long as price "
-            f"holds beyond invalidation {inv}. Do not chase the low/high — look for "
-            f"a small bounce toward {bounce} to enter, tight stop past {inv}. "
-            f"Partial at {t1}, full at Target 2. Manual only."
+            f"holds beyond invalidation {inv}. Do not chase the low — look for "
+            f"a small bounce from {cur} toward {inv} to enter, tight stop past {inv}. "
+            f"Partial at {t1}.{t2_bit} Manual only."
         )
     else:
         status = "BULLISH"
-        zone = f"above invalidation {inv}" if inv is not None else "buy setup"
-        dip = f"{cur} toward {inv}" if cur is not None and inv is not None else "a small dip into the stop"
+        zone = f"above invalidation {inv}"
         take = (
             f"{side} is the scanner side on {symbol} {tf} {grade} as long as price "
             f"holds beyond invalidation {inv}. Do not chase — look for a small dip "
-            f"toward {dip} to enter, tight stop past {inv}. "
-            f"Partial at {t1}, full at Target 2. Manual only."
+            f"from {cur} toward {inv} to enter, tight stop past {inv}. "
+            f"Partial at {t1}.{t2_bit} Manual only."
         )
     if tf in ("1h", "60"):
         counter = "1h A/A+ diluted frozen OOS (PF 1.14 vs 4h 1.61). Prefer 4h."
