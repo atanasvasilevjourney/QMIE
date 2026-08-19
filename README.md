@@ -87,7 +87,10 @@ qmie/
 │   │   ├── radar.py                  daily RGG + coil Trend Radar
 │   │   └── dispatcher.py              dedup + notifier fan-out
 │   ├── improve/
-│   │   └── review.py                  one-variable weekly review (no .env writes)
+│   │   ├── review.py                  one-variable weekly review (no .env writes)
+│   │   ├── checklist.py               native Smart Checklist
+│   │   ├── agents.py                  six-agent briefing (isolated)
+│   │   └── analysis.py                OpenAI/template Take + ATR levels
 │   ├── notifiers/
 │   │   ├── discord.py                 themed embeds + TV deep link
 │   │   └── telegram.py                MarkdownV2 + TV deep link
@@ -212,10 +215,14 @@ On an A/A+ alert, `/qmie-setup` pulls TradingView MCP live TA (if the
 server is enabled) through a **fixed** confirm/skip checklist
 (`python -m improve.setup_review`). That does not change scores.
 
-The desk **AGENTS** tab runs five isolated specialists
+The desk **AGENTS** tab runs six isolated specialists
 (`GET /agents/briefing`): scanner, radar breadth, ranked book, native
-Smart Checklist (GO/WATCH/SKIP), and the last review knob. Same
-boundaries: no orders, no `W_*` retune. CLI: `python -m improve.agents`.
+Smart Checklist (GO/WATCH/SKIP), the last review knob, and whether the
+OpenAI analysis overlay is armed. `GET /agents/analysis/{id}` writes a
+levels table (Invalidation / Current / 1R / TP) plus a tactical Take.
+Empty `OPENAI_API_KEY` uses the deterministic template. The model never
+owns prices and is not a grade. Same boundaries: no orders, no `W_*`
+retune. CLI: `python -m improve.agents`.
 
 Backtest QMIE signals with `python -m backtest.run`, not MCP
 `backtest_strategy`. Details: [`docs/tradingview-mcp.md`](docs/tradingview-mcp.md).

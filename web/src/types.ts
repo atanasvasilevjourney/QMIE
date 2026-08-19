@@ -100,6 +100,7 @@ export type Health = {
     last_radar_at?: number | null
   }
   data_source?: string
+  openai_configured?: boolean
 }
 
 export type JournalFill = {
@@ -141,6 +142,7 @@ export type ChecklistCard = {
   side: string
   grade: string
   timeframe: string
+  signal_id?: number | null
   items: ChecklistItem[]
   places_orders?: boolean
 }
@@ -163,6 +165,7 @@ export type AgentBriefing = {
     checklist_headline?: string
     scanner_headline?: string
     review_headline?: string
+    analysis_headline?: string
   }
   agents: {
     scanner?: AgentBlock & { aa_count?: number; grades?: Record<string, number> }
@@ -180,5 +183,33 @@ export type AgentBriefing = {
       proposed_knob?: string | null
       applied?: string | null
     }
+    analysis?: AgentBlock & { openai_configured?: boolean }
   }
+}
+
+export type AnalysisLevel = {
+  type: string
+  price: number
+  note: string
+}
+
+export type AnalysisCard = {
+  ok: boolean
+  agent?: string
+  source: string
+  model?: string | null
+  openai_configured?: boolean
+  symbol: string
+  side: string
+  grade: string
+  timeframe: string
+  signal_id?: number | null
+  status: 'BULLISH' | 'BEARISH' | 'MIXED' | string
+  zone: string
+  take: string
+  counter: string
+  checklist_verdict?: string
+  levels: AnalysisLevel[]
+  places_orders?: boolean
+  note?: string
 }

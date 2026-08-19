@@ -89,6 +89,7 @@ class NativeChecklist:
     side: str
     grade: str
     timeframe: str
+    signal_id: Optional[int] = None
     items: list[CheckItem] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -99,6 +100,7 @@ class NativeChecklist:
             "side": self.side,
             "grade": self.grade,
             "timeframe": self.timeframe,
+            "signal_id": self.signal_id,
             "items": [i.as_dict() for i in self.items],
             "places_orders": False,
         }
@@ -245,6 +247,11 @@ def evaluate_native(
             "Overlay agrees with stored QMIE fields. Confirm on "
             "quant_visualizer.pine, then enter manually. Not an order."
         )
+    sid = flat.get("id")
+    try:
+        signal_id = int(sid) if sid is not None else None
+    except (TypeError, ValueError):
+        signal_id = None
     return NativeChecklist(
         verdict=verdict,
         action=action,
@@ -252,5 +259,6 @@ def evaluate_native(
         side=side,
         grade=grade,
         timeframe=tf,
+        signal_id=signal_id,
         items=items,
     )

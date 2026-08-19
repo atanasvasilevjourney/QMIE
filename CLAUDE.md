@@ -46,7 +46,8 @@ qmie/
 │   ├── improve/review.py             One-variable weekly review
 │   ├── improve/setup_review.py       QMIE + MCP ruled setup overlay
 │   ├── improve/checklist.py          Native Smart Checklist (no MCP)
-│   ├── improve/agents.py             Five-agent briefing (gather, isolated)
+│   ├── improve/agents.py             Six-agent briefing (gather, isolated)
+│   ├── improve/analysis.py           OpenAI/template Take + ATR levels
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
@@ -134,6 +135,13 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `/qmie-setup`). Do not retune `W_*` or Pine from it. QMIE signal
    backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
 
+9. **OpenAI analysis is overlay.** `GET /agents/analysis/{id}` may call
+   OpenAI via aiohttp (`/v1/chat/completions`). Do not add the `openai`
+   SDK. The 12s briefing poll must not call OpenAI. Levels are stamped
+   from scanner ATR SL/1R/TP after any LLM response. Empty
+   `OPENAI_API_KEY` → template. SKIP checklist → MIXED, no LLM call.
+   Never retune `W_*` from the Take. See `test_openai_success_stamps_scanner_levels_not_llm_prices`.
+
 
 ## Conventions
 
@@ -142,8 +150,8 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
   current set is intentionally small (FastAPI, pydantic, aiohttp,
   aiosqlite, pandas, numpy, redis).
 - `async` everywhere in the request path. `httpx` is not used —
-  we standardized on `aiohttp` for the exchange clients and for the
-  notifiers.
+  we standardized on `aiohttp` for the exchange clients, the
+  notifiers, and the optional OpenAI analysis overlay.
 - Tests use synthetic OHLCV fixtures from `tests/conftest.py`. No
   network calls in tests — exchange responses are mocked with
   `_FakeSession` / `_FakeResp` patterns.

@@ -93,3 +93,9 @@ Sprint 1 has an OOS number.
 - [x] ATR volatility filter (backtest CLI + dashboard)
 - [x] CLAUDE.md workflow instructions + framework recommendations
 - [x] Development status research (`docs/development-status.md`)
+
+## OpenAI analysis overlay (desk ANALYZE)
+- [x] `improve/analysis.py` — ATR levels + optional OpenAI Take via aiohttp
+- [x] `GET /agents/analysis/{id}` on-demand; briefing reports armed/not only
+- [x] Desk AGENTS ANALYZE button (levels table + Take + counter)
+- [x] Empty `OPENAI_API_KEY` → template; LLM never owns prices; no `openai` SDK

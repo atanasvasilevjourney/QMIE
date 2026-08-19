@@ -139,6 +139,12 @@ class Settings(BaseSettings):
     # Persist + notify 1D GREEN flip / coil-UP as a breakout long (manual only)
     radar_dispatch_trend_start: bool = True
 
+    # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4.1-mini"
+    openai_timeout_sec: float = 20.0
+    openai_base_url: str = "https://api.openai.com/v1"
+
     @property
     def webhook_allowlist(self) -> list[str]:
         return [ip.strip() for ip in self.webhook_allow_ips.split(",") if ip.strip()]

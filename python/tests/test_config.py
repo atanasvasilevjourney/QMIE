@@ -67,3 +67,9 @@ class TestValidateRuntime:
     def test_weights_total_property(self):
         s = Settings(webhook_secret="x")
         assert s.weights_total == 100
+
+    def test_openai_defaults_empty_key(self):
+        s = Settings(webhook_secret="x")
+        assert s.openai_api_key is None
+        assert s.openai_model == "gpt-4.1-mini"
+        assert s.openai_timeout_sec == 20.0

@@ -14,8 +14,9 @@ Endpoints:
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
-  GET  /agents/briefing       five specialist agents in parallel (read-only)
+  GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
+  GET  /agents/analysis/{id}  OpenAI/template Take + ATR levels (on-demand)
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -50,6 +51,7 @@ from scanner.signal_engine import Weights
 from scanner.symbol_universe import SymbolUniverse
 from security import IdempotencyStore, verify_signature, verify_webhook_token
 from improve.agents import run_briefing
+from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from journal import JournalError, close_fill, create_fill, drift_message
 
@@ -267,6 +269,9 @@ async def health() -> dict[str, Any]:
         "notifiers": {n.name: "ok" for n in state.notifiers},
         "scanner": sched_stats,
         "data_source": state.settings.scan_data_source if state.settings else None,
+        "openai_configured": openai_configured(
+            state.settings.openai_api_key if state.settings else None
+        ),
     }
 
 
@@ -358,7 +363,8 @@ async def radar_once(notify: bool = False) -> dict[str, Any]:
 
 @app.get("/agents/briefing")
 async def agents_briefing() -> dict[str, Any]:
-    """Five read-only specialist agents. Isolated failures. Never orders."""
+    """Six read-only specialist agents. Isolated failures. Never orders.
+    Analysis agent here is armed/not only — it does not call OpenAI."""
     if state.db is None:
         raise HTTPException(503, "db_not_ready")
     signals = await state.db.recent_signals(limit=50)
@@ -388,6 +394,32 @@ async def agents_checklist(signal_id: int) -> dict[str, Any]:
     if state.scheduler is not None and state.scheduler.last_radar is not None:
         radar = state.scheduler.last_radar.as_dict()
     return evaluate_native(row, radar=radar).as_dict()
+
+
+@app.get("/agents/analysis/{signal_id}")
+async def agents_analysis(signal_id: int) -> dict[str, Any]:
+    """On-demand overlay: status + Invalidation / Current / T1 / T2 + Take.
+
+    Prices are stamped from scanner ATR SL/TP after any LLM response.
+    Empty OPENAI_API_KEY uses the deterministic template. Not a grade.
+    """
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    row = await state.db.get_signal(signal_id)
+    if row is None:
+        raise HTTPException(404, "signal_not_found")
+    radar = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        radar = state.scheduler.last_radar.as_dict()
+    s = state.settings
+    return await analyze_signal(
+        row,
+        api_key=s.openai_api_key if s else None,
+        model=s.openai_model if s else "gpt-4.1-mini",
+        timeout_sec=s.openai_timeout_sec if s else 20.0,
+        base_url=s.openai_base_url if s else "https://api.openai.com/v1",
+        radar=radar,
+    )
 
 
 async def _maybe_notify_journal_drift() -> None:

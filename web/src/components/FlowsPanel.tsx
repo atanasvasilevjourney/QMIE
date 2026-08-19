@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: 'Agent checklist',
-    body: 'AGENTS tab runs scanner/radar/book/checklist/review in parallel. GO/WATCH/SKIP is an overlay — confirm on the visualizer, then click yourself.',
+    body: 'AGENTS tab runs scanner/radar/book/checklist/review/analysis in parallel. ANALYZE writes Invalidation / T1 / T2 + Take (template or OpenAI). GO and BULLISH are overlays — confirm on the visualizer, then click yourself.',
   },
   {
     title: 'Manual fill',
