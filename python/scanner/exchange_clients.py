@@ -6,8 +6,9 @@ Public REST clients for kline / ticker data. **Read-only.** No auth.
 Supported:
   * Binance USDT-M Futures   (fapi.binance.com)
   * Bybit V5 Linear Perps    (api.bybit.com)
+  * OKX USDT-margined swaps  (www.okx.com) — geo-block fallback, not Pine venue
 
-Both expose the same async interface:
+All three expose the same async interface:
     async fetch_klines(symbol, timeframe, limit) -> pd.DataFrame
     async fetch_top_volume_symbols(top_n, min_quote_volume) -> list[str]
     async close()
@@ -40,6 +41,25 @@ _BINANCE_TF = {"1m":"1m","3m":"3m","5m":"5m","15m":"15m","30m":"30m",
 _BYBIT_TF   = {"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30",
                "1h":"60","2h":"120","4h":"240","6h":"360","12h":"720",
                "1d":"D","1w":"W"}
+_OKX_TF     = {"1m":"1m","3m":"3m","5m":"5m","15m":"15m","30m":"30m",
+               "1h":"1H","2h":"2H","4h":"4H","6h":"6H","12h":"12H",
+               "1d":"1D","1w":"1W"}
+
+
+def _okx_inst(symbol: str) -> str:
+    """BTCUSDT / BTCUSDT.P → BTC-USDT-SWAP."""
+    raw = symbol.upper().replace(".P", "").replace("-", "")
+    if raw.endswith("USDT"):
+        return f"{raw[:-4]}-USDT-SWAP"
+    return f"{raw}-USDT-SWAP"
+
+
+def _okx_to_qmie(inst_id: str) -> str:
+    """BTC-USDT-SWAP → BTCUSDT."""
+    s = inst_id.upper()
+    if s.endswith("-USDT-SWAP"):
+        return s[: -len("-USDT-SWAP")] + "USDT"
+    return s.replace("-", "")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -292,10 +312,132 @@ class BybitClient(ExchangeClient):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+class OkxClient(ExchangeClient):
+    """OKX USDT-margined perpetual swaps. Public REST, no auth.
+
+    Use when Binance fapi (451) and Bybit (403) are geo-blocked.
+    Candles are OKX SWAP, not Binance USDT-M — confirm on the visualizer;
+    bar prints can differ from ``BINANCE:SYMBOL.P``.
+    """
+
+    name = "okx"
+    BASE = "https://www.okx.com"
+
+    def __init__(self, *, timeout: float = 10.0):
+        self.timeout = timeout
+        self._session: aiohttp.ClientSession | None = None
+
+    async def _s(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout))
+        return self._session
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def fetch_klines(self, symbol: str, timeframe: str,
+                           limit: int = 300) -> pd.DataFrame:
+        tf = _OKX_TF.get(timeframe.lower())
+        if tf is None:
+            raise ValueError(f"OKX: unsupported timeframe {timeframe}")
+        inst = _okx_inst(symbol)
+        url = f"{self.BASE}/api/v5/market/candles"
+        params = {"instId": inst, "bar": tf, "limit": str(min(limit, 300))}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                raise RuntimeError(
+                    f"OKX klines {inst}/{tf} HTTP {resp.status}: {text[:200]}")
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            raise RuntimeError(
+                f"OKX error {payload.get('code')}: {payload.get('msg')}")
+        rows = payload.get("data") or []
+        if not rows:
+            return pd.DataFrame()
+        # Newest-first: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
+        closed = [r for r in rows if len(r) < 9 or str(r[8]) == "1"]
+        if not closed:
+            closed = rows[1:] if len(rows) > 1 else []
+        closed = list(reversed(closed))
+        if not closed:
+            return pd.DataFrame()
+        padded = [list(r) + [""] * (9 - len(r)) for r in closed]
+        df = pd.DataFrame(padded, columns=[
+            "ts", "open", "high", "low", "close", "volume",
+            "volCcy", "volCcyQuote", "confirm",
+        ])
+        df["ts"] = pd.to_datetime(pd.to_numeric(df["ts"]), unit="ms", utc=True)
+        df.set_index("ts", inplace=True)
+        for c in ("open", "high", "low", "close", "volume"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        return df[["open", "high", "low", "close", "volume"]].dropna()
+
+    async def fetch_top_volume_symbols(self, *, top_n: int,
+                                       min_quote_volume: float) -> list[str]:
+        if top_n <= 0:
+            return []
+        url = f"{self.BASE}/api/v5/market/tickers"
+        params = {"instType": "SWAP"}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"OKX tickers HTTP {resp.status}")
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            return []
+        ranked: list[tuple[str, float]] = []
+        for d in payload.get("data") or []:
+            inst = str(d.get("instId") or "")
+            if not inst.endswith("-USDT-SWAP"):
+                continue
+            try:
+                last = float(d.get("last") or 0)
+                vol_base = float(d.get("volCcy24h") or 0)
+            except (TypeError, ValueError):
+                continue
+            qv = vol_base * last
+            if qv < min_quote_volume:
+                continue
+            ranked.append((_okx_to_qmie(inst), qv))
+        ranked.sort(key=lambda r: -r[1])
+        return [sym for sym, _ in ranked[:top_n]]
+
+    async def fetch_premium_index(self, symbol: str) -> dict:
+        inst = _okx_inst(symbol)
+        url = f"{self.BASE}/api/v5/public/funding-rate"
+        params = {"instId": inst}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                raise RuntimeError(
+                    f"OKX funding {inst} HTTP {resp.status}: {text[:200]}")
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            raise RuntimeError(
+                f"OKX error {payload.get('code')}: {payload.get('msg')}")
+        rows = payload.get("data") or []
+        if not rows:
+            return {"lastFundingRate": 0.0}
+        row = rows[0]
+        try:
+            rate = float(row.get("fundingRate") or 0)
+        except (TypeError, ValueError):
+            rate = 0.0
+        return {"lastFundingRate": rate, "symbol": _okx_to_qmie(inst)}
+
+
+# ═══════════════════════════════════════════════════════════════════════
 def get_client(source: str, *, timeout: float = 10.0) -> ExchangeClient:
     s = source.lower().strip()
     if s == "binance":
         return BinanceClient(timeout=timeout)
     if s == "bybit":
         return BybitClient(timeout=timeout)
+    if s == "okx":
+        return OkxClient(timeout=timeout)
     raise ValueError(f"Unknown data source: {source}")

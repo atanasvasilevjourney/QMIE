@@ -77,7 +77,7 @@ qmie/
 │   ├── db.py                          aiosqlite persistence
 │   ├── security.py                    HMAC + idempotency
 │   ├── scanner/
-│   │   ├── exchange_clients.py        Binance + Bybit public REST
+│   │   ├── exchange_clients.py        Binance + Bybit + OKX public REST
 │   │   ├── indicators.py              Pine-compatible math
 │   │   ├── signal_engine.py           7-component scoring
 │   │   ├── symbol_universe.py         static + auto top-N volume

@@ -45,7 +45,12 @@ async function settled<T>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok:
   try {
     return { ok: true, value: await p }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    const raw = e instanceof Error ? e.message : String(e)
+    const error =
+      raw === 'Failed to fetch' || raw.includes('NetworkError')
+        ? 'desk API unreachable — open http://127.0.0.1:5173 (Vite /qmie → :8080)'
+        : raw
+    return { ok: false, error }
   }
 }
 

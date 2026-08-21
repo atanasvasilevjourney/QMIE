@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # Higher-timeframe used for HTF confirmation. Mapping per scan TF.
     scan_htf_map: str = "15m:1h,1h:4h,4h:1d,1d:1w"
 
-    # Exchange data source: "binance" | "bybit"
+    # Exchange data source: "binance" | "bybit" | "okx"
     scan_data_source: str = "binance"
     # Public REST. No auth needed for klines.
     scan_data_timeout_sec: float = 10.0
@@ -190,10 +190,10 @@ class Settings(BaseSettings):
                 f"SCAN_MIN_ALERT_GRADE={self.scan_min_alert_grade!r} invalid; "
                 "expected one of A+/A/B/C/REJECT."
             )
-        if self.scan_data_source.lower() not in ("binance", "bybit"):
+        if self.scan_data_source.lower() not in ("binance", "bybit", "okx"):
             warnings.append(
                 f"SCAN_DATA_SOURCE={self.scan_data_source!r} not supported; "
-                "expected binance or bybit."
+                "expected binance, bybit, or okx."
             )
         if self.alloc_mode.lower() not in ("ranked", "all", "rotation"):
             warnings.append(

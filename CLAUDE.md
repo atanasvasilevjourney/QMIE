@@ -35,7 +35,7 @@ qmie/
 │   ├── scanner/                      ← the core
 │   │   ├── indicators.py             Pine-compatible math (RMA, EMA, RSI, ADX, ATR, Supertrend, pivots)
 │   │   ├── signal_engine.py          7-component scoring → A+/A/B/C/REJECT
-│   │   ├── exchange_clients.py       Binance + Bybit public REST
+│   │   ├── exchange_clients.py       Binance + Bybit + OKX public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
 │   │   ├── allocator.py              Ranked swing book + ARS rotation
 │   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
