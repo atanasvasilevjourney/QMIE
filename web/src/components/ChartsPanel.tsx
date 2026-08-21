@@ -217,20 +217,37 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   const R = 14
   const T = 18
   const B = 28
-  const prices: number[] = []
-  for (const b of bars) prices.push(b.h, b.l)
+  const barPrices: number[] = []
+  for (const b of bars) barPrices.push(b.h, b.l)
+  const markPrices: number[] = []
   for (const t of trades) {
-    prices.push(t.entry.price)
-    if (t.exit) prices.push(t.exit.price)
-    if (t.stop_loss != null) prices.push(t.stop_loss)
-    if (t.take_profit != null) prices.push(t.take_profit)
+    markPrices.push(t.entry.price)
+    if (t.exit) markPrices.push(t.exit.price)
+    if (t.stop_loss != null) markPrices.push(t.stop_loss)
+    if (t.take_profit != null) markPrices.push(t.take_profit)
   }
-  if (!prices.length) {
+  if (!barPrices.length && !markPrices.length) {
     return (
       <div className="rounded-2xl border border-line/10 bg-surface/40 px-4 py-10">
         <Empty>Pick a symbol with fills to plot candles and marks</Empty>
       </div>
     )
+  }
+  let pMin: number
+  let pMax: number
+  if (barPrices.length) {
+    pMin = Math.min(...barPrices)
+    pMax = Math.max(...barPrices)
+    const band = Math.max(pMax - pMin, Math.abs(pMax) * 0.02) * 0.55
+    for (const p of markPrices) {
+      if (p >= pMin - band && p <= pMax + band) {
+        pMin = Math.min(pMin, p)
+        pMax = Math.max(pMax, p)
+      }
+    }
+  } else {
+    pMin = Math.min(...markPrices)
+    pMax = Math.max(...markPrices)
   }
   const times: number[] = bars.map((b) => b.t)
   for (const t of trades) {
@@ -240,8 +257,6 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   const t0 = Math.min(...times)
   const t1 = Math.max(...times)
   const dt = Math.max(t1 - t0, 1)
-  const pMin = Math.min(...prices)
-  const pMax = Math.max(...prices)
   const pad = (pMax - pMin) * 0.06 || pMax * 0.01 || 1
   const yMin = pMin - pad
   const yMax = pMax + pad
@@ -274,6 +289,10 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
         )
       })}
       {trades.map((tr) => {
+        const onScale = (p: number) => p >= yMin && p <= yMax
+        if (!onScale(tr.entry.price) && !(tr.exit && onScale(tr.exit.price))) {
+          return <g key={tr.fill_id} />
+        }
         const x0 = x(tr.entry.t)
         const x1 = x(tr.exit?.t ?? t1)
         const win = (tr.exit?.pnl ?? 0) >= 0 && tr.exit != null
