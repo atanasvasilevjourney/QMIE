@@ -2,6 +2,7 @@ import type {
   AgentBriefing,
   AllocationPlan,
   ChecklistCard,
+  DeskGraph,
   Health,
   JournalFill,
   JournalStats,
@@ -61,6 +62,7 @@ export const api = {
   closeFill: (id: number, exit_price: number, notes?: string) =>
     sendJson<JournalFill>(`/journal/${id}`, 'PATCH', { exit_price, notes }),
   briefing: () => getJson<AgentBriefing>('/agents/briefing'),
+  desk: () => getJson<DeskGraph>('/agents/desk'),
   checklist: (signalId: number) => getJson<ChecklistCard>(`/agents/checklist/${signalId}`),
   analysis: (signalId: number) => getJson<AnalysisCard>(`/agents/analysis/${signalId}`),
 }

@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: 'Agent checklist',
-    body: 'AGENTS tab runs scanner/radar/book/checklist/review/analysis in parallel. ANALYZE writes Invalidation / T1 / T2 + Take (template or OpenAI). GO and BULLISH are overlays — confirm on the visualizer, then click yourself.',
+    body: 'AGENTS tab: briefing specialists plus desk DAG (start→data→strategy→risk→portfolio). suggest_long is not an order (quantity 0). ANALYZE is on-demand Take. Confirm on the visualizer, then click yourself.',
   },
   {
     title: 'Manual fill',

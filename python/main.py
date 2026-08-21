@@ -15,6 +15,7 @@ Endpoints:
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
+  GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
   GET  /agents/analysis/{id}  OpenAI/template Take + ATR levels (on-demand)
   POST /journal               log a manual fill against a signal id
@@ -53,6 +54,7 @@ from security import IdempotencyStore, verify_signature, verify_webhook_token
 from improve.agents import run_briefing
 from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
+from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
 
 
@@ -381,6 +383,22 @@ async def agents_briefing() -> dict[str, Any]:
         allocation=allocation,
         db_path=Path(state.db.path),
     )
+
+
+@app.get("/agents/desk")
+async def agents_desk() -> dict[str, Any]:
+    """Hedge-fund DAG analog. Suggested decisions only. quantity always 0."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    signals = await state.db.recent_signals(limit=50)
+    radar = None
+    allocation = None
+    if state.scheduler is not None:
+        if state.scheduler.last_radar is not None:
+            radar = state.scheduler.last_radar.as_dict()
+        if state.scheduler.last_allocation is not None:
+            allocation = state.scheduler.last_allocation.as_dict()
+    return run_desk(signals=signals, radar=radar, allocation=allocation)
 
 
 @app.get("/agents/checklist/{signal_id}")

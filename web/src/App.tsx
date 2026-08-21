@@ -132,7 +132,7 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <AgentsPanel briefing={desk.briefing} loading={desk.loading} />
+              <AgentsPanel briefing={desk.briefing} graph={desk.desk} loading={desk.loading} />
             </motion.div>
           )}
 

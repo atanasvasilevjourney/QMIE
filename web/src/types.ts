@@ -187,6 +187,36 @@ export type AgentBriefing = {
   }
 }
 
+export type DeskDecision = {
+  action: 'suggest_long' | 'suggest_short' | 'watch' | 'skip' | string
+  quantity: number
+  suggested_weight_pct?: number
+  confidence?: number
+  reasoning?: string
+  symbol?: string
+  side?: string
+  grade?: string
+  timeframe?: string
+  signal_id?: number | null
+  checklist_verdict?: string
+  places_orders?: boolean
+}
+
+export type DeskGraph = {
+  as_of?: string
+  elapsed_ms?: number
+  places_orders?: boolean
+  graph?: { nodes: string[]; edges: string[][]; mermaid?: string }
+  summary?: {
+    strategy_headline?: string
+    risk_headline?: string
+    portfolio_headline?: string
+  }
+  nodes: Record<string, AgentBlock>
+  decisions: Record<string, DeskDecision>
+  note?: string
+}
+
 export type AnalysisLevel = {
   type: string
   price: number

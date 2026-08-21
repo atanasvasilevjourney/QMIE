@@ -48,6 +48,7 @@ qmie/
 │   ├── improve/checklist.py          Native Smart Checklist (no MCP)
 │   ├── improve/agents.py             Six-agent briefing (gather, isolated)
 │   ├── improve/analysis.py           OpenAI/template Take + ATR levels
+│   ├── improve/desk.py               Hedge-fund DAG analog (no orders)
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
 │   │   └── telegram.py               MarkdownV2 + chart link
@@ -142,13 +143,20 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `OPENAI_API_KEY` → template. SKIP checklist → MIXED, no LLM call.
    Never retune `W_*` from the Take. See `test_openai_success_stamps_scanner_levels_not_llm_prices`.
 
+10. **Desk DAG is not a broker.** `GET /agents/desk` is a signal-only
+    analog of ai-hedge-fund-crypto (`start → data → strategy → risk →
+    portfolio`). Actions are `suggest_long` / `suggest_short` / `watch`
+    / `skip`. `quantity` is always 0. Do not add LangGraph, MACD/RSI/BB
+    extra strategies, or a Binance trading gateway. See `test_desk.py`.
+
 
 ## Conventions
 
 - Python 3.12. Type hints throughout.
 - No new runtime dependencies without strong justification — the
   current set is intentionally small (FastAPI, pydantic, aiohttp,
-  aiosqlite, pandas, numpy, redis).
+  aiosqlite, pandas, numpy, redis). Do not add LangGraph, langchain,
+  or the OpenAI SDK.
 - `async` everywhere in the request path. `httpx` is not used —
   we standardized on `aiohttp` for the exchange clients, the
   notifiers, and the optional OpenAI analysis overlay.

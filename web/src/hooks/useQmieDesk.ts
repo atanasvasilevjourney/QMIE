@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type {
   AgentBriefing,
   AllocationPlan,
+  DeskGraph,
   Health,
   JournalFill,
   JournalStats,
@@ -19,6 +20,7 @@ type DeskState = {
   stats: JournalStats | null
   universeCount: number
   briefing: AgentBriefing | null
+  desk: DeskGraph | null
   loading: boolean
   error: string | null
   lastSync: number | null
@@ -33,6 +35,7 @@ const empty: DeskState = {
   stats: null,
   universeCount: 0,
   briefing: null,
+  desk: null,
   loading: true,
   error: null,
   lastSync: null,
@@ -50,7 +53,7 @@ export function useQmieDesk(pollMs = 12000) {
   const [state, setState] = useState<DeskState>(empty)
 
   const refresh = useCallback(async () => {
-    const [health, radar, signals, allocation, fills, stats, universe, briefing] = await Promise.all([
+    const [health, radar, signals, allocation, fills, stats, universe, briefing, desk] = await Promise.all([
       settled(api.health()),
       settled(api.radar()),
       settled(api.signals(50)),
@@ -59,9 +62,10 @@ export function useQmieDesk(pollMs = 12000) {
       settled(api.journalStats()),
       settled(api.universe()),
       settled(api.briefing()),
+      settled(api.desk()),
     ])
 
-    const failures = [health, radar, signals, allocation, fills, stats, universe, briefing]
+    const failures = [health, radar, signals, allocation, fills, stats, universe, briefing, desk]
       .filter((r) => !r.ok)
       .map((r) => (r as { ok: false; error: string }).error)
 
@@ -74,6 +78,7 @@ export function useQmieDesk(pollMs = 12000) {
       stats: stats.ok ? stats.value : prev.stats,
       universeCount: universe.ok ? universe.value.count : prev.universeCount,
       briefing: briefing.ok ? briefing.value : prev.briefing,
+      desk: desk.ok ? desk.value : prev.desk,
       loading: false,
       error: failures.length ? failures.slice(0, 2).join(' · ') : null,
       lastSync: Date.now(),
