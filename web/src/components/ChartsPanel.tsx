@@ -260,6 +260,8 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   const xAt = (i: number) => (n <= 0 ? L : L + ((i + 0.5) / n) * inner)
   const y = (p: number) => T + ((yMax - p) / span) * (H - T - B)
   const cw = n ? Math.max(1.4, (inner / n) * 0.7) : 4
+  const markW = Math.max(2.2, Math.min(cw * 0.85, 5))
+  const markH = Math.max(3.5, Math.min(cw * 1.35, 7))
   const clamp = (p: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, p))
   const barAt = (i: number | undefined) => (i != null && i >= 0 && i < n ? bars[i] : undefined)
 
@@ -337,8 +339,8 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
             <polygon
               points={
                 buy
-                  ? `${x0},${eY} ${x0 - 5},${eY + 9} ${x0 + 5},${eY + 9}`
-                  : `${x0},${eY} ${x0 - 5},${eY - 9} ${x0 + 5},${eY - 9}`
+                  ? `${x0},${eY} ${x0 - markW},${eY + markH} ${x0 + markW},${eY + markH}`
+                  : `${x0},${eY} ${x0 - markW},${eY - markH} ${x0 + markW},${eY - markH}`
               }
               fill="var(--color-cyan)"
             >
@@ -348,7 +350,7 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
             </polygon>
             {tr.exit && tr.exit.i != null && tr.exit.on_ohlc !== false && (
               <polygon
-                points={`${x1},${xY} ${x1 - 5},${xY - 9} ${x1 + 5},${xY - 9}`}
+                points={`${x1},${xY} ${x1 - markW},${xY - markH} ${x1 + markW},${xY - markH}`}
                 fill={link}
               >
                 <title>
