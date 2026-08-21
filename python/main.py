@@ -64,7 +64,7 @@ from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
 from paper import PaperBook
 from guide import trading_guide
-from charts import ALLOWED_CHART_TFS, bars_payload, equity_payload, trades_payload
+from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -522,6 +522,7 @@ async def get_charts_price(
         payload["note"] = "no_klines"
         return payload
     payload["bars"] = bars_payload(df)
+    payload["trades"] = align_trades(payload["bars"], payload["trades"], chart_tf=tf)
     return payload
 
 

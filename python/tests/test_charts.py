@@ -6,7 +6,15 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from charts import bars_payload, equity_payload, trades_payload, ts_ms
+from charts import (
+    align_trades,
+    bars_payload,
+    equity_payload,
+    snap_entry_index,
+    snap_exit_index,
+    trades_payload,
+    ts_ms,
+)
 from db import Database
 from journal import create_fill
 from models import EventType, Grade, JournalCreate, Side, TVSignal
@@ -89,6 +97,66 @@ def test_trades_payload_entry_exit_levels():
     assert t["stop_loss"] == 95.0
     assert t["take_profit"] == 110.0
     assert t["side"] == "BUY"
+    assert t["timeframe"] is None
+
+
+def _hourly_bars(*, start_ms: int, n: int, close0: float = 100.0) -> list[dict]:
+    bars = []
+    for i in range(n):
+        c = close0 + i
+        bars.append({
+            "t": start_ms + i * 3_600_000,
+            "o": c - 0.4,
+            "h": c + 1.0,
+            "l": c - 1.0,
+            "c": c,
+            "v": 1.0,
+        })
+    return bars
+
+
+def test_snap_1h_fill_lands_on_same_candle():
+    bars = _hourly_bars(start_ms=1_700_000_000_000, n=6, close0=100.0)
+    i = snap_entry_index(bars, t=bars[2]["t"], price=bars[2]["c"], window_ms=3_600_000)
+    assert i == 2
+
+
+def test_snap_4h_close_onto_last_1h_of_window():
+    """4h open at bar 0, close printed on the 4th 1h candle (index 3)."""
+    bars = _hourly_bars(start_ms=1_700_000_000_000, n=8, close0=100.0)
+    htf_open = bars[0]["t"]
+    htf_close = bars[3]["c"]
+    i = snap_entry_index(bars, t=htf_open, price=htf_close, window_ms=14_400_000)
+    assert i == 3
+
+
+def test_snap_exit_skips_signal_bar():
+    bars = _hourly_bars(start_ms=1_700_000_000_000, n=6, close0=100.0)
+    # SL 100.5 is inside bar 0 AND bar 1 ranges (bar0: 99-102, bar1: 100-103)
+    i = snap_exit_index(bars, after_i=0, price=100.5)
+    assert i == 1
+
+
+def test_align_trades_stamps_bar_index():
+    bars = _hourly_bars(start_ms=1_700_000_000_000, n=8, close0=100.0)
+    trades = trades_payload([
+        {
+            "id": 9,
+            "symbol": "BTCUSDT",
+            "side": "BUY",
+            "source": "paper",
+            "outcome": "OPEN",
+            "fill_price": bars[3]["c"],
+            "bar_time": bars[0]["t"],
+            "timeframe": "4h",
+            "stop_loss": 95.0,
+            "take_profit": 110.0,
+        }
+    ])
+    aligned = align_trades(bars, trades, chart_tf="1h")
+    assert aligned[0]["aligned"] is True
+    assert aligned[0]["entry"]["i"] == 3
+    assert aligned[0]["entry"]["t"] == bars[3]["t"]
 
 
 def test_equity_payload_cumulative_and_no_orders():

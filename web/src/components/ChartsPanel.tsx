@@ -37,6 +37,21 @@ export function ChartsPanel({
   }, [focusSymbol, focusTimeframe])
 
   useEffect(() => {
+    if (focusTimeframe) return
+    const tfs = fills
+      .filter((f) => f.symbol === symbol)
+      .map((f) => (f.timeframe || '1h').toLowerCase())
+      .filter((t): t is (typeof TFS)[number] => (TFS as readonly string[]).includes(t))
+    if (!tfs.length) return
+    const counts = new Map<string, number>()
+    for (const t of tfs) counts.set(t, (counts.get(t) || 0) + 1)
+    const best = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]
+    if (best) setTf(best)
+    // Only when the symbol chip changes — do not fight a manual 1H/4H/1D click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol])
+
+  useEffect(() => {
     if (!symbol && symbols[0]?.symbol) setSymbol(symbols[0].symbol)
   }, [symbol, symbols])
 
@@ -217,16 +232,10 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   const R = 14
   const T = 18
   const B = 28
+  const n = bars.length
   const barPrices: number[] = []
   for (const b of bars) barPrices.push(b.h, b.l)
-  const markPrices: number[] = []
-  for (const t of trades) {
-    markPrices.push(t.entry.price)
-    if (t.exit) markPrices.push(t.exit.price)
-    if (t.stop_loss != null) markPrices.push(t.stop_loss)
-    if (t.take_profit != null) markPrices.push(t.take_profit)
-  }
-  if (!barPrices.length && !markPrices.length) {
+  if (!barPrices.length && !trades.length) {
     return (
       <div className="rounded-2xl border border-line/10 bg-surface/40 px-4 py-10">
         <Empty>Pick a symbol with fills to plot candles and marks</Empty>
@@ -238,32 +247,21 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   if (barPrices.length) {
     pMin = Math.min(...barPrices)
     pMax = Math.max(...barPrices)
-    const band = Math.max(pMax - pMin, Math.abs(pMax) * 0.02) * 0.55
-    for (const p of markPrices) {
-      if (p >= pMin - band && p <= pMax + band) {
-        pMin = Math.min(pMin, p)
-        pMax = Math.max(pMax, p)
-      }
-    }
   } else {
-    pMin = Math.min(...markPrices)
-    pMax = Math.max(...markPrices)
+    const fallback = trades.flatMap((t) => [t.entry.price, t.exit?.price ?? t.entry.price])
+    pMin = Math.min(...fallback)
+    pMax = Math.max(...fallback)
   }
-  const times: number[] = bars.map((b) => b.t)
-  for (const t of trades) {
-    times.push(t.entry.t)
-    if (t.exit) times.push(t.exit.t)
-  }
-  const t0 = Math.min(...times)
-  const t1 = Math.max(...times)
-  const dt = Math.max(t1 - t0, 1)
   const pad = (pMax - pMin) * 0.06 || pMax * 0.01 || 1
   const yMin = pMin - pad
   const yMax = pMax + pad
   const span = yMax - yMin || 1
-  const x = (t: number) => L + ((t - t0) / dt) * (W - L - R)
+  const inner = W - L - R
+  const xAt = (i: number) => (n <= 0 ? L : L + ((i + 0.5) / n) * inner)
   const y = (p: number) => T + ((yMax - p) / span) * (H - T - B)
-  const cw = bars.length ? Math.max(1.4, ((W - L - R) / bars.length) * 0.62) : 4
+  const cw = n ? Math.max(1.4, (inner / n) * 0.7) : 4
+  const clamp = (p: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, p))
+  const barAt = (i: number | undefined) => (i != null && i >= 0 && i < n ? bars[i] : undefined)
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Price chart with trade marks">
@@ -274,10 +272,10 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
       <text x="8" y={H - B} fill="var(--color-chrome)" fontSize="10" fontFamily="ui-monospace, monospace">
         {yMin.toFixed(yMin >= 100 ? 1 : 4)}
       </text>
-      {bars.map((b) => {
+      {bars.map((b, i) => {
         const up = b.c >= b.o
         const color = up ? 'var(--color-lime)' : 'var(--color-magenta)'
-        const cx = x(b.t)
+        const cx = xAt(i)
         const top = y(Math.max(b.o, b.c))
         const bot = y(Math.min(b.o, b.c))
         const bh = Math.max(1, bot - top)
@@ -289,23 +287,30 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
         )
       })}
       {trades.map((tr) => {
-        const onScale = (p: number) => p >= yMin && p <= yMax
-        if (!onScale(tr.entry.price) && !(tr.exit && onScale(tr.exit.price))) {
-          return <g key={tr.fill_id} />
-        }
-        const x0 = x(tr.entry.t)
-        const x1 = x(tr.exit?.t ?? t1)
+        if (!tr.aligned || tr.entry.i == null) return <g key={tr.fill_id} />
+        const eBar = barAt(tr.entry.i)
+        if (!eBar) return <g key={tr.fill_id} />
+        const x0 = xAt(tr.entry.i)
+        const x1 = tr.exit?.i != null ? xAt(tr.exit.i) : xAt(n - 1)
+        const ePx = clamp(tr.entry.price, eBar.l, eBar.h)
+        const xBar = tr.exit?.i != null ? barAt(tr.exit.i) : undefined
+        const xPx = xBar && tr.exit ? clamp(tr.exit.price, xBar.l, xBar.h) : ePx
         const win = (tr.exit?.pnl ?? 0) >= 0 && tr.exit != null
         const loss = tr.exit != null && (tr.exit.pnl ?? 0) < 0
         const link = win ? 'var(--color-lime)' : loss ? 'var(--color-magenta)' : 'var(--color-cyan)'
+        const buy = tr.side === 'BUY'
+        const eY = y(ePx)
+        const xY = y(xPx)
+        const slOk = tr.stop_loss != null && tr.stop_loss >= yMin && tr.stop_loss <= yMax
+        const tpOk = tr.take_profit != null && tr.take_profit >= yMin && tr.take_profit <= yMax
         return (
           <g key={tr.fill_id}>
-            {tr.stop_loss != null && (
+            {slOk && (
               <line
                 x1={x0}
-                y1={y(tr.stop_loss)}
+                y1={y(tr.stop_loss as number)}
                 x2={Math.max(x0 + 8, x1)}
-                y2={y(tr.stop_loss)}
+                y2={y(tr.stop_loss as number)}
                 stroke="var(--color-magenta)"
                 strokeDasharray="5 4"
                 strokeWidth="1.2"
@@ -313,12 +318,12 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
                 <title>SL {tr.stop_loss}</title>
               </line>
             )}
-            {tr.take_profit != null && (
+            {tpOk && (
               <line
                 x1={x0}
-                y1={y(tr.take_profit)}
+                y1={y(tr.take_profit as number)}
                 x2={Math.max(x0 + 8, x1)}
-                y2={y(tr.take_profit)}
+                y2={y(tr.take_profit as number)}
                 stroke="var(--color-lime)"
                 strokeDasharray="5 4"
                 strokeWidth="1.2"
@@ -326,28 +331,24 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
                 <title>TP {tr.take_profit}</title>
               </line>
             )}
-            {tr.exit && (
-              <line
-                x1={x0}
-                y1={y(tr.entry.price)}
-                x2={x1}
-                y2={y(tr.exit.price)}
-                stroke={link}
-                strokeWidth="1.6"
-                strokeOpacity="0.85"
-              />
+            {tr.exit && tr.exit.i != null && (
+              <line x1={x0} y1={eY} x2={x1} y2={xY} stroke={link} strokeWidth="1.6" strokeOpacity="0.85" />
             )}
             <polygon
-              points={`${x0},${y(tr.entry.price) - 8} ${x0 - 6},${y(tr.entry.price) + 5} ${x0 + 6},${y(tr.entry.price) + 5}`}
+              points={
+                buy
+                  ? `${x0},${eY} ${x0 - 5},${eY + 9} ${x0 + 5},${eY + 9}`
+                  : `${x0},${eY} ${x0 - 5},${eY - 9} ${x0 + 5},${eY - 9}`
+              }
               fill="var(--color-cyan)"
             >
               <title>
-                ENTRY #{tr.fill_id} {tr.side} {tr.entry.price} {tr.source}
+                ENTRY #{tr.fill_id} {tr.side} {tr.entry.price} bar {tr.entry.i} {tr.source}
               </title>
             </polygon>
-            {tr.exit && (
+            {tr.exit && tr.exit.i != null && (
               <polygon
-                points={`${x1},${y(tr.exit.price) + 8} ${x1 - 6},${y(tr.exit.price) - 5} ${x1 + 6},${y(tr.exit.price) - 5}`}
+                points={`${x1},${xY} ${x1 - 5},${xY - 9} ${x1 + 5},${xY - 9}`}
                 fill={link}
               >
                 <title>
@@ -370,6 +371,7 @@ function TradeLegend({ trades }: { trades: ChartTrade[] }) {
         <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-[11px] text-chrome/70">
           <span>
             #{t.fill_id} {t.symbol} {t.side} {t.source === 'paper' ? 'PAPER' : 'MANUAL'} {t.outcome}
+            {t.aligned === false ? ' · off-chart' : ''}
           </span>
           <span>
             {t.entry.price}

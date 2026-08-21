@@ -171,6 +171,12 @@ export type ChartBar = {
   v: number
 }
 
+export type ChartMark = {
+  t: number
+  price: number
+  i?: number
+}
+
 export type ChartTrade = {
   fill_id: number
   symbol?: string
@@ -179,8 +185,10 @@ export type ChartTrade = {
   source?: string
   outcome?: string
   size?: number
-  entry: { t: number; price: number }
-  exit?: { t: number; price: number; pnl?: number | null; reason?: string | null } | null
+  timeframe?: string | null
+  aligned?: boolean
+  entry: ChartMark
+  exit?: { t: number; price: number; i?: number; pnl?: number | null; reason?: string | null } | null
   stop_loss?: number | null
   take_profit?: number | null
 }
