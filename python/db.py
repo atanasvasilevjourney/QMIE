@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS fills (
     notes        TEXT,
     realized_r   REAL,
     outcome      TEXT NOT NULL,
+    pnl          REAL,
+    source       TEXT NOT NULL DEFAULT 'manual',
+    exit_reason  TEXT,
     FOREIGN KEY (signal_id) REFERENCES signals(id)
 );
 CREATE INDEX IF NOT EXISTS ix_fills_signal ON fills(signal_id);
@@ -114,6 +117,14 @@ class Database:
             await db.execute("ALTER TABLE signals ADD COLUMN daily_trend TEXT")
         if "funding_rate" not in cols:
             await db.execute("ALTER TABLE signals ADD COLUMN funding_rate REAL")
+        async with db.execute("PRAGMA table_info(fills)") as cur:
+            fill_cols = {row[1] for row in await cur.fetchall()}
+        if "pnl" not in fill_cols:
+            await db.execute("ALTER TABLE fills ADD COLUMN pnl REAL")
+        if "source" not in fill_cols:
+            await db.execute("ALTER TABLE fills ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+        if "exit_reason" not in fill_cols:
+            await db.execute("ALTER TABLE fills ADD COLUMN exit_reason TEXT")
 
     async def health_check(self) -> bool:
         try:
@@ -147,7 +158,15 @@ class Database:
                  json.dumps(sig.model_dump(mode="json"))),
             )
             await db.commit()
-            return cur.lastrowid or 0
+            rid = cur.lastrowid or 0
+            if rid:
+                return rid
+            async with db.execute(
+                "SELECT id FROM signals WHERE idempotency_key = ?",
+                (sig.idempotency_key,),
+            ) as found:
+                existing = await found.fetchone()
+            return int(existing[0]) if existing else 0
 
     async def get_signal(self, signal_id: int) -> Optional[dict[str, Any]]:
         async with aiosqlite.connect(self.path) as db:
@@ -178,6 +197,9 @@ class Database:
         notes: Optional[str],
         realized_r: Optional[float],
         outcome: str,
+        pnl: Optional[float] = None,
+        source: str = "manual",
+        exit_reason: Optional[str] = None,
     ) -> dict[str, Any]:
         now = _now()
         async with aiosqlite.connect(self.path) as db:
@@ -185,11 +207,11 @@ class Database:
                 """
                 INSERT INTO fills
                 (created_at, updated_at, signal_id, fill_price, size,
-                 exit_price, notes, realized_r, outcome)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 exit_price, notes, realized_r, outcome, pnl, source, exit_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (now, now, signal_id, fill_price, size,
-                 exit_price, notes, realized_r, outcome),
+                 exit_price, notes, realized_r, outcome, pnl, source, exit_reason),
             )
             await db.commit()
             fill_id = cur.lastrowid or 0
@@ -213,6 +235,8 @@ class Database:
         realized_r: Optional[float],
         outcome: str,
         notes: Optional[str],
+        pnl: Optional[float] = None,
+        exit_reason: Optional[str] = None,
     ) -> dict[str, Any]:
         now = _now()
         async with aiosqlite.connect(self.path) as db:
@@ -220,10 +244,10 @@ class Database:
                 """
                 UPDATE fills
                    SET updated_at = ?, exit_price = ?, realized_r = ?,
-                       outcome = ?, notes = ?
+                       outcome = ?, notes = ?, pnl = ?, exit_reason = ?
                  WHERE id = ?
                 """,
-                (now, exit_price, realized_r, outcome, notes, fill_id),
+                (now, exit_price, realized_r, outcome, notes, pnl, exit_reason, fill_id),
             )
             await db.commit()
         row = await self.get_fill(fill_id)
@@ -234,7 +258,10 @@ class Database:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 """
-                SELECT f.*, s.symbol, s.side, s.grade
+                SELECT f.*, s.symbol, s.side, s.grade, s.strategy, s.event,
+                       s.stop_loss, s.take_profit, s.signal_price,
+                       json_extract(s.raw, '$.timeframe') AS timeframe,
+                       json_extract(s.raw, '$.bar_time') AS bar_time
                 FROM fills f
                 JOIN signals s ON s.id = f.signal_id
                 ORDER BY f.id DESC
@@ -245,11 +272,56 @@ class Database:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
 
+    async def fill_for_signal(self, signal_id: int) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM fills WHERE signal_id = ? ORDER BY id ASC LIMIT 1",
+                (signal_id,),
+            ) as cur:
+                row = await cur.fetchone()
+                return dict(row) if row else None
+
+    async def open_fills(self) -> list[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT f.*, s.symbol, s.side, s.grade, s.strategy, s.event,
+                       s.stop_loss, s.take_profit, s.signal_price,
+                       json_extract(s.raw, '$.timeframe') AS timeframe,
+                       json_extract(s.raw, '$.bar_time') AS bar_time
+                FROM fills f
+                JOIN signals s ON s.id = f.signal_id
+                WHERE f.outcome = 'OPEN'
+                ORDER BY f.id ASC
+                """
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
+    async def entry_signals_without_fill(self) -> list[dict[str, Any]]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT s.*
+                FROM signals s
+                LEFT JOIN fills f ON f.signal_id = s.id
+                WHERE f.id IS NULL
+                  AND lower(s.event) = 'entry'
+                  AND ifnull(s.strategy, '') != 'QMIE-Paper'
+                ORDER BY s.id ASC
+                """
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
     async def journal_stats(self, *, grades: tuple[str, ...] | None = None) -> dict[str, Any]:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             sql = """
-                SELECT f.outcome, f.realized_r, s.grade
+                SELECT f.outcome, f.realized_r, f.pnl, s.grade
                 FROM fills f
                 JOIN signals s ON s.id = f.signal_id
                 """
@@ -266,6 +338,8 @@ class Database:
         win_pct = round(100.0 * len(wins) / len(closed), 1) if closed else 0.0
         r_vals = [float(r["realized_r"]) for r in closed if r.get("realized_r") is not None]
         avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
+        pnls = [float(r["pnl"]) for r in closed if r.get("pnl") is not None]
+        sum_pnl = round(sum(pnls), 4) if pnls else None
         return {
             "fills": len(rows),
             "closed": len(closed),
@@ -273,6 +347,7 @@ class Database:
             "losses": len(closed) - len(wins),
             "win_pct": win_pct,
             "avg_realized_r": avg_r,
+            "sum_pnl": sum_pnl,
             "grades": list(grades) if grades else "all",
         }
 

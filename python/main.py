@@ -18,6 +18,9 @@ Endpoints:
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
   GET  /agents/analysis/{id}  OpenAI/template Take + ATR levels (on-demand)
+  GET  /guide                 trading guide (operator module)
+  GET  /paper                 paper book snapshot (never orders)
+  POST /paper/sync            backfill paper fills + mark SL/TP exits
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -57,6 +60,8 @@ from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
+from paper import PaperBook
+from guide import trading_guide
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -80,6 +85,7 @@ class AppState:
         self.dispatcher: SignalDispatcher | None = None
         self.scheduler: ScannerScheduler | None = None
         self.client = None
+        self.paper: PaperBook | None = None
         self.start_time: float = 0.0
 
 
@@ -157,7 +163,16 @@ async def lifespan(app: FastAPI):
         min_alert_grade=min_grade,
         tv_chart_prefix=s.tv_chart_prefix,
         max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
+        paper=None,
     )
+    paper = PaperBook(
+        db,
+        enabled=s.paper_enabled,
+        notional_usdt=s.paper_notional_usdt,
+        notify_exits=s.paper_notify_exits,
+    )
+    dispatcher.paper = paper
+    state.paper = paper
     state.dispatcher = dispatcher
 
     # Scheduler
@@ -212,6 +227,16 @@ async def lifespan(app: FastAPI):
     )
     await scheduler.start()
     state.scheduler = scheduler
+
+    if paper.enabled:
+        try:
+            synced = await paper.sync_all(client)
+            logger.info(
+                "Paper book sync: opened=%s closed=%s checked=%s (never orders)",
+                synced.get("opened"), synced.get("closed"), synced.get("checked"),
+            )
+        except Exception:
+            logger.exception("paper startup sync failed (non-fatal)")
 
     logger.info("QMIE Scanner ready — TFs=%s min_grade=%s notifiers=%s",
                 s.timeframes_list, min_grade.value,
@@ -284,6 +309,10 @@ async def health() -> dict[str, Any]:
         "openai_configured": openai_configured(
             state.settings.openai_api_key if state.settings else None
         ),
+        "paper": {
+            "enabled": bool(state.settings.paper_enabled) if state.settings else False,
+            "places_orders": False,
+        },
     }
 
 
@@ -422,6 +451,36 @@ async def agents_checklist(signal_id: int) -> dict[str, Any]:
     if state.scheduler is not None and state.scheduler.last_radar is not None:
         radar = state.scheduler.last_radar.as_dict()
     return evaluate_native(row, radar=radar).as_dict()
+
+
+@app.get("/guide")
+async def get_guide() -> dict[str, Any]:
+    """Operator trading guide. Not a score. Never orders."""
+    return trading_guide()
+
+
+@app.get("/paper")
+async def get_paper() -> dict[str, Any]:
+    if state.paper is None:
+        raise HTTPException(503, "paper_not_ready")
+    snap = await state.paper.snapshot()
+    snap["places_orders"] = False
+    return snap
+
+
+@app.post("/paper/sync")
+async def post_paper_sync() -> dict[str, Any]:
+    """Backfill paper fills for stored entries and mark SL/TP exits.
+
+    Never places orders. Uses closed klines only.
+    """
+    if state.paper is None:
+        raise HTTPException(503, "paper_not_ready")
+    if not state.paper.enabled:
+        raise HTTPException(400, "paper_disabled")
+    result = await state.paper.sync_all(state.client)
+    result["places_orders"] = False
+    return result
 
 
 @app.get("/agents/analysis/{signal_id}")

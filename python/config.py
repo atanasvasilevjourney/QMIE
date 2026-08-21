@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     journal_drift_pts:   float = 5.0
     journal_min_fills:   int = 30
 
+    # ─── Paper book (auto journal vs alerts; never an order) ─────────────
+    paper_enabled:       bool = True
+    paper_notional_usdt: float = 1000.0
+    paper_notify_exits:  bool = False
+
     # ─── Ranked asset allocation (which alerts to take, suggested size) ─
     alloc_mode:        str = "ranked"   # ranked | all | rotation
     alloc_top_long:    int = 3

@@ -396,6 +396,13 @@ class ScannerScheduler:
             except Exception as e:
                 logger.warning("dispatch %s/%s failed: %s", res.symbol, tf, e)
 
+        paper = getattr(self.dispatcher, "paper", None)
+        if paper is not None and getattr(paper, "enabled", False):
+            try:
+                await paper.mark_with_client(self.client)
+            except Exception:
+                logger.exception("paper mark after scan failed (non-fatal)")
+
         elapsed = time.time() - t0
         self.stats["passes"] += 1
         self.stats["last_pass_at"] = int(time.time())
@@ -535,6 +542,12 @@ class ScannerScheduler:
                 logger.exception("daily breakout dispatch failed for %s", item.get("symbol"))
         if n:
             logger.info("Trend Radar dispatched %d daily breakout long(s)", n)
+        paper = getattr(self.dispatcher, "paper", None)
+        if paper is not None and getattr(paper, "enabled", False):
+            try:
+                await paper.mark_with_client(self.client)
+            except Exception:
+                logger.exception("paper mark after radar failed (non-fatal)")
         return n
 
     async def _notify_rotation_text(self, plan: AllocationPlan) -> None:
