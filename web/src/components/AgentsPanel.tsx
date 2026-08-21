@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api/client'
-import type { AgentBriefing, AnalysisCard, ChecklistCard, ChecklistItem } from '../types'
+import type { AgentBriefing, AnalysisCard, ChecklistCard, ChecklistItem, DeskDecision, DeskGraph } from '../types'
 import { Empty, PanelShell } from './RadarPanel'
 
 type AnalysisState = {
@@ -11,9 +11,11 @@ type AnalysisState = {
 
 export function AgentsPanel({
   briefing,
+  graph,
   loading,
 }: {
   briefing: AgentBriefing | null
+  graph?: DeskGraph | null
   loading?: boolean
 }) {
   const agents = briefing?.agents
@@ -49,6 +51,7 @@ export function AgentsPanel({
             fields. Analyze is an on-demand overlay (template or OpenAI) — not a new score, not MCP,
             not an order. Briefing never calls OpenAI.
           </p>
+          <DeskDag graph={graph} />
         </PanelShell>
       </div>
 
@@ -250,4 +253,60 @@ function reviewExtra(review?: AgentBriefing['agents']['review']) {
   const knob = review.proposed_knob || 'none'
   const applied = review.applied || 'n/a'
   return `knob ${knob} · applied ${applied}`
+}
+
+function DeskDag({ graph }: { graph?: DeskGraph | null }) {
+  const names = graph?.graph?.nodes ?? ['start', 'data', 'strategy', 'risk', 'portfolio']
+  const decisions = Object.values(graph?.decisions ?? {})
+  return (
+    <div className="mt-4">
+      <p className="mb-2 font-display text-[10px] tracking-[0.24em] text-cyan">
+        DESK DAG · quantity always 0 · never orders
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {names.map((name, i) => {
+          const node = graph?.nodes?.[name]
+          const ok = node?.ok !== false
+          return (
+            <div key={name} className="flex items-center gap-2">
+              <div className={`rounded-xl border px-3 py-2 ${ok ? 'border-cyan/30 bg-cyan/10' : 'border-magenta/40 bg-magenta/10'}`}>
+                <div className="font-display text-[10px] tracking-[0.2em] text-cyan">{name.toUpperCase()}</div>
+                <div className="mt-1 max-w-[160px] truncate font-mono text-[10px] text-chrome/70">
+                  {node?.headline || node?.error || '—'}
+                </div>
+              </div>
+              {i < names.length - 1 ? <span className="font-mono text-chrome/30">→</span> : null}
+            </div>
+          )
+        })}
+      </div>
+      {decisions.length ? (
+        <div className="mt-3 grid gap-2">
+          {decisions.map((d) => (
+            <DecisionLine key={`${d.symbol}-${d.action}`} d={d} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 font-mono text-[10px] text-chrome/40">No portfolio decisions yet</p>
+      )}
+    </div>
+  )
+}
+
+function DecisionLine({ d }: { d: DeskDecision }) {
+  const tone =
+    d.action === 'skip'
+      ? 'text-magenta'
+      : d.action.startsWith('suggest')
+        ? 'text-lime'
+        : 'text-amber'
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 font-mono text-[10px]">
+      <span className={`tracking-widest ${tone}`}>{d.action.toUpperCase()}</span>
+      <span className="ml-2 text-white">{d.symbol}</span>
+      <span className="ml-2 text-chrome/50">qty {d.quantity}</span>
+      <span className="ml-2 text-chrome/50">w {d.suggested_weight_pct ?? 0}%</span>
+      <p className="mt-1 text-chrome/65">{d.reasoning}</p>
+    </div>
+  )
 }

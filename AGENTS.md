@@ -20,6 +20,7 @@ Do not put service startup in the environment update script — start them in th
 - Standard Docker path remains `docker/` + root README.
 - Multi-agent briefing: `GET /agents/briefing` or `cd python && python -m improve.agents` (read-only; GO/WATCH/SKIP is not an order).
 - Analysis overlay: `GET /agents/analysis/{id}` (on-demand Take + ATR levels). Empty `OPENAI_API_KEY` uses the template. Briefing must not call OpenAI.
+- Hedge-fund DAG analog: `GET /agents/desk` (start→data→strategy→risk→portfolio). `quantity` is always 0. Not LangGraph. Not a broker.
 
 ### Cloud gotchas
 

@@ -216,13 +216,13 @@ server is enabled) through a **fixed** confirm/skip checklist
 (`python -m improve.setup_review`). That does not change scores.
 
 The desk **AGENTS** tab runs six isolated specialists
-(`GET /agents/briefing`): scanner, radar breadth, ranked book, native
-Smart Checklist (GO/WATCH/SKIP), the last review knob, and whether the
-OpenAI analysis overlay is armed. `GET /agents/analysis/{id}` writes a
-levels table (Invalidation / Current / 1R / TP) plus a tactical Take.
-Empty `OPENAI_API_KEY` uses the deterministic template. The model never
-owns prices and is not a grade. Same boundaries: no orders, no `W_*`
-retune. CLI: `python -m improve.agents`.
+(`GET /agents/briefing`) plus a signal-only hedge-fund DAG
+(`GET /agents/desk`: start → data → strategy → risk → portfolio).
+Portfolio actions are `suggest_long` / `suggest_short` / `watch` / `skip`
+with **quantity always 0**. Analog of
+[51bitquant/ai-hedge-fund-crypto](https://github.com/51bitquant/ai-hedge-fund-crypto)
+without LangGraph, MACD ensembles, or a broker. See
+[`docs/ai-hedge-fund-crypto.md`](docs/ai-hedge-fund-crypto.md).
 
 Backtest QMIE signals with `python -m backtest.run`, not MCP
 `backtest_strategy`. Details: [`docs/tradingview-mcp.md`](docs/tradingview-mcp.md).
