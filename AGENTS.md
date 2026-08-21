@@ -24,7 +24,8 @@ Do not put service startup in the environment update script — start them in th
 
 ### Cloud gotchas
 
-- **Exchange REST geo-blocks:** Binance Futures (`fapi`) and Bybit public endpoints often return 451/403 from this VM. Scanner/radar live rows may be empty. Historical Vision (`data.binance.vision`) and offline/unit tests still work. Do not treat empty `/radar` as a UI bug when health is `ok`.
+- **Exchange REST geo-blocks:** Binance Futures (`fapi`) and Bybit public endpoints often return 451/403 from this VM. `SCAN_DATA_SOURCE=okx` (OKX USDT-margined swaps) is reachable here — session env only unless the operator confirms `.env`. Historical Vision (`data.binance.vision`) still works for backtests. Yahoo/Kraken/CoinGecko last prices are **not** the scanner. Do not treat empty `/radar` as a UI bug when health is `ok`.
+- **Desk `Sync: Failed to fetch` / `desk API unreachable`:** the browser never reached FastAPI. Open `http://127.0.0.1:5173` (Vite `/qmie` → `:8080`). The UI now also retries `http://127.0.0.1:8080` (CORS). Empty radar / Binance 451 is a **different** problem — see `docs/streaming-data-sources.md`. Do **not** add Hyperliquid trading APIs.
 - **Secrets:** Discord/Telegram webhooks and `WEBHOOK_SECRET` are optional for desk UI + journal. HMAC webhook posts need a matching secret from `python/.env`.
 - **Signal-only:** Never add broker/execution paths. Desk JOURNAL is manual fill logging only.
 - **Shadow MCP:** `.cursor/mcp.json` TradingView MCP is not the scanner; do not retune `W_*` from it (`docs/tradingview-mcp.md`).

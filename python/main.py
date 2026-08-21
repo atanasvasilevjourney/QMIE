@@ -36,6 +36,7 @@ from typing import Any
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -237,6 +238,15 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url=None,
+)
+
+# Desk UI on :5173 (or a preview origin) may call :8080 directly when the
+# Vite /qmie proxy is missing. Public scanner data; no cookies.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

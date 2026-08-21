@@ -162,7 +162,9 @@ arithmetic identical.
 | Scanner runs but no Discord alerts | `SCAN_MIN_ALERT_GRADE` too strict, or `SIG_MIN_ATR_PCT` filtering everything in low-vol regime |
 | Same signal fires twice | Container restart inside dedup TTL window; configure Redis or extend TTL |
 | Pine visualizer disagrees with server | Different timeframe, different lookback (defaults must match `.env`), or warm-up window (first ~5 lookback periods) |
-| `Binance HTTP 451` | You're scanning from a region Binance fapi blocks (US, UK without VPN). Switch `SCAN_DATA_SOURCE=bybit` |
+| `Binance HTTP 451` | You're scanning from a region Binance fapi blocks (US, UK without VPN). Switch `SCAN_DATA_SOURCE=bybit` or `okx` (OKX SWAP is the Cloud VM fallback). |
+| `Bybit HTTP 403` CloudFront country | Same geo-block family. Try `SCAN_DATA_SOURCE=okx`. Do not write `.env` unless the operator confirms. |
+| Desk `Sync: Failed to fetch` | Browser never reached `/qmie` (Vite proxy → `:8080`). Open `http://127.0.0.1:5173`, not a static preview and not `:8080` as a page. |
 | `Binance HTTP 403 Host not allowed` | Network egress blocked (firewall, container DNS). Test from inside the container with `curl https://fapi.binance.com/fapi/v1/ping` |
 | Scanner loop crashes silently | Check logs for `Scheduler tick crashed` — exception isolated, loop continues, but you should fix the underlying issue |
 

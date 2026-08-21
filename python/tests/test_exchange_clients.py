@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from scanner.exchange_clients import BinanceClient, BybitClient, get_client
+from scanner.exchange_clients import BinanceClient, BybitClient, OkxClient, get_client
 
 
 # ────── Helpers to fake aiohttp responses ───────────────────────────────
@@ -179,6 +179,10 @@ class TestGetClient:
         c = get_client("bybit")
         assert isinstance(c, BybitClient)
 
+    def test_okx_factory(self):
+        c = get_client("okx")
+        assert isinstance(c, OkxClient)
+
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown data source"):
             get_client("kraken")
@@ -186,6 +190,7 @@ class TestGetClient:
     def test_case_insensitive(self):
         assert isinstance(get_client("BINANCE"), BinanceClient)
         assert isinstance(get_client("Bybit"), BybitClient)
+        assert isinstance(get_client("OKX"), OkxClient)
 
 
 class TestPremiumIndex:
@@ -234,3 +239,71 @@ class TestPremiumIndex:
         with patch.object(c, "_s", AsyncMock(return_value=fake)):
             data = await c.fetch_premium_index("BTCUSDT")
         assert data["lastFundingRate"] == 0.0
+
+
+class TestOkx:
+    @pytest.fixture
+    def candle_payload(self):
+        # Newest-first. confirm 0 = in-progress, 1 = closed.
+        return {
+            "code": "0",
+            "data": [
+                ["1704074400000", "107", "110", "106", "109", "9", "9", "981", "0"],
+                ["1704070800000", "104", "108", "103", "107", "12", "12", "1284", "1"],
+                ["1704067200000", "100", "105", "99", "104", "10", "10", "1040", "1"],
+            ],
+        }
+
+    async def test_parse_klines_drops_unconfirmed(self, candle_payload):
+        c = OkxClient()
+        fake = _FakeSession([_FakeResp(200, candle_payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            df = await c.fetch_klines("BTCUSDT.P", "1h", limit=10)
+        assert len(df) == 2
+        assert df.iloc[-1]["close"] == 107.0
+        assert df.index.tz is not None
+        assert fake.calls[0][1]["instId"] == "BTC-USDT-SWAP"
+        assert fake.calls[0][1]["bar"] == "1H"
+
+    async def test_4xx_raises(self):
+        c = OkxClient()
+        fake = _FakeSession([_FakeResp(451, {"msg": "restricted"})])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            with pytest.raises(RuntimeError, match="HTTP 451"):
+                await c.fetch_klines("BTCUSDT", "4h")
+
+    async def test_api_code_raises(self):
+        c = OkxClient()
+        fake = _FakeSession([_FakeResp(200, {"code": "51001", "msg": "bad inst"})])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            with pytest.raises(RuntimeError, match="OKX error"):
+                await c.fetch_klines("BTCUSDT", "1h")
+
+    async def test_funding_maps_rate(self):
+        c = OkxClient()
+        payload = {
+            "code": "0",
+            "data": [{"instId": "ETH-USDT-SWAP", "fundingRate": "0.00012"}],
+        }
+        fake = _FakeSession([_FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            data = await c.fetch_premium_index("ETHUSDT")
+        assert data["lastFundingRate"] == pytest.approx(0.00012)
+        assert data["symbol"] == "ETHUSDT"
+        assert fake.calls[0][1]["instId"] == "ETH-USDT-SWAP"
+
+    async def test_top_volume_filters_usdt_swap(self):
+        c = OkxClient()
+        payload = {
+            "code": "0",
+            "data": [
+                {"instId": "BTC-USDT-SWAP", "last": "50000", "volCcy24h": "2000"},
+                {"instId": "ETH-USDT-SWAP", "last": "2000", "volCcy24h": "10"},
+                {"instId": "BTC-USD-SWAP", "last": "50000", "volCcy24h": "99999"},
+            ],
+        }
+        fake = _FakeSession([_FakeResp(200, payload)])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            # BTC quote vol = 2000*50000 = 100_000_000; ETH = 20_000
+            syms = await c.fetch_top_volume_symbols(top_n=5, min_quote_volume=1_000_000)
+        assert syms == ["BTCUSDT"]

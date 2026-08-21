@@ -45,7 +45,12 @@ async function settled<T>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok:
   try {
     return { ok: true, value: await p }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    const raw = e instanceof Error ? e.message : String(e)
+    const error =
+      raw === 'Failed to fetch' || raw.includes('NetworkError')
+        ? 'desk API unreachable — open http://127.0.0.1:5173 (Vite /qmie → :8080)'
+        : raw
+    return { ok: false, error }
   }
 }
 
@@ -65,9 +70,11 @@ export function useQmieDesk(pollMs = 12000) {
       settled(api.desk()),
     ])
 
-    const failures = [health, radar, signals, allocation, fills, stats, universe, briefing, desk]
-      .filter((r) => !r.ok)
-      .map((r) => (r as { ok: false; error: string }).error)
+    const failures = [...new Set(
+      [health, radar, signals, allocation, fills, stats, universe, briefing, desk]
+        .filter((r) => !r.ok)
+        .map((r) => (r as { ok: false; error: string }).error),
+    )]
 
     setState((prev) => ({
       health: health.ok ? health.value : prev.health,

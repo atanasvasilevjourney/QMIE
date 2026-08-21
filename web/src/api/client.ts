@@ -11,15 +11,37 @@ import type {
   AnalysisCard,
 } from '../types'
 
-const BASE = '/qmie'
+const BASES: string[] = [
+  '/qmie',
+  'http://127.0.0.1:8080',
+  'http://localhost:8080',
+  '',
+]
+
+function describeNetworkError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  if (raw === 'Failed to fetch' || raw.includes('NetworkError') || raw.includes('Failed to fetch')) {
+    return 'desk API unreachable — open http://127.0.0.1:5173 (Vite /qmie → :8080) or :8080 directly'
+  }
+  return raw
+}
 
 async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`)
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${path}: ${text || res.statusText}`)
+  let last: Error | null = null
+  for (const base of BASES) {
+    try {
+      const res = await fetch(`${base}${path}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        last = new Error(`${res.status} ${path}: ${text || res.statusText}`)
+        continue
+      }
+      return res.json() as Promise<T>
+    } catch (e) {
+      last = e instanceof Error ? e : new Error(String(e))
+    }
   }
-  return res.json() as Promise<T>
+  throw new Error(describeNetworkError(last))
 }
 
 async function sendJson<T>(
@@ -27,16 +49,25 @@ async function sendJson<T>(
   method: 'POST' | 'PATCH',
   body?: unknown,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${path}: ${text || res.statusText}`)
+  let last: Error | null = null
+  for (const base of BASES) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method,
+        headers: body ? { 'content-type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        last = new Error(`${res.status} ${path}: ${text || res.statusText}`)
+        continue
+      }
+      return res.json() as Promise<T>
+    } catch (e) {
+      last = e instanceof Error ? e : new Error(String(e))
+    }
   }
-  return res.json() as Promise<T>
+  throw new Error(describeNetworkError(last))
 }
 
 export const api = {

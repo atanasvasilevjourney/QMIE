@@ -35,7 +35,7 @@ qmie/
 │   ├── scanner/                      ← the core
 │   │   ├── indicators.py             Pine-compatible math (RMA, EMA, RSI, ADX, ATR, Supertrend, pivots)
 │   │   ├── signal_engine.py          7-component scoring → A+/A/B/C/REJECT
-│   │   ├── exchange_clients.py       Binance + Bybit public REST
+│   │   ├── exchange_clients.py       Binance + Bybit + OKX public REST
 │   │   ├── scheduler.py              Bar-close-aware loop
 │   │   ├── allocator.py              Ranked swing book + ARS rotation
 │   │   ├── rotation.py               Lookback ROC, cash, dual, BTC-weak
@@ -63,6 +63,7 @@ qmie/
 │   └── docker-compose.yml
 ├── docs/
 │   ├── architecture.md               How things fit + scaling cliffs
+│   ├── streaming-data-sources.md     Binance vs Hyperliquid vs OKX (data only)
 │   ├── development-status.md         Completeness score + sprint plan
 │   └── tradingview-mcp.md            Cursor TradingView MCP (shadow stdio)
 ├── README.md

@@ -64,6 +64,11 @@ class TestValidateRuntime:
         warnings = s.validate_runtime()
         assert any("DATA_SOURCE" in w for w in warnings)
 
+    def test_okx_data_source_does_not_warn(self):
+        s = Settings(webhook_secret="x", scan_data_source="okx")
+        warnings = s.validate_runtime()
+        assert not any("DATA_SOURCE" in w for w in warnings)
+
     def test_weights_total_property(self):
         s = Settings(webhook_secret="x")
         assert s.weights_total == 100
