@@ -28,7 +28,8 @@ Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light m
 | Tab | Purpose |
 |---|---|
 | ORBIT | Landing page: Orbis Universe 3D (RGG nebula + orbit tokens) |
-| OPS | Trend Radar + separate TEMA scanner / Daily breakout tables |
+| OPS | Trend Radar + TEMA / Daily breakout / Exit tables |
+| GUIDE | Trading guide (paper fills, SL/TP exits, PnL) |
 | AGENTS | Briefing + desk DAG (quantity always 0) |
 | BOOK | Ranked allocation weights (suggested only) |
 | JOURNAL | Manual fill / exit logging |

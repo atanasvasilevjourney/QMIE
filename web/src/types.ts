@@ -58,6 +58,11 @@ export type SignalRow = {
   strategy?: string
   reason?: string
   setup_type?: string
+  event?: string
+  pnl?: number | null
+  realized_r?: number | null
+  fill_id?: number | null
+  entry_price?: number | null
 }
 
 /** Flat slot shape from AllocationPlan.as_dict() — not nested under `result`. */
@@ -101,6 +106,7 @@ export type Health = {
   }
   data_source?: string
   openai_configured?: boolean
+  paper?: { enabled?: boolean; places_orders?: boolean }
 }
 
 export type JournalFill = {
@@ -115,6 +121,10 @@ export type JournalFill = {
   symbol?: string
   side?: string
   grade?: string
+  pnl?: number | null
+  source?: string
+  exit_reason?: string | null
+  timeframe?: string
 }
 
 export type JournalStats = {
@@ -124,9 +134,10 @@ export type JournalStats = {
   losses: number
   win_pct: number
   avg_realized_r?: number | null
+  sum_pnl?: number | null
 }
 
-export type DeskTab = 'orbit' | 'ops' | 'book' | 'journal' | 'flows' | 'agents'
+export type DeskTab = 'orbit' | 'ops' | 'book' | 'journal' | 'flows' | 'agents' | 'guide'
 
 export type DeskTheme = 'dark' | 'light'
 
@@ -244,4 +255,29 @@ export type AnalysisCard = {
   levels: AnalysisLevel[]
   places_orders?: boolean
   note?: string
+}
+
+export type GuideSection = {
+  id: string
+  title: string
+  body: string
+  rules?: string[]
+}
+
+export type TradingGuide = {
+  title: string
+  places_orders: boolean
+  version?: string
+  headline?: string
+  sections: GuideSection[]
+}
+
+export type PaperSnapshot = {
+  enabled: boolean
+  notional_usdt: number
+  places_orders: boolean
+  fills: number
+  open: number
+  closed: number
+  closed_pnl: number
 }

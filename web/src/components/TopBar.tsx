@@ -4,6 +4,7 @@ import type { DeskTab, DeskTheme } from '../types'
 const TABS: { id: DeskTab; label: string; hint: string }[] = [
   { id: 'orbit', label: 'ORBIT', hint: 'Orbis Universe' },
   { id: 'ops', label: 'OPS', hint: 'Radar + strategy tables' },
+  { id: 'guide', label: 'GUIDE', hint: 'How to trade' },
   { id: 'agents', label: 'AGENTS', hint: 'Briefing + take' },
   { id: 'book', label: 'BOOK', hint: 'Ranked allocation' },
   { id: 'journal', label: 'JOURNAL', hint: 'Manual fills' },
@@ -19,6 +20,7 @@ export function TopBar({
   universe,
   onRefresh,
   onRadar,
+  onPaper,
   busy,
   theme,
   onTheme,
@@ -31,6 +33,7 @@ export function TopBar({
   universe: number
   onRefresh: () => void
   onRadar: () => void
+  onPaper: () => void
   busy?: boolean
   theme: DeskTheme
   onTheme: () => void
@@ -110,6 +113,15 @@ export function TopBar({
             className="rounded-2xl border border-magenta/40 bg-magenta/10 px-4 py-3 font-display text-xs tracking-widest text-magenta disabled:opacity-40"
           >
             RADAR ONCE
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            disabled={busy}
+            onClick={onPaper}
+            className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 font-display text-xs tracking-widest text-lime disabled:opacity-40"
+          >
+            PAPER SYNC
           </motion.button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
 import { AgentsPanel } from './components/AgentsPanel'
+import { GuidePanel } from './components/GuidePanel'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
@@ -22,7 +23,7 @@ export default function App() {
 
   const healthOk = desk.health?.status === 'ok' && !!desk.health?.db_ok
   const uptime = desk.health?.uptime_sec ?? 0
-  const radarFailed = !!radarMsg && !radarMsg.startsWith('Radar pass')
+  const radarFailed = !!radarMsg && !radarMsg.startsWith('Radar pass') && !radarMsg.startsWith('Paper')
 
   const onRadar = async () => {
     setBusy(true)
@@ -30,6 +31,21 @@ export default function App() {
     try {
       await desk.forceRadar()
       setRadarMsg('Radar pass queued — syncing snapshot')
+    } catch (e) {
+      setRadarMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onPaper = async () => {
+    setBusy(true)
+    setRadarMsg(null)
+    try {
+      const result = await desk.forcePaper()
+      setRadarMsg(
+        `Paper sync · opened ${result.opened ?? 0} · exits ${result.closed ?? 0} · never orders`,
+      )
     } catch (e) {
       setRadarMsg(e instanceof Error ? e.message : String(e))
     } finally {
@@ -66,6 +82,7 @@ export default function App() {
         universe={desk.universeCount}
         onRefresh={() => void desk.refresh()}
         onRadar={() => void onRadar()}
+        onPaper={() => void onPaper()}
         busy={busy || desk.loading}
         theme={theme}
         onTheme={toggleTheme}
@@ -147,7 +164,28 @@ export default function App() {
                 </h2>
               </div>
               <RadarPanel radar={desk.radar} />
+              {desk.paper && (
+                <div className="card rounded-2xl px-5 py-4 font-mono text-sm text-chrome/80">
+                  Paper book · {desk.paper.open} open · {desk.paper.closed} closed · PnL{' '}
+                  <span className={desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}>
+                    {desk.paper.closed_pnl}
+                  </span>{' '}
+                  USDT · never orders
+                </div>
+              )}
               <SignalsPanel signals={desk.signals} selectedId={selected?.id} onSelect={goJournal} />
+            </motion.div>
+          )}
+
+          {tab === 'guide' && (
+            <motion.div
+              key="guide"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <GuidePanel guide={desk.guide} />
             </motion.div>
           )}
 

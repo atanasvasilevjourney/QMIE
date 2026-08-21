@@ -126,13 +126,16 @@ export function JournalFlow({
             <div key={f.id} className="card rounded-2xl px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-[11px] text-ink">
-                  #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}
+                  #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}{' '}
+                  {f.source === 'paper' ? 'PAPER' : ''}
                 </span>
                 <span className="font-mono text-[10px] text-chrome/60">{f.outcome}</span>
               </div>
               <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-chrome/55">
                 <span>
                   {f.fill_price} → {f.exit_price ?? 'open'} · sz {f.size}
+                  {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
+                  {f.exit_reason ? ` · ${f.exit_reason}` : ''}
                 </span>
                 {!f.exit_price && (
                   <button

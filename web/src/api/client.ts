@@ -9,6 +9,8 @@ import type {
   RadarSnapshot,
   SignalRow,
   AnalysisCard,
+  TradingGuide,
+  PaperSnapshot,
 } from '../types'
 
 const BASES: string[] = [
@@ -96,4 +98,11 @@ export const api = {
   desk: () => getJson<DeskGraph>('/agents/desk'),
   checklist: (signalId: number) => getJson<ChecklistCard>(`/agents/checklist/${signalId}`),
   analysis: (signalId: number) => getJson<AnalysisCard>(`/agents/analysis/${signalId}`),
+  guide: () => getJson<TradingGuide>('/guide'),
+  paper: () => getJson<PaperSnapshot>('/paper'),
+  paperSync: () =>
+    sendJson<{ opened?: number; closed?: number; checked?: number; places_orders?: boolean }>(
+      '/paper/sync',
+      'POST',
+    ),
 }

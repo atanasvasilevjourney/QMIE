@@ -7,34 +7,34 @@ const STEPS = [
   },
   {
     title: 'Land on Orbis',
-    body: 'ORBIT is the landing page (3D universe). OPS is radar + separate TEMA / daily-breakout tables.',
+    body: 'ORBIT is the landing page (3D universe). OPS is radar + separate TEMA / daily-breakout / EXIT tables.',
   },
   {
-    title: 'Read Trend Radar',
-    body: 'RGG map is context. Fresh GREEN or coil-UP on the daily close is a BREAKOUT LONG / trend-start candidate.',
+    title: 'Read the trading guide',
+    body: 'GUIDE tab: TEMA vs daily breakout, paper fills, EXIT + PnL. Signal-only — you click live size.',
   },
   {
     title: 'Wait for TEMA A/A+ or daily breakout',
-    body: 'OPS tables are split: TEMA scanner (1h/4h TMA 9/90/199) vs 1D BREAKOUT. Open DETAILS, then the visualizer.',
+    body: 'OPS tables are split: TEMA scanner vs 1D BREAKOUT vs EXIT. Open DETAILS, then the visualizer.',
+  },
+  {
+    title: 'Paper book',
+    body: 'PAPER SYNC auto-fills every ENTRY at signal_price ($1000 notional). EXIT rows show close + PnL. Never an order.',
   },
   {
     title: 'Confirm on chart',
     body: 'Pine visualizer should match side/grade. Optional MCP setup review on desktop Cursor.',
   },
   {
-    title: 'Agent checklist',
-    body: 'AGENTS tab: briefing specialists plus desk DAG (start→data→strategy→risk→portfolio). suggest_long is not an order (quantity 0). ANALYZE is on-demand Take. Confirm on the visualizer, then click yourself.',
-  },
-  {
-    title: 'Manual fill',
-    body: 'Execute yourself. Log fill + exit in JOURNAL so live edge can be measured.',
+    title: 'Manual live fill',
+    body: 'If you click it live, log the real fill in JOURNAL (not the paper row). Need 30 closed before retune talk.',
   },
 ]
 
 export function FlowsPanel() {
   return (
     <PanelShell title="Operator Flows" subtitle="best-path manual trading loop · no broker">
-      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {STEPS.map((s, i) => (
           <div
             key={s.title}
