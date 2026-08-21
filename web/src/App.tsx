@@ -12,10 +12,12 @@ import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
 import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
+import { ChartsPanel } from './components/ChartsPanel'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
   const [selected, setSelected] = useState<SignalRow | null>(null)
+  const [chartFocus, setChartFocus] = useState<{ symbol: string; timeframe?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [radarMsg, setRadarMsg] = useState<string | null>(null)
   const desk = useQmieDesk()
@@ -65,6 +67,11 @@ export default function App() {
   const goJournal = (s: SignalRow) => {
     setSelected(s)
     setTab('journal')
+  }
+
+  const goChart = (symbol: string, timeframe?: string) => {
+    setChartFocus({ symbol, timeframe })
+    setTab('charts')
   }
 
   return (
@@ -173,7 +180,37 @@ export default function App() {
                   USDT · never orders
                 </div>
               )}
-              <SignalsPanel signals={desk.signals} selectedId={selected?.id} onSelect={goJournal} />
+              <SignalsPanel
+                signals={desk.signals}
+                selectedId={selected?.id}
+                onSelect={goJournal}
+                onChart={goChart}
+              />
+            </motion.div>
+          )}
+
+          {tab === 'charts' && (
+            <motion.div
+              key="charts"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <div className="mb-5">
+                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Charts</p>
+                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
+                  Equity + <span className="text-cyan">visualised trades</span>
+                </h2>
+                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
+                  SVG from closed fills and closed klines. Not TradingView. Not an order ticket.
+                </p>
+              </div>
+              <ChartsPanel
+                focusSymbol={chartFocus?.symbol}
+                focusTimeframe={chartFocus?.timeframe}
+                fills={desk.fills}
+              />
             </motion.div>
           )}
 
@@ -226,6 +263,7 @@ export default function App() {
                 fills={desk.fills}
                 stats={desk.stats}
                 onDone={() => void desk.refresh()}
+                onViewChart={goChart}
               />
             </motion.div>
           )}

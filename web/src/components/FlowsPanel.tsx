@@ -23,7 +23,7 @@ const STEPS = [
   },
   {
     title: 'Confirm on chart',
-    body: 'Pine visualizer should match side/grade. Optional MCP setup review on desktop Cursor.',
+    body: 'CHARTS tab: SVG equity + closed candles with entry/exit and SL/TP. Pine visualizer should still match side/grade.',
   },
   {
     title: 'Manual live fill',

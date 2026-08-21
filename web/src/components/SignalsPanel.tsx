@@ -31,10 +31,12 @@ export function SignalsPanel({
   signals,
   selectedId,
   onSelect,
+  onChart,
 }: {
   signals: SignalRow[]
   selectedId?: number | null
   onSelect: (s: SignalRow) => void
+  onChart?: (symbol: string, timeframe?: string) => void
 }) {
   const { tema, breakout, exits, other } = useMemo(() => {
     const tema: SignalRow[] = []
@@ -58,6 +60,7 @@ export function SignalsPanel({
         rows={tema}
         selectedId={selectedId}
         onSelect={onSelect}
+        onChart={onChart}
         empty="No TEMA A/A+ alerts yet"
       />
       <StrategyTable
@@ -66,6 +69,7 @@ export function SignalsPanel({
         rows={breakout}
         selectedId={selectedId}
         onSelect={onSelect}
+        onChart={onChart}
         empty="No daily trend-start longs yet"
         accent="amber"
       />
@@ -75,6 +79,7 @@ export function SignalsPanel({
         rows={exits}
         selectedId={selectedId}
         onSelect={onSelect}
+        onChart={onChart}
         empty="No paper exits yet — PAPER SYNC marks SL/TP on closed bars"
         accent="lime"
       />
@@ -85,6 +90,7 @@ export function SignalsPanel({
           rows={other}
           selectedId={selectedId}
           onSelect={onSelect}
+          onChart={onChart}
           empty="—"
         />
       )}
@@ -100,6 +106,7 @@ function StrategyTable({
   onSelect,
   empty,
   accent = 'cyan',
+  onChart,
 }: {
   title: string
   subtitle: string
@@ -108,6 +115,7 @@ function StrategyTable({
   onSelect: (s: SignalRow) => void
   empty: string
   accent?: 'cyan' | 'amber' | 'lime'
+  onChart?: (symbol: string, timeframe?: string) => void
 }) {
   const [openId, setOpenId] = useState<number | null>(null)
   return (
@@ -122,6 +130,7 @@ function StrategyTable({
             accent={accent}
             onToggle={() => setOpenId((id) => (id === s.id ? null : s.id))}
             onJournal={() => onSelect(s)}
+            onChart={onChart ? () => onChart(s.symbol, s.timeframe) : undefined}
           />
         ))}
         {!rows.length && <Empty>{empty}</Empty>}
@@ -137,6 +146,7 @@ function SignalCard({
   accent,
   onToggle,
   onJournal,
+  onChart,
 }: {
   s: SignalRow
   active: boolean
@@ -144,6 +154,7 @@ function SignalCard({
   accent: 'cyan' | 'amber' | 'lime'
   onToggle: () => void
   onJournal: () => void
+  onChart?: () => void
 }) {
   const buy = (s.side || '').toUpperCase() === 'BUY'
   const breakout = isBreakout(s)
@@ -208,15 +219,26 @@ function SignalCard({
           <p className="mt-3 font-mono text-xs text-chrome/50">
             Signal-only. Confirm on quant_visualizer.pine. DETAILS does not place an order.
           </p>
-          {!exit && (
-            <button
-              type="button"
-              onClick={onJournal}
-              className="mt-4 rounded-2xl border border-cyan/40 bg-cyan/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-cyan"
-            >
-              LOG FILL IN JOURNAL
-            </button>
-          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {!exit && (
+              <button
+                type="button"
+                onClick={onJournal}
+                className="rounded-2xl border border-cyan/40 bg-cyan/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-cyan"
+              >
+                LOG FILL IN JOURNAL
+              </button>
+            )}
+            {onChart && s.symbol && (
+              <button
+                type="button"
+                onClick={onChart}
+                className="rounded-2xl border border-lime/40 bg-lime/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-lime"
+              >
+                VIEW CHART
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -253,6 +253,28 @@ class Database:
         row = await self.get_fill(fill_id)
         return row or {"id": fill_id}
 
+    async def fills_for_symbol(self, symbol: str, limit: int = 200) -> list[dict[str, Any]]:
+        """Journal/paper fills for one USDT-perp, oldest first (chart marks)."""
+        symbol = (symbol or "").upper()
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT f.*, s.symbol, s.side, s.grade, s.strategy, s.event,
+                       s.stop_loss, s.take_profit, s.signal_price,
+                       json_extract(s.raw, '$.timeframe') AS timeframe,
+                       json_extract(s.raw, '$.bar_time') AS bar_time
+                FROM fills f
+                JOIN signals s ON s.id = f.signal_id
+                WHERE s.symbol = ?
+                ORDER BY f.id ASC
+                LIMIT ?
+                """,
+                (symbol, limit),
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
     async def recent_fills(self, limit: int = 50) -> list[dict[str, Any]]:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row

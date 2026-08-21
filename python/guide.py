@@ -86,6 +86,21 @@ def trading_guide() -> dict[str, Any]:
                 ],
             },
             {
+                "id": "charts",
+                "title": "Charts (desk)",
+                "body": (
+                    "The CHARTS tab draws an SVG equity curve from closed fills "
+                    "(paper + manual) and a closed-bar price chart with entry/exit "
+                    "marks and SL/TP lines. It is not TradingView and not an order "
+                    "ticket. Klines load only while the tab is open."
+                ),
+                "rules": [
+                    "SVG only — no extra chart library",
+                    "Closed candles from the scanner data source",
+                    "Paper PnL is not live edge until 30 closed manual fills",
+                ],
+            },
+            {
                 "id": "live",
                 "title": "If you take it live",
                 "body": (

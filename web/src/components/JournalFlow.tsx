@@ -8,11 +8,13 @@ export function JournalFlow({
   fills,
   stats,
   onDone,
+  onViewChart,
 }: {
   selected: SignalRow | null
   fills: JournalFill[]
   stats: JournalStats | null
   onDone: () => void
+  onViewChart?: (symbol: string, timeframe?: string) => void
 }) {
   const [fillPrice, setFillPrice] = useState('')
   const [size, setSize] = useState('0.01')
@@ -137,16 +139,27 @@ export function JournalFlow({
                   {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
                   {f.exit_reason ? ` · ${f.exit_reason}` : ''}
                 </span>
-                {!f.exit_price && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void closeFill(f.id)}
-                    className="text-magenta hover:underline"
-                  >
-                    CLOSE
-                  </button>
-                )}
+                <span className="flex gap-3">
+                  {onViewChart && f.symbol && (
+                    <button
+                      type="button"
+                      onClick={() => onViewChart(f.symbol as string, f.timeframe)}
+                      className="text-cyan hover:underline"
+                    >
+                      CHART
+                    </button>
+                  )}
+                  {!f.exit_price && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void closeFill(f.id)}
+                      className="text-magenta hover:underline"
+                    >
+                      CLOSE
+                    </button>
+                  )}
+                </span>
               </div>
             </div>
           ))}

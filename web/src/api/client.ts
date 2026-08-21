@@ -11,6 +11,8 @@ import type {
   AnalysisCard,
   TradingGuide,
   PaperSnapshot,
+  ChartBook,
+  ChartPrice,
 } from '../types'
 
 const BASES: string[] = [
@@ -104,5 +106,10 @@ export const api = {
     sendJson<{ opened?: number; closed?: number; checked?: number; places_orders?: boolean }>(
       '/paper/sync',
       'POST',
+    ),
+  chartsBook: (limit = 500) => getJson<ChartBook>(`/charts/book?limit=${limit}`),
+  chartsPrice: (symbol: string, timeframe = '1h', limit = 180) =>
+    getJson<ChartPrice>(
+      `/charts/price?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
     ),
 }

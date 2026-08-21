@@ -4,6 +4,7 @@ import type { DeskTab, DeskTheme } from '../types'
 const TABS: { id: DeskTab; label: string; hint: string }[] = [
   { id: 'orbit', label: 'ORBIT', hint: 'Orbis Universe' },
   { id: 'ops', label: 'OPS', hint: 'Radar + strategy tables' },
+  { id: 'charts', label: 'CHARTS', hint: 'Equity + trade marks' },
   { id: 'guide', label: 'GUIDE', hint: 'How to trade' },
   { id: 'agents', label: 'AGENTS', hint: 'Briefing + take' },
   { id: 'book', label: 'BOOK', hint: 'Ranked allocation' },

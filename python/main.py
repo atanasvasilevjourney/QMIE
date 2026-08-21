@@ -21,6 +21,8 @@ Endpoints:
   GET  /guide                 trading guide (operator module)
   GET  /paper                 paper book snapshot (never orders)
   POST /paper/sync            backfill paper fills + mark SL/TP exits
+  GET  /charts/book           equity curve from closed fills (SVG JSON)
+  GET  /charts/price          closed klines + entry/exit/SL/TP marks
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -62,6 +64,7 @@ from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
 from paper import PaperBook
 from guide import trading_guide
+from charts import ALLOWED_CHART_TFS, bars_payload, equity_payload, trades_payload
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -466,6 +469,60 @@ async def get_paper() -> dict[str, Any]:
     snap = await state.paper.snapshot()
     snap["places_orders"] = False
     return snap
+
+
+@app.get("/charts/book")
+async def get_charts_book(limit: int = 500) -> dict[str, Any]:
+    """Cumulative paper/manual PnL. Starting equity 0. Never orders."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    limit = max(1, min(2000, limit))
+    fills = await state.db.recent_fills(limit=limit)
+    payload = equity_payload(fills)
+    payload["limit"] = limit
+    return payload
+
+
+@app.get("/charts/price")
+async def get_charts_price(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 180,
+) -> dict[str, Any]:
+    """Closed-bar OHLC + trade marks for one symbol. SVG JSON. Never orders."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    sym = (symbol or "").upper().replace("-", "").replace(".P", "")
+    if not sym.endswith("USDT") or not sym[:-4].isalnum() or len(sym) < 7:
+        raise HTTPException(400, "symbol_must_be_usdt_perp")
+    tf = (timeframe or "1h").lower()
+    if tf not in ALLOWED_CHART_TFS:
+        raise HTTPException(400, "bad_timeframe")
+    lim = max(20, min(300, limit))
+    fills = await state.db.fills_for_symbol(sym, limit=200)
+    payload: dict[str, Any] = {
+        "symbol": sym,
+        "timeframe": tf,
+        "places_orders": False,
+        "bars": [],
+        "trades": trades_payload(fills),
+        "fills": len(fills),
+        "note": None,
+    }
+    if state.client is None:
+        payload["note"] = "client_not_ready"
+        return payload
+    try:
+        df = await state.client.fetch_klines(sym, tf, limit=lim)
+    except Exception as e:
+        logger.warning("charts klines failed %s %s: %s", sym, tf, e)
+        payload["note"] = "klines_unavailable"
+        return payload
+    if df is None or getattr(df, "empty", True):
+        payload["note"] = "no_klines"
+        return payload
+    payload["bars"] = bars_payload(df)
+    return payload
 
 
 @app.post("/paper/sync")

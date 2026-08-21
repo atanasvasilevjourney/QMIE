@@ -137,7 +137,63 @@ export type JournalStats = {
   sum_pnl?: number | null
 }
 
-export type DeskTab = 'orbit' | 'ops' | 'book' | 'journal' | 'flows' | 'agents' | 'guide'
+export type DeskTab = 'orbit' | 'ops' | 'charts' | 'book' | 'journal' | 'flows' | 'agents' | 'guide'
+
+export type ChartEquityPoint = {
+  t: number | null
+  equity: number
+  pnl: number
+  n: number
+  fill_id?: number
+  symbol?: string
+  outcome?: string
+  source?: string
+}
+
+export type ChartBook = {
+  places_orders: boolean
+  starting_eq: number
+  fills: number
+  closed: number
+  open: number
+  sum_pnl: number
+  points: ChartEquityPoint[]
+  symbols: { symbol: string; fills: number }[]
+  timeframes?: { timeframe: string; fills: number }[]
+}
+
+export type ChartBar = {
+  t: number
+  o: number
+  h: number
+  l: number
+  c: number
+  v: number
+}
+
+export type ChartTrade = {
+  fill_id: number
+  symbol?: string
+  side: string
+  grade?: string | null
+  source?: string
+  outcome?: string
+  size?: number
+  entry: { t: number; price: number }
+  exit?: { t: number; price: number; pnl?: number | null; reason?: string | null } | null
+  stop_loss?: number | null
+  take_profit?: number | null
+}
+
+export type ChartPrice = {
+  symbol: string
+  timeframe: string
+  places_orders: boolean
+  bars: ChartBar[]
+  trades: ChartTrade[]
+  fills: number
+  note?: string | null
+}
 
 export type DeskTheme = 'dark' | 'light'
 
