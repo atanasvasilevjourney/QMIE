@@ -107,6 +107,7 @@ qmie/
 │   └── docker-compose.yml
 └── docs/
     ├── architecture.md                what runs where, why
+    ├── streaming-data-sources.md      Binance vs HL vs OKX (data only)
     ├── development-status.md          completeness score + next sprints
     └── deployment.md                  ops runbook
 ```

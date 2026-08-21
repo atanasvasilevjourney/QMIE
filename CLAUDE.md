@@ -63,6 +63,7 @@ qmie/
 │   └── docker-compose.yml
 ├── docs/
 │   ├── architecture.md               How things fit + scaling cliffs
+│   ├── streaming-data-sources.md     Binance vs Hyperliquid vs OKX (data only)
 │   ├── development-status.md         Completeness score + sprint plan
 │   └── tradingview-mcp.md            Cursor TradingView MCP (shadow stdio)
 ├── README.md

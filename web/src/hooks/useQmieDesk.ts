@@ -70,9 +70,11 @@ export function useQmieDesk(pollMs = 12000) {
       settled(api.desk()),
     ])
 
-    const failures = [health, radar, signals, allocation, fills, stats, universe, briefing, desk]
-      .filter((r) => !r.ok)
-      .map((r) => (r as { ok: false; error: string }).error)
+    const failures = [...new Set(
+      [health, radar, signals, allocation, fills, stats, universe, briefing, desk]
+        .filter((r) => !r.ok)
+        .map((r) => (r as { ok: false; error: string }).error),
+    )]
 
     setState((prev) => ({
       health: health.ok ? health.value : prev.health,
