@@ -64,7 +64,7 @@ function Bucket({
 function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03]">
+    <div className="card rounded-2xl">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -76,7 +76,7 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
         </span>
       </button>
       {open && (
-        <dl className="grid gap-3 border-t border-white/10 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid gap-3 border-t border-line/10 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
           <Fact k="Symbol" v={row.symbol} />
           <Fact k="Color" v={row.color} />
           <Fact k="Days in state" v={String(row.days_in_state)} />
@@ -106,7 +106,7 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
   const yp = total ? (100 * grey) / total : 0
   const rp = total ? (100 * red) / total : 0
   return (
-    <div className="mb-3 flex h-2 overflow-hidden rounded-full border border-white/10 bg-black/40">
+    <div className="mb-3 flex h-2 overflow-hidden rounded-full border border-line/15 bg-surface/80">
       <div className="bg-lime" style={{ width: `${gp}%` }} />
       <div className="bg-chrome/40" style={{ width: `${yp}%` }} />
       <div className="bg-magenta" style={{ width: `${rp}%` }} />
@@ -116,9 +116,9 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   const color =
-    tone === 'lime' ? 'text-lime border-lime/20' : tone === 'magenta' ? 'text-magenta border-magenta/20' : 'text-chrome/70 border-white/10'
+    tone === 'lime' ? 'text-lime border-lime/20' : tone === 'magenta' ? 'text-magenta border-magenta/20' : 'text-chrome/70 border-line/15'
   return (
-    <div className={`rounded-2xl border bg-black/20 px-4 py-3 ${color}`}>
+    <div className={`rounded-2xl border bg-surface/80 px-4 py-3 ${color}`}>
       <div className="font-display text-[11px] tracking-widest opacity-70">{label}</div>
       <div className="font-mono text-2xl">{value}</div>
     </div>
@@ -140,7 +140,7 @@ export function PanelShell({
     <section className="neon-border glass relative overflow-hidden rounded-[24px] p-6">
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg tracking-[0.22em] text-white uppercase">{title}</h2>
+          <h2 className="font-display text-lg tracking-[0.22em] text-ink uppercase">{title}</h2>
           {subtitle && <p className="mt-1 max-w-4xl font-mono text-sm text-chrome/50">{subtitle}</p>}
         </div>
         {action}

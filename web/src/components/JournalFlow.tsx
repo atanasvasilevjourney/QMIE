@@ -123,9 +123,9 @@ export function JournalFlow({
         </div>
         <div className="max-h-64 space-y-2 overflow-auto">
           {fills.map((f) => (
-            <div key={f.id} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+            <div key={f.id} className="card rounded-2xl px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[11px] text-white">
+                <span className="font-mono text-[11px] text-ink">
                   #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}
                 </span>
                 <span className="font-mono text-[10px] text-chrome/60">{f.outcome}</span>
@@ -175,7 +175,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-mono text-sm text-white outline-none focus:border-cyan/50"
+            className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-4 py-3 font-mono text-sm text-ink outline-none focus:border-cyan/50"
       />
     </label>
   )
@@ -183,7 +183,7 @@ function Field({
 
 function Mini({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
+    <div className="card rounded-xl px-2 py-2">
       <div className="font-display text-[9px] tracking-widest text-chrome/50">{label}</div>
       <div className="font-mono text-lg text-cyan">{value}</div>
     </div>

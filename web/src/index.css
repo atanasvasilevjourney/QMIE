@@ -11,6 +11,9 @@
   --color-lime: #b8ff3c;
   --color-amber: #ffb020;
   --color-chrome: #c8d2e0;
+  --color-ink: #e8f0ff;
+  --color-surface: #10182a;
+  --color-line: #ffffff;
 }
 
 * {
@@ -23,7 +26,7 @@ body,
   min-height: 100%;
   margin: 0;
   background: var(--color-void);
-  color: #e8f0ff;
+  color: var(--color-ink);
   font-family: var(--font-body);
 }
 
@@ -34,6 +37,28 @@ body {
     linear-gradient(180deg, #05060a 0%, #070b14 45%, #05060a 100%);
 }
 
+html[data-theme="light"] {
+  --color-void: #f4f6fb;
+  --color-panel: #ffffff;
+  --color-cyan: #067a91;
+  --color-magenta: #c2188a;
+  --color-lime: #3f7d12;
+  --color-amber: #b56a00;
+  --color-chrome: #4b5568;
+  --color-ink: #152033;
+  --color-surface: #ffffff;
+  --color-line: #1a2436;
+  color-scheme: light;
+}
+
+html[data-theme="light"] body {
+  background:
+    radial-gradient(1200px 600px at 8% -8%, rgba(6, 122, 145, 0.10), transparent 52%),
+    radial-gradient(900px 480px at 92% 0%, rgba(194, 24, 138, 0.07), transparent 48%),
+    linear-gradient(180deg, #f8f9fd 0%, #eef1f7 48%, #f5f7fb 100%);
+  color: var(--color-ink);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -41,6 +66,9 @@ body {
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #00f0ff55, #ff2bd655);
   border-radius: 999px;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #067a9188, #c2188a66);
 }
 
 .neon-border {
@@ -50,9 +78,30 @@ body {
     0 0 28px rgba(0, 240, 255, 0.08);
 }
 
+html[data-theme="light"] .neon-border {
+  box-shadow:
+    0 0 0 1px rgba(194, 24, 138, 0.06) inset,
+    0 10px 28px rgba(21, 32, 51, 0.06);
+}
+
 .glass {
   background: linear-gradient(160deg, rgba(12, 18, 32, 0.92), rgba(8, 10, 18, 0.78));
   backdrop-filter: blur(14px);
+}
+
+html[data-theme="light"] .glass {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 253, 0.88));
+}
+
+.card {
+  background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-line) 10%, transparent);
+}
+
+html[data-theme="light"] .card {
+  background: #ffffff;
+  border: 1px solid rgba(26, 36, 54, 0.12);
+  box-shadow: 0 10px 28px rgba(21, 32, 51, 0.06);
 }
 
 .scanlines::after {
@@ -69,12 +118,26 @@ body {
   opacity: 0.35;
 }
 
+html[data-theme="light"] .scanlines::after {
+  opacity: 0.08;
+}
+
 .grid-floor {
   background-image:
     linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: linear-gradient(180deg, transparent, black 20%, black 80%, transparent);
+}
+
+html[data-theme="light"] .theme-blob {
+  opacity: 0.45;
+}
+
+html[data-theme="light"] .grid-floor {
+  background-image:
+    linear-gradient(rgba(6, 122, 145, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 122, 145, 0.08) 1px, transparent 1px);
 }
 
 .universe-frame {
@@ -85,6 +148,12 @@ body {
   background:
     radial-gradient(ellipse at 50% 20%, rgba(0, 240, 255, 0.08), transparent 55%),
     linear-gradient(180deg, rgba(8, 12, 24, 0.95), rgba(3, 4, 10, 0.98));
+}
+
+html[data-theme="light"] .universe-frame {
+  box-shadow:
+    0 0 0 1px rgba(6, 122, 145, 0.18) inset,
+    0 16px 40px rgba(21, 32, 51, 0.12);
 }
 
 .universe-frame::before {

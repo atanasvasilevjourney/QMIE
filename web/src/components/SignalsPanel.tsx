@@ -132,13 +132,13 @@ function SignalCard({
           ? 'border-cyan/50 bg-cyan/10'
           : breakout || accent === 'amber'
             ? 'border-amber/35 bg-amber/5'
-            : 'border-white/10 bg-white/[0.03]'
+            : 'border-line/15 bg-surface/70'
       }`}
     >
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-display text-base tracking-wider text-white">{s.symbol}</span>
+            <span className="font-display text-base tracking-wider text-ink">{s.symbol}</span>
             <span className={`font-mono text-sm ${buy ? 'text-lime' : 'text-magenta'}`}>
               {breakout ? 'LONG TREND START' : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
@@ -160,7 +160,7 @@ function SignalCard({
         </span>
       </button>
       {open && (
-        <div className="border-t border-white/10 px-5 py-4">
+        <div className="border-t border-line/10 px-5 py-4">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact k="Strategy" v={s.strategy || '—'} />
             <Fact k="Reason" v={s.reason || '—'} />

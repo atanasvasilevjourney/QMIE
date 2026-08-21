@@ -16,10 +16,10 @@ export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
         {slots.map((slot, i) => (
           <div
             key={`${slot.symbol ?? 'slot'}-${slot.rank ?? i}`}
-            className="flex items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r from-cyan/5 to-magenta/5 px-5 py-4"
+            className="card flex items-center justify-between rounded-2xl bg-gradient-to-r from-cyan/5 to-magenta/5 px-5 py-4"
           >
             <div>
-              <div className="font-display text-sm tracking-wider text-white">
+              <div className="font-display text-sm tracking-wider text-ink">
                 #{slot.rank ?? i + 1} {slot.symbol || '—'}
               </div>
               <div className="font-mono text-xs text-chrome/55">

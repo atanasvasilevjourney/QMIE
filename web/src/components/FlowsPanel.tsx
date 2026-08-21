@@ -43,7 +43,7 @@ export function FlowsPanel() {
             <div className="font-display text-[10px] tracking-[0.3em] text-magenta">
               STEP 0{i + 1}
             </div>
-            <h3 className="mt-2 font-display text-xs tracking-wide text-white">{s.title}</h3>
+            <h3 className="mt-2 font-display text-xs tracking-wide text-ink">{s.title}</h3>
             <p className="mt-2 font-mono text-[10px] leading-relaxed text-chrome/65">{s.body}</p>
             {i < STEPS.length - 1 && (
               <div className="pointer-events-none absolute -right-2 top-1/2 hidden h-px w-4 bg-cyan/40 md:block" />

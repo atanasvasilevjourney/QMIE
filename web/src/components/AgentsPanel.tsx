@@ -110,9 +110,9 @@ export function BreadthBar({
         <span>GREY {y.toFixed(1)}%</span>
         <span>RED {r.toFixed(1)}%</span>
       </div>
-      <div className="flex h-3 overflow-hidden rounded-full border border-white/10 bg-black/40">
+      <div className="flex h-3 overflow-hidden rounded-full border border-line/15 bg-surface/80">
         {sum <= 0 ? (
-          <div className="w-full bg-white/5" />
+          <div className="w-full bg-line/10" />
         ) : (
           <>
             <div className="bg-lime" style={{ width: `${g}%` }} />
@@ -136,7 +136,7 @@ function AgentCard({
 }) {
   const ok = body?.ok !== false
   return (
-    <div className={`rounded-2xl border px-5 py-4 ${ok ? 'border-white/10 bg-black/25' : 'border-magenta/40 bg-magenta/10'}`}>
+    <div className={`rounded-2xl border px-5 py-4 ${ok ? 'border-line/15 bg-surface/80' : 'border-magenta/40 bg-magenta/10'}`}>
       <div className="flex items-center justify-between">
         <span className="font-display text-[10px] tracking-[0.28em] text-cyan">{name}</span>
         <span className={`font-mono text-[10px] ${ok ? 'text-lime' : 'text-magenta'}`}>{ok ? 'OK' : 'FAIL'}</span>
@@ -163,7 +163,7 @@ function ChecklistBlock({
   return (
     <div className={`rounded-2xl border px-5 py-4 ${tone}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-display text-xs tracking-wider text-white">
+        <span className="font-display text-xs tracking-wider text-ink">
           {card.symbol} · {card.side} · {card.grade || '—'} · {card.timeframe || '—'}
         </span>
         <span className={`font-mono text-[11px] tracking-widest ${tag}`}>{card.verdict}</span>
@@ -198,7 +198,7 @@ function AnalysisBlock({ card }: { card: AnalysisCard }) {
   const tone =
     card.status === 'BULLISH' ? 'text-lime' : card.status === 'BEARISH' ? 'text-magenta' : 'text-amber'
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3">
+    <div className="card mt-3 rounded-xl p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={`font-display text-[11px] tracking-[0.22em] ${tone}`}>
           {card.symbol} Status: {card.status}
@@ -218,9 +218,9 @@ function AnalysisBlock({ card }: { card: AnalysisCard }) {
           </thead>
           <tbody>
             {card.levels.map((lv) => (
-              <tr key={lv.type} className="border-t border-white/5 text-chrome/80">
+              <tr key={lv.type} className="border-t border-line/10 text-chrome/80">
                 <td className="py-1 pr-2 text-cyan">{lv.type}</td>
-                <td className="py-1 pr-2 text-white">{lv.price}</td>
+                <td className="py-1 pr-2 text-ink">{lv.price}</td>
                 <td className="py-1 text-chrome/60">{lv.note}</td>
               </tr>
             ))}
@@ -301,9 +301,9 @@ function DecisionLine({ d }: { d: DeskDecision }) {
         ? 'text-lime'
         : 'text-amber'
   return (
-    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 font-mono text-[10px]">
+    <div className="card rounded-xl px-3 py-2 font-mono text-[10px]">
       <span className={`tracking-widest ${tone}`}>{d.action.toUpperCase()}</span>
-      <span className="ml-2 text-white">{d.symbol}</span>
+      <span className="ml-2 text-ink">{d.symbol}</span>
       <span className="ml-2 text-chrome/50">qty {d.quantity}</span>
       <span className="ml-2 text-chrome/50">w {d.suggested_weight_pct ?? 0}%</span>
       <p className="mt-1 text-chrome/65">{d.reasoning}</p>

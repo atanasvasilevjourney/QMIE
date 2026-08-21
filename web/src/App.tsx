@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQmieDesk } from './hooks/useQmieDesk'
+import { useTheme } from './hooks/useTheme'
 import type { DeskTab, SignalRow } from './types'
 import { Scene3D } from './components/Scene3D'
 import { TopBar } from './components/TopBar'
@@ -17,6 +18,7 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [radarMsg, setRadarMsg] = useState<string | null>(null)
   const desk = useQmieDesk()
+  const { theme, toggle: toggleTheme } = useTheme()
 
   const healthOk = desk.health?.status === 'ok' && !!desk.health?.db_ok
   const uptime = desk.health?.uptime_sec ?? 0
@@ -52,8 +54,8 @@ export default function App() {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <div className="pointer-events-none fixed inset-0 grid-floor opacity-40" />
-      <div className="pointer-events-none fixed -left-24 top-10 h-80 w-80 rounded-full bg-magenta/20 blur-3xl" />
-      <div className="pointer-events-none fixed right-0 top-32 h-96 w-96 rounded-full bg-cyan/15 blur-3xl" />
+      <div className="pointer-events-none fixed -left-24 top-10 h-80 w-80 rounded-full bg-magenta/20 blur-3xl theme-blob" />
+      <div className="pointer-events-none fixed right-0 top-32 h-96 w-96 rounded-full bg-cyan/15 blur-3xl theme-blob" />
 
       <TopBar
         tab={tab}
@@ -65,6 +67,8 @@ export default function App() {
         onRefresh={() => void desk.refresh()}
         onRadar={() => void onRadar()}
         busy={busy || desk.loading}
+        theme={theme}
+        onTheme={toggleTheme}
       />
 
       <main className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
@@ -94,7 +98,7 @@ export default function App() {
               <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Landing</p>
-                  <h2 className="font-display text-3xl tracking-wide text-white md:text-4xl">
+                  <h2 className="font-display text-3xl tracking-wide text-ink md:text-4xl">
                     Orbis <span className="text-cyan">Universe</span>
                   </h2>
                   <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
@@ -138,7 +142,7 @@ export default function App() {
             >
               <div>
                 <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Operations</p>
-                <h2 className="font-display text-2xl tracking-wide text-white md:text-3xl">
+                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
                   Radar + <span className="text-cyan">strategy tables</span>
                 </h2>
               </div>
@@ -202,7 +206,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 border-t border-white/5 px-4 py-4 text-center font-mono text-xs text-chrome/40">
+      <footer className="relative z-10 border-t border-line/10 px-4 py-4 text-center font-mono text-xs text-chrome/50">
         QMIE Desk · Orbis landing · OPS strategy tables · never places orders
       </footer>
     </div>
@@ -221,7 +225,7 @@ function MiniStat({
   mono?: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 px-5 py-4">
+    <div className="card rounded-2xl px-5 py-4">
       <div className="font-display text-[10px] tracking-widest text-chrome/50 uppercase">{label}</div>
       <div className={`mt-1 ${mono ? 'font-mono text-xl' : 'font-mono text-base'} ${tone}`}>{value}</div>
     </div>

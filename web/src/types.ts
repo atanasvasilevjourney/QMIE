@@ -128,6 +128,8 @@ export type JournalStats = {
 
 export type DeskTab = 'orbit' | 'ops' | 'book' | 'journal' | 'flows' | 'agents'
 
+export type DeskTheme = 'dark' | 'light'
+
 export type ChecklistItem = {
   id: string
   passed: boolean
