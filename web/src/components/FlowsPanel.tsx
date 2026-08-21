@@ -6,12 +6,16 @@ const STEPS = [
     body: 'Confirm ONLINE + universe count. Radar warms on boot; force RADAR ONCE if empty.',
   },
   {
+    title: 'Land on Orbis',
+    body: 'ORBIT is the landing page (3D universe). OPS is radar + separate TEMA / daily-breakout tables.',
+  },
+  {
     title: 'Read Trend Radar',
     body: 'RGG map is context. Fresh GREEN or coil-UP on the daily close is a BREAKOUT LONG / trend-start candidate.',
   },
   {
-    title: 'Wait for A/A+ or daily breakout',
-    body: 'Live Signals: graded 1H/4H A/A+ or 1D BREAKOUT. Open the TradingView deep-link (visualizer on Daily for trend-start).',
+    title: 'Wait for TEMA A/A+ or daily breakout',
+    body: 'OPS tables are split: TEMA scanner (1h/4h TMA 9/90/199) vs 1D BREAKOUT. Open DETAILS, then the visualizer.',
   },
   {
     title: 'Confirm on chart',
@@ -34,7 +38,7 @@ export function FlowsPanel() {
         {STEPS.map((s, i) => (
           <div
             key={s.title}
-            className="relative rounded-2xl border border-cyan/20 bg-gradient-to-b from-cyan/10 to-transparent p-3"
+            className="relative rounded-2xl border border-cyan/20 bg-gradient-to-b from-cyan/10 to-transparent p-4"
           >
             <div className="font-display text-[10px] tracking-[0.3em] text-magenta">
               STEP 0{i + 1}
@@ -58,7 +62,7 @@ export function FlowsPanel() {
 
 function Tip({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-magenta/20 bg-magenta/5 p-3">
+    <div className="rounded-2xl border border-magenta/20 bg-magenta/5 p-4">
       <div className="font-display text-[10px] tracking-widest text-magenta uppercase">{title}</div>
       <p className="mt-2 font-mono text-[11px] text-chrome/70">{body}</p>
     </div>

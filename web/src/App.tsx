@@ -12,7 +12,7 @@ import { FlowsPanel } from './components/FlowsPanel'
 import { AgentsPanel } from './components/AgentsPanel'
 
 export default function App() {
-  const [tab, setTab] = useState<DeskTab>('desk')
+  const [tab, setTab] = useState<DeskTab>('orbit')
   const [selected, setSelected] = useState<SignalRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [radarMsg, setRadarMsg] = useState<string | null>(null)
@@ -44,6 +44,11 @@ export default function App() {
     return g
   }, [desk.signals])
 
+  const goJournal = (s: SignalRow) => {
+    setSelected(s)
+    setTab('journal')
+  }
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <div className="pointer-events-none fixed inset-0 grid-floor opacity-40" />
@@ -62,10 +67,10 @@ export default function App() {
         busy={busy || desk.loading}
       />
 
-      <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-5 sm:px-5">
+      <main className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
         {(desk.error || radarMsg) && (
           <div
-            className={`mb-4 rounded-2xl border px-4 py-3 font-mono text-xs ${
+            className={`mb-5 rounded-2xl border px-5 py-4 font-mono text-sm ${
               desk.error || radarFailed
                 ? 'border-magenta/40 bg-magenta/10 text-magenta'
                 : 'border-cyan/40 bg-cyan/10 text-cyan'
@@ -78,49 +83,67 @@ export default function App() {
         )}
 
         <AnimatePresence mode="wait">
-          {tab === 'desk' && (
+          {tab === 'orbit' && (
             <motion.div
-              key="desk"
+              key="orbit"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
-              className="grid gap-4 lg:grid-cols-12"
             >
-              <div className="lg:col-span-5">
-                <div className="mb-3">
-                  <p className="font-display text-[11px] tracking-[0.35em] text-magenta uppercase">
-                    Ops viewport
-                  </p>
-                  <h2 className="font-display text-xl tracking-wide text-white md:text-2xl">
-                    Signal <span className="text-cyan">Universe</span>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Landing</p>
+                  <h2 className="font-display text-3xl tracking-wide text-white md:text-4xl">
+                    Orbis <span className="text-cyan">Universe</span>
                   </h2>
+                  <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
+                    RGG nebula + orbit tokens. Operations (radar + TEMA / daily-breakout tables) live on OPS.
+                    Signal-only — never orders.
+                  </p>
                 </div>
-                <div className="h-[min(62vh,560px)] min-h-[420px]">
-                  <Scene3D radar={desk.radar} signalCount={desk.signals.length} />
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
-                  <MiniStat label="Signals" value={desk.signals.length} tone="text-cyan" />
-                  <MiniStat
-                    label="Synced"
-                    value={desk.lastSync ? new Date(desk.lastSync).toLocaleTimeString() : '—'}
-                    tone="text-chrome/70"
-                    mono={false}
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setTab('ops')}
+                  className="rounded-2xl border border-cyan/40 bg-cyan/10 px-6 py-4 font-display text-sm tracking-[0.22em] text-cyan"
+                >
+                  OPEN OPS
+                </button>
               </div>
-              <div className="grid gap-4 lg:col-span-7 lg:grid-cols-2">
-                <RadarPanel radar={desk.radar} />
-                <SignalsPanel
-                  signals={desk.signals}
-                  selectedId={selected?.id}
-                  onSelect={(s) => {
-                    setSelected(s)
-                    setTab('journal')
-                  }}
+              <div className="h-[min(78vh,860px)] min-h-[520px]">
+                <Scene3D radar={desk.radar} signalCount={desk.signals.length} allowZoom />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
+                <MiniStat label="Signals" value={desk.signals.length} tone="text-cyan" />
+                <MiniStat label="Universe" value={desk.universeCount} tone="text-lime" />
+                <MiniStat
+                  label="Synced"
+                  value={desk.lastSync ? new Date(desk.lastSync).toLocaleTimeString() : '—'}
+                  tone="text-chrome/70"
+                  mono={false}
                 />
               </div>
+            </motion.div>
+          )}
+
+          {tab === 'ops' && (
+            <motion.div
+              key="ops"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+              className="grid gap-5"
+            >
+              <div>
+                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Operations</p>
+                <h2 className="font-display text-2xl tracking-wide text-white md:text-3xl">
+                  Radar + <span className="text-cyan">strategy tables</span>
+                </h2>
+              </div>
+              <RadarPanel radar={desk.radar} />
+              <SignalsPanel signals={desk.signals} selectedId={selected?.id} onSelect={goJournal} />
             </motion.div>
           )}
 
@@ -179,8 +202,8 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 border-t border-white/5 px-4 py-4 text-center font-mono text-[10px] text-chrome/40">
-        QMIE Desk · signal-only cyber ops · Discord/Telegram optional · never places orders
+      <footer className="relative z-10 border-t border-white/5 px-4 py-4 text-center font-mono text-xs text-chrome/40">
+        QMIE Desk · Orbis landing · OPS strategy tables · never places orders
       </footer>
     </div>
   )
@@ -198,9 +221,9 @@ function MiniStat({
   mono?: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
-      <div className="font-display text-[9px] tracking-widest text-chrome/50 uppercase">{label}</div>
-      <div className={`mt-1 ${mono ? 'font-mono text-lg' : 'font-mono text-sm'} ${tone}`}>{value}</div>
+    <div className="rounded-2xl border border-white/10 bg-black/30 px-5 py-4">
+      <div className="font-display text-[10px] tracking-widest text-chrome/50 uppercase">{label}</div>
+      <div className={`mt-1 ${mono ? 'font-mono text-xl' : 'font-mono text-base'} ${tone}`}>{value}</div>
     </div>
   )
 }

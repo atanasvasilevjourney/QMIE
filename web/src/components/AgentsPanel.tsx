@@ -136,7 +136,7 @@ function AgentCard({
 }) {
   const ok = body?.ok !== false
   return (
-    <div className={`rounded-2xl border px-3 py-3 ${ok ? 'border-white/10 bg-black/25' : 'border-magenta/40 bg-magenta/10'}`}>
+    <div className={`rounded-2xl border px-5 py-4 ${ok ? 'border-white/10 bg-black/25' : 'border-magenta/40 bg-magenta/10'}`}>
       <div className="flex items-center justify-between">
         <span className="font-display text-[10px] tracking-[0.28em] text-cyan">{name}</span>
         <span className={`font-mono text-[10px] ${ok ? 'text-lime' : 'text-magenta'}`}>{ok ? 'OK' : 'FAIL'}</span>
@@ -161,7 +161,7 @@ function ChecklistBlock({
   const tag =
     card.verdict === 'GO' ? 'text-lime' : card.verdict === 'SKIP' ? 'text-magenta' : 'text-amber'
   return (
-    <div className={`rounded-2xl border px-3 py-3 ${tone}`}>
+    <div className={`rounded-2xl border px-5 py-4 ${tone}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-display text-xs tracking-wider text-white">
           {card.symbol} · {card.side} · {card.grade || '—'} · {card.timeframe || '—'}
@@ -179,7 +179,7 @@ function ChecklistBlock({
           type="button"
           onClick={onAnalyze}
           disabled={analysis?.loading}
-          className="mt-3 rounded-lg border border-cyan/30 bg-cyan/10 px-3 py-1 font-display text-[10px] tracking-[0.2em] text-cyan disabled:opacity-40"
+          className="mt-3 rounded-2xl border border-cyan/30 bg-cyan/10 px-5 py-3 font-display text-xs tracking-[0.2em] text-cyan disabled:opacity-40"
         >
           {analysis?.loading ? 'WAIT' : 'ANALYZE'}
         </button>
@@ -269,7 +269,7 @@ function DeskDag({ graph }: { graph?: DeskGraph | null }) {
           const ok = node?.ok !== false
           return (
             <div key={name} className="flex items-center gap-2">
-              <div className={`rounded-xl border px-3 py-2 ${ok ? 'border-cyan/30 bg-cyan/10' : 'border-magenta/40 bg-magenta/10'}`}>
+              <div className={`rounded-2xl border px-4 py-3 ${ok ? 'border-cyan/30 bg-cyan/10' : 'border-magenta/40 bg-magenta/10'}`}>
                 <div className="font-display text-[10px] tracking-[0.2em] text-cyan">{name.toUpperCase()}</div>
                 <div className="mt-1 max-w-[160px] truncate font-mono text-[10px] text-chrome/70">
                   {node?.headline || node?.error || '—'}

@@ -126,7 +126,7 @@ export type JournalStats = {
   avg_realized_r?: number | null
 }
 
-export type DeskTab = 'desk' | 'book' | 'journal' | 'flows' | 'agents'
+export type DeskTab = 'orbit' | 'ops' | 'book' | 'journal' | 'flows' | 'agents'
 
 export type ChecklistItem = {
   id: string

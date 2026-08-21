@@ -2,7 +2,8 @@ import { motion } from 'framer-motion'
 import type { DeskTab } from '../types'
 
 const TABS: { id: DeskTab; label: string; hint: string }[] = [
-  { id: 'desk', label: 'DESK', hint: 'Radar + signals' },
+  { id: 'orbit', label: 'ORBIT', hint: 'Orbis Universe' },
+  { id: 'ops', label: 'OPS', hint: 'Radar + strategy tables' },
   { id: 'agents', label: 'AGENTS', hint: 'Briefing + take' },
   { id: 'book', label: 'BOOK', hint: 'Ranked allocation' },
   { id: 'journal', label: 'JOURNAL', hint: 'Manual fills' },
@@ -32,7 +33,7 @@ export function TopBar({
 }) {
   return (
     <header className="relative z-20 border-b border-cyan/15 bg-void/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto flex max-w-[1920px] flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
           <div className="relative grid h-12 w-12 place-items-center rounded-2xl neon-border glass">
             <span className="font-display text-sm font-bold text-cyan">Q</span>
@@ -56,14 +57,14 @@ export function TopBar({
                 key={t.id}
                 type="button"
                 onClick={() => onTab(t.id)}
-                className={`rounded-xl px-3 py-2 text-left transition ${
+                className={`min-w-[7.5rem] rounded-2xl px-4 py-3 text-left transition ${
                   active
                     ? 'neon-border bg-cyan/10 text-cyan'
                     : 'border border-white/5 bg-white/[0.02] text-chrome/70 hover:border-cyan/30 hover:text-white'
                 }`}
               >
-                <div className="font-display text-[11px] tracking-[0.22em]">{t.label}</div>
-                <div className="font-mono text-[10px] opacity-60">{t.hint}</div>
+                <div className="font-display text-xs tracking-[0.22em]">{t.label}</div>
+                <div className="font-mono text-[11px] opacity-60">{t.hint}</div>
               </button>
             )
           })}
@@ -79,7 +80,7 @@ export function TopBar({
             type="button"
             disabled={busy}
             onClick={onRefresh}
-            className="rounded-xl border border-cyan/30 bg-cyan/10 px-3 py-2 font-display text-[11px] tracking-widest text-cyan disabled:opacity-40"
+            className="rounded-2xl border border-cyan/30 bg-cyan/10 px-4 py-3 font-display text-xs tracking-widest text-cyan disabled:opacity-40"
           >
             SYNC
           </motion.button>
@@ -88,7 +89,7 @@ export function TopBar({
             type="button"
             disabled={busy}
             onClick={onRadar}
-            className="rounded-xl border border-magenta/40 bg-magenta/10 px-3 py-2 font-display text-[11px] tracking-widest text-magenta disabled:opacity-40"
+            className="rounded-2xl border border-magenta/40 bg-magenta/10 px-4 py-3 font-display text-xs tracking-widest text-magenta disabled:opacity-40"
           >
             RADAR ONCE
           </motion.button>
