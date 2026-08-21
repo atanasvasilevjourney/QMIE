@@ -187,8 +187,9 @@ export type ChartTrade = {
   size?: number
   timeframe?: string | null
   aligned?: boolean
+  on_ohlc?: boolean
   entry: ChartMark
-  exit?: { t: number; price: number; i?: number; pnl?: number | null; reason?: string | null } | null
+  exit?: { t: number; price: number; i?: number; on_ohlc?: boolean; pnl?: number | null; reason?: string | null } | null
   stop_loss?: number | null
   take_profit?: number | null
 }

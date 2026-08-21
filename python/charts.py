@@ -195,6 +195,7 @@ def align_trades(
     if not bars:
         for tr in trades:
             tr["aligned"] = False
+            tr["on_ohlc"] = False
         return trades
     chart_ms = interval_ms(bars)
     out: list[dict[str, Any]] = []
@@ -209,13 +210,16 @@ def align_trades(
             entry_i = snap_entry_index(bars, t=int(t), price=float(px), window_ms=window)
         if entry_i is None:
             row["aligned"] = False
+            row["on_ohlc"] = False
             row["entry"] = entry
             out.append(row)
             continue
         entry["i"] = entry_i
         entry["t"] = int(bars[entry_i]["t"])
         row["entry"] = entry
+        bar = bars[entry_i]
         row["aligned"] = True
+        row["on_ohlc"] = float(bar["l"]) <= float(px) <= float(bar["h"])
         ext = row.get("exit")
         if ext and ext.get("price") is not None:
             exit_obj = dict(ext)
@@ -228,6 +232,8 @@ def align_trades(
             if exit_i is not None:
                 exit_obj["i"] = exit_i
                 exit_obj["t"] = int(bars[exit_i]["t"])
+                xb = bars[exit_i]
+                exit_obj["on_ohlc"] = float(xb["l"]) <= float(exit_obj["price"]) <= float(xb["h"])
             row["exit"] = exit_obj
         out.append(row)
     return out

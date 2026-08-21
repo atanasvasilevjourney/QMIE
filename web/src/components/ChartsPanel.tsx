@@ -287,7 +287,7 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
         )
       })}
       {trades.map((tr) => {
-        if (!tr.aligned || tr.entry.i == null) return <g key={tr.fill_id} />
+        if (!tr.aligned || tr.entry.i == null || tr.on_ohlc === false) return <g key={tr.fill_id} />
         const eBar = barAt(tr.entry.i)
         if (!eBar) return <g key={tr.fill_id} />
         const x0 = xAt(tr.entry.i)
@@ -331,7 +331,7 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
                 <title>TP {tr.take_profit}</title>
               </line>
             )}
-            {tr.exit && tr.exit.i != null && (
+            {tr.exit && tr.exit.i != null && tr.exit.on_ohlc !== false && (
               <line x1={x0} y1={eY} x2={x1} y2={xY} stroke={link} strokeWidth="1.6" strokeOpacity="0.85" />
             )}
             <polygon
@@ -346,7 +346,7 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
                 ENTRY #{tr.fill_id} {tr.side} {tr.entry.price} bar {tr.entry.i} {tr.source}
               </title>
             </polygon>
-            {tr.exit && tr.exit.i != null && (
+            {tr.exit && tr.exit.i != null && tr.exit.on_ohlc !== false && (
               <polygon
                 points={`${x1},${xY} ${x1 - 5},${xY - 9} ${x1 + 5},${xY - 9}`}
                 fill={link}
@@ -371,7 +371,7 @@ function TradeLegend({ trades }: { trades: ChartTrade[] }) {
         <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-[11px] text-chrome/70">
           <span>
             #{t.fill_id} {t.symbol} {t.side} {t.source === 'paper' ? 'PAPER' : 'MANUAL'} {t.outcome}
-            {t.aligned === false ? ' · off-chart' : ''}
+            {t.aligned === false || t.on_ohlc === false ? ' · off-chart' : ''}
           </span>
           <span>
             {t.entry.price}

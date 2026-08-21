@@ -155,6 +155,7 @@ def test_align_trades_stamps_bar_index():
     ])
     aligned = align_trades(bars, trades, chart_tf="1h")
     assert aligned[0]["aligned"] is True
+    assert aligned[0]["on_ohlc"] is True
     assert aligned[0]["entry"]["i"] == 3
     assert aligned[0]["entry"]["t"] == bars[3]["t"]
 
