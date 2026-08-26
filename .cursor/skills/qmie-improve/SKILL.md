@@ -35,7 +35,7 @@ backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
    (atilaahmettaner/tradingview-mcp via `uvx`). Prefer Runlayer if a
    managed TradingView server appears. Never mix MCP TA into QMIE
    `W_*` or `compute_signal`.
-5. **Do not retune scoring weights** on the sample used to report hit rate. Frozen OOS write-up (`docs/backtest-baseline.md`) first. KovaView / KAMA-DF / TQQQ notebooks are overlay maps (`docs/kovaview-equity-map.md`), not a live-engine upgrade and not a reason to skip the outstanding `SCAN_TIMEFRAMES=4h` knob. Do **not** re-apply `too_late` / BTC-RED `buys_allowed` / cooldown as checklist SKIP — they cut winners on the 4h A/A+ slice (`docs/kovaview-overlay-backtest.md`).
+5. **Do not retune scoring weights** on the sample used to report hit rate. Frozen OOS write-up (`docs/backtest-baseline.md`) first. KovaView / KAMA-DF / TQQQ notebooks are overlay maps (`docs/kovaview-equity-map.md`), not a live-engine upgrade and not a reason to skip the outstanding `SCAN_TIMEFRAMES=4h` knob. Do **not** re-apply `too_late` / BTC-RED `buys_allowed` / cooldown as checklist SKIP — they cut winners on the 4h A/A+ slice (`docs/kovaview-overlay-backtest.md`). Do **not** add `1d` to `SCAN_TIMEFRAMES` — daily A/A+ OOS loses.
 6. **OpenAI Take is not a score.** `GET /agents/analysis/{id}` may color the alert; it must not change `W_*`, grades, or place orders. Inventing gamma / dark-pool / 0DTE tape is out of scope.
 
 ## Workflow
