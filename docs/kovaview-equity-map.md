@@ -199,10 +199,11 @@ Native checklist overlays (not `compute_signal`, not `.env`):
 
 - **`too_late`** — radar `is_late_stage` same-side chase → SKIP
 - **`btc_regime`** — BTC 1D RED blocks new BUY (`buys_allowed` false). GREY is WATCH. SELL is not gated. Missing BTC row is WATCH, not SKIP
-- **`cooldown`** — two consecutive *manual* journal losses → SKIP next setup. Paper fills ignored
+- **`cooldown`** — two consecutive *manual* losses **on that symbol**, then a **24h** pause. Paper ignored. Book-wide lockout is not used (it starved a 4h alert stream).
 
-GUIDE section `kovaview` points here. `places_orders` stays false.
-Quantity on the desk DAG stays 0.
+GUIDE section `kovaview` points here. Measurement:
+`docs/kovaview-overlay-backtest.md` (BTC/ETH/SOL 4h A/A+ OOS).
+`places_orders` stays false. Quantity on the desk DAG stays 0.
 
 **Still not landed (on purpose)**
 
