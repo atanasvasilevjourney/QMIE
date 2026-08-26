@@ -12,7 +12,7 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.0",
+        "version": "1.1",
         "headline": "Signal-only desk. Paper fills every alert. You click live size yourself.",
         "sections": [
             {
@@ -116,6 +116,24 @@ def trading_guide() -> dict[str, Any]:
                     "SVG only — no extra chart library",
                     "Closed candles from the scanner data source",
                     "Paper PnL is not live edge until 30 closed manual fills",
+                ],
+            },
+            {
+                "id": "kovaview",
+                "title": "KovaView overlays (not a new engine)",
+                "body": (
+                    "KovaView is an EOD equity swing stack (GREEN/GREY/RED, SPY regime, "
+                    "ATR×2.5, SMA20 trail). Do not port it into TEMA 9/90/199. Steal "
+                    "regime + too_late + sizing math as overlays after SCAN_TIMEFRAMES=4h "
+                    "is live. KAMA-DF and TQQQ notebooks must not retune W_* or EMA lengths. "
+                    "Map: docs/kovaview-equity-map.md."
+                ),
+                "rules": [
+                    "Do not add KAMA / EWMAC / z_52 as score votes",
+                    "Printed stop stays 1.5×ATR; 1.25% equity is operator sizing",
+                    "50–60% WR is fine if E[R] ≥ 0.15R — 4h A/A+ already sits there",
+                    "Universe RS / rotation outranks more entry polish",
+                    "One outstanding knob: 4h-only, then ADX≥20 — not both",
                 ],
             },
             {

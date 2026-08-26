@@ -14,6 +14,10 @@ def test_guide_never_orders():
         "paper",
         "exit",
         "charts",
+        "kovaview",
         "live",
     ]
     assert "Paper" in g["sections"][4]["title"]
+    kv = next(s for s in g["sections"] if s["id"] == "kovaview")
+    assert "docs/kovaview-equity-map.md" in kv["body"]
+    assert any("KAMA" in r for r in kv["rules"])

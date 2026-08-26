@@ -325,3 +325,7 @@ and leftover hygiene (`deployment.md`, daily signal cap).
 Sprint 0 is done in this branch. Next is Sprint 1 (measure OOS).
 Do not re-open execution. Do not re-add scoring components until
 Sprint 1 has a number.
+
+KovaView / ORBIS Equity (and the KAMA-DF / TQQQ notebooks) is an
+**overlay map**, not an engine fork: `docs/kovaview-equity-map.md`.
+Do not skip `SCAN_TIMEFRAMES=4h` to add KAMA.
