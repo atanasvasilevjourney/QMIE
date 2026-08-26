@@ -87,13 +87,13 @@ def test_btc_red_skips_buy_not_sell():
     sell = dict(buy)
     sell["side"] = "SELL"
     sell["daily_trend"] = "bearish"
-    d_buy = overlay_decision(buy, radar=radar, fills=[])
-    d_sell = overlay_decision(sell, radar=radar, fills=[])
+    d_buy = overlay_decision(buy, radar=radar)
+    d_sell = overlay_decision(sell, radar=radar)
     assert d_buy.skip is True and d_buy.btc_regime is True
     assert d_sell.btc_regime is False
 
 
-def test_two_losses_skip_third_via_annotate():
+def test_two_losses_do_not_lock_next_setup():
     idx = pd.date_range("2025-06-01", periods=10, freq="4h", tz="UTC")
     green = pd.DataFrame(
         {
@@ -105,8 +105,6 @@ def test_two_losses_skip_third_via_annotate():
         },
         index=pd.date_range("2025-06-01", periods=10, freq="1D", tz="UTC"),
     )
-    eth = green.copy()
-    eth["symbol"] = "ETHUSDT"
     trades = []
     for ts, out in (
         (idx[1], "LOSS"),
@@ -129,30 +127,9 @@ def test_two_losses_skip_third_via_annotate():
             "realized_r": -1.0 if out == "LOSS" else 1.6,
             "rr_ratio": 1.6,
         })
-    trades.append({
-        "timestamp": idx[3],
-        "symbol": "ETHUSDT",
-        "side": "BUY",
-        "grade": "A",
-        "score": 80.0,
-        "entry": 100.0,
-        "stop_loss": 96.0,
-        "daily_trend": "bullish",
-        "timeframe": "4h",
-        "adx_value": 28.0,
-        "atr_pct": 1.2,
-        "outcome": "WIN",
-        "realized_r": 1.6,
-        "rr_ratio": 1.6,
-    })
-    annotated = annotate_closed(trades, {"BTCUSDT": green, "ETHUSDT": eth})
-    btc = [r for r in annotated if r["symbol"] == "BTCUSDT"]
-    eth_rows = [r for r in annotated if r["symbol"] == "ETHUSDT"]
-    assert btc[0]["overlay_skip"] is False
-    assert btc[1]["overlay_skip"] is False
-    assert btc[2]["overlay_skip"] is True
-    assert "cooldown" in btc[2]["overlay_reasons"]
-    assert eth_rows[0]["overlay_skip"] is False
+    annotated = annotate_closed(trades, {"BTCUSDT": green})
+    assert all(r["overlay_skip"] is False for r in annotated)
+    assert all("cooldown" not in str(r.get("overlay_reasons") or "") for r in annotated)
     kept = summarize(annotated, kept_only=True)
     assert kept["n"] == 3
     assert kept["wins"] == 1
@@ -186,6 +163,6 @@ def test_too_late_green_chase_skips_buy():
         },
         signal_id=1,
     )
-    dec = overlay_decision(row, radar=radar, fills=[])
+    dec = overlay_decision(row, radar=radar)
     assert dec.skip is True
     assert dec.too_late is True

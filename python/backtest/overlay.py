@@ -2,7 +2,8 @@
 KovaView checklist overlays on frozen backtest signals
 ======================================================
 Post-filters only. Does not call compute_signal. Does not retune W_*.
-Uses production ``evaluate_native`` items too_late / btc_regime / cooldown.
+Uses production ``evaluate_native`` items too_late / btc_regime.
+Two-loss cooldown is not applied (it locked a 4h alert stream).
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from improve.checklist import evaluate_native
 from scanner.indicators import adx
 from scanner.radar import RadarConfig, classify_rgg_series
 
-OVERLAY_GATES = ("too_late", "btc_regime", "cooldown")
+OVERLAY_GATES = ("too_late", "btc_regime")
 
 
 def radar_state_table(
@@ -159,7 +160,6 @@ class OverlayDecision:
     reasons: list[str]
     too_late: bool
     btc_regime: bool
-    cooldown: bool
     desk_verdict: str
 
 
@@ -167,12 +167,11 @@ def overlay_decision(
     signal_row: dict[str, Any],
     *,
     radar: Optional[dict[str, Any]],
-    fills: Optional[list[dict[str, Any]]],
 ) -> OverlayDecision:
     """SKIP only when a *new* overlay required-gate fails (not HTF/1h/ADX)."""
-    chk = evaluate_native(signal_row, radar=radar, fills=fills)
+    chk = evaluate_native(signal_row, radar=radar)
     reasons: list[str] = []
-    flags = {"too_late": False, "btc_regime": False, "cooldown": False}
+    flags = {"too_late": False, "btc_regime": False}
     for item in chk.items:
         if item.id in flags and item.required and not item.passed:
             flags[item.id] = True
@@ -182,7 +181,6 @@ def overlay_decision(
         reasons=reasons,
         too_late=flags["too_late"],
         btc_regime=flags["btc_regime"],
-        cooldown=flags["cooldown"],
         desk_verdict=chk.verdict,
     )
 
@@ -191,33 +189,21 @@ def annotate_closed(
     rows: list[dict[str, Any]],
     tables: dict[str, pd.DataFrame],
 ) -> list[dict[str, Any]]:
-    """Walk closed trades in time; cooldown uses taken (non-skipped) fills only."""
+    """Apply too_late + btc_regime to closed trades. No loss-streak lockout."""
     ordered = sorted(rows, key=lambda r: (pd.Timestamp(r["timestamp"]), str(r.get("symbol") or "")))
-    taken: list[dict[str, Any]] = []
-    fill_id = 0
     out: list[dict[str, Any]] = []
     for i, r in enumerate(ordered, start=1):
         ts = pd.Timestamp(r["timestamp"])
         radar = radar_snapshot_at(tables, ts, [r.get("symbol") or "", "BTCUSDT"])
         sig = result_to_signal_row(r, signal_id=i)
-        dec = overlay_decision(sig, radar=radar, fills=list(taken))
+        dec = overlay_decision(sig, radar=radar)
         rec = dict(r)
         rec["overlay_skip"] = dec.skip
         rec["overlay_reasons"] = ",".join(dec.reasons)
         rec["desk_verdict"] = dec.desk_verdict
         rec["too_late"] = dec.too_late
         rec["btc_regime_skip"] = dec.btc_regime
-        rec["cooldown_skip"] = dec.cooldown
         out.append(rec)
-        if not dec.skip and str(r.get("outcome") or "").upper() in ("WIN", "LOSS"):
-            fill_id += 1
-            taken.append({
-                "id": fill_id,
-                "source": "manual",
-                "outcome": str(r["outcome"]).upper(),
-                "symbol": str(r.get("symbol") or "").upper(),
-                "updated_at": r.get("timestamp"),
-            })
     return out
 
 

@@ -181,7 +181,7 @@ because a notebook is interesting.
 | `too_late` → checklist SKIP | Radar late-stage already exists; make it hard on GO |
 | BTC 1D trend + optional vol% as `buys_allowed` | SPY analog. Overlay, not an 8th vote |
 | Measure `ALLOC_MODE=rotation` vs ranked | Universe RS / regime leverage |
-| 2-loss cooldown (operator, then maybe code) | Brief’s extra gate; last |
+| 2-loss cooldown (operator only — do not code) | 4h stream is not one EOD setup |
 
 **Never from this brief / notebooks**
 
@@ -199,7 +199,7 @@ Native checklist overlays (not `compute_signal`, not `.env`):
 
 - **`too_late`** — radar `is_late_stage` same-side chase → SKIP
 - **`btc_regime`** — BTC 1D RED blocks new BUY (`buys_allowed` false). GREY is WATCH. SELL is not gated. Missing BTC row is WATCH, not SKIP
-- **`cooldown`** — two consecutive *manual* losses **on that symbol**, then a **24h** pause. Paper ignored. Book-wide lockout is not used (it starved a 4h alert stream).
+- **Cooldown is not coded.** Book-wide two-loss skip locked 4h A/A+ (606→2). Leave skip-next as an operator habit, not a checklist gate.
 
 GUIDE section `kovaview` points here. Measurement:
 `docs/kovaview-overlay-backtest.md` (BTC/ETH/SOL 4h A/A+ OOS).
@@ -211,3 +211,4 @@ GUIDE section `kovaview` points here. Measurement:
 - `SCAN_TIMEFRAMES=4h` and `sig_min_adx=20` (one outstanding knob, then catalog)
 - Realized-vol percentile, SMA20 trail, ATR×2.5 paper stop, share sizing
 - Switching live `ALLOC_MODE` to rotation
+- Two-loss / 24h cooldown as a checklist SKIP

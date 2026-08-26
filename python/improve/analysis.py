@@ -178,10 +178,9 @@ def facts_payload(
     row: dict[str, Any],
     *,
     radar: Optional[dict[str, Any]] = None,
-    fills: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     flat = flatten_signal(row)
-    chk = evaluate_native(row, radar=radar, fills=fills)
+    chk = evaluate_native(row, radar=radar)
     levels = scanner_levels(flat)
     color = radar_color_for(_s(flat.get("symbol")), radar)
     return {
@@ -285,10 +284,9 @@ async def analyze_signal(
     timeout_sec: float = 20.0,
     base_url: str = "https://api.openai.com/v1",
     radar: Optional[dict[str, Any]] = None,
-    fills: Optional[list[dict[str, Any]]] = None,
     session: Optional[aiohttp.ClientSession] = None,
 ) -> dict[str, Any]:
-    facts = facts_payload(row, radar=radar, fills=fills)
+    facts = facts_payload(row, radar=radar)
     levels = [Level(**lv) for lv in facts["levels"]]
     chk_v = facts["checklist"]["verdict"]
     status, zone, take, counter = template_take(flatten_signal(row), chk_v, levels)

@@ -13,13 +13,7 @@ from improve.agents import (
     run_briefing,
     scanner_agent,
 )
-from improve.checklist import (
-    atr_pct_of,
-    consecutive_manual_losses,
-    evaluate_native,
-    flatten_signal,
-    radar_color_for,
-)
+from improve.checklist import atr_pct_of, evaluate_native, flatten_signal, radar_color_for
 
 
 def _row(**kw) -> dict:
@@ -169,80 +163,15 @@ def test_too_late_false_stays_go():
     ]}
     v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "GO"
+    assert all(i.id != "cooldown" for i in v.items)
 
 
-def test_two_manual_losses_cooldown_skips():
+def test_two_manual_losses_do_not_lock_book():
+    """Cooldown was removed — a 4h stream is not one EOD setup."""
     radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
-    fills = [
-        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-06-02T12:00:00+00:00"},
-        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-06-02T08:00:00+00:00"},
-    ]
-    v = evaluate_native(
-        _row(timestamp="2025-06-02T16:00:00+00:00"),
-        radar=radar,
-        fills=fills,
-    )
-    assert v.verdict == "SKIP"
-    assert any(i.id == "cooldown" and i.required and not i.passed for i in v.items)
-
-
-def test_cooldown_is_per_symbol():
-    radar = {"rows": [
-        {"symbol": "ETHUSDT", "color": "GREEN"},
-        {"symbol": "BTCUSDT", "color": "GREEN"},
-    ]}
-    fills = [
-        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-06-02T12:00:00+00:00"},
-        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-06-02T08:00:00+00:00"},
-    ]
-    v = evaluate_native(
-        _row(symbol="ETHUSDT", timestamp="2025-06-02T16:00:00+00:00"),
-        radar=radar,
-        fills=fills,
-    )
+    v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "GO"
-    assert any(i.id == "cooldown" and i.passed for i in v.items)
-
-
-def test_cooldown_expires_after_24h():
-    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
-    fills = [
-        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-06-01T00:00:00+00:00"},
-        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
-         "updated_at": "2025-05-31T20:00:00+00:00"},
-    ]
-    v = evaluate_native(
-        _row(timestamp="2025-06-02T08:00:00+00:00"),
-        radar=radar,
-        fills=fills,
-    )
-    assert v.verdict == "GO"
-    assert any(i.id == "cooldown" and i.passed for i in v.items)
-
-
-def test_paper_losses_do_not_trigger_cooldown():
-    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
-    fills = [
-        {"id": 2, "source": "paper", "outcome": "LOSS"},
-        {"id": 1, "source": "paper", "outcome": "LOSS"},
-    ]
-    v = evaluate_native(_row(), radar=radar, fills=fills)
-    assert v.verdict == "GO"
-    assert consecutive_manual_losses(fills) == 0
-
-
-def test_manual_win_clears_loss_streak():
-    fills = [
-        {"id": 3, "source": "manual", "outcome": "WIN"},
-        {"id": 2, "source": "manual", "outcome": "LOSS"},
-        {"id": 1, "source": "manual", "outcome": "LOSS"},
-    ]
-    assert consecutive_manual_losses(fills) == 0
+    assert all(i.id != "cooldown" for i in v.items)
 
 
 def test_book_agent_clusters():

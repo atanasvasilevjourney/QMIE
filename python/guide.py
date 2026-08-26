@@ -124,13 +124,13 @@ def trading_guide() -> dict[str, Any]:
                 "body": (
                     "KovaView is an EOD equity swing stack (GREEN/GREY/RED, SPY regime, "
                     "ATR×2.5, SMA20 trail). Do not port it into TEMA 9/90/199. The desk "
-                    "now applies three overlays on the native checklist: too_late, BTC "
-                    "buys_allowed, and a 24h per-symbol pause after two manual losses. "
+                    "now applies two overlays on the native checklist: too_late and BTC "
+                    "buys_allowed. Two-loss cooldown is not coded (it locked a 4h stream). "
                     "SCAN_TIMEFRAMES=4h is still the outstanding live knob. "
                     "Map: docs/kovaview-equity-map.md."
                 ),
                 "rules": [
-                    "too_late / BTC buys_allowed / 24h per-symbol cooldown are checklist gates",
+                    "too_late / BTC buys_allowed are checklist gates — no loss-streak cooldown",
                     "Do not add KAMA / EWMAC / z_52 as score votes",
                     "Printed stop stays 1.5×ATR; 1.25% equity is operator sizing",
                     "One outstanding knob: 4h-only, then ADX≥20 — not both",

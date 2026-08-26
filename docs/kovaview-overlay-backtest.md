@@ -13,13 +13,11 @@ python -m backtest.overlay_run \
   --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0
 ```
 
-Vision cache, not live `fapi`. Production `evaluate_native` items:
-`too_late`, `btc_regime`, `cooldown`.
+Vision cache, not live `fapi`. Production gates: `too_late`, `btc_regime`.
 
-**Cooldown after the first run:** a book-wide “skip while streak ≥ 2”
-starved the book (606 → 2). That is **not** KovaView “skip next setup”.
-Live cooldown is now **per-symbol** and only hard-SKIPs for **24h** after
-the last loss on that name. Paper fills still do not count.
+**Cooldown is removed.** A book-wide two-loss skip treated every 4h A/A+ as
+the next setup and locked the book (606 → 2). That does not match KovaView
+“skip the next setup.” It is not on the checklist. Operator habit only.
 
 ## Headline (OOS ≥ 2025-01-01, 4h A/A+, ADX≥20, ATR% 0.4–4.0)
 
@@ -28,47 +26,27 @@ Three names: BTC / ETH / SOL.
 | Book | N | Win | E[R] | PF | Notes |
 |---|---:|---:|---:|---:|---|
 | Raw closed alerts | 606 | 44.7% | +0.193 | 1.35 | Clustered 4h A/A+ |
-| + overlays | 431 | 60.3% | +0.609 | 2.53 | Skip 175: cooldown 166, BTC 5, too_late 4 |
+| + too_late + BTC regime | 597 | 44.6% | +0.188 | 1.34 | Skip 9: BTC 5, too_late 4 |
 | First alert / symbol / UTC day | 277 | 43.3% | +0.155 | 1.27 | Swing-style de-dupe |
-| + overlays | 226 | **50.4%** | **+0.345** | **1.70** | Skip 51: cooldown 46, BTC 3, too_late 2 |
+| + too_late + BTC regime | 272 | 43.0% | +0.147 | 1.26 | Skip 5: BTC 3, too_late 2 |
 
-One-per-day is the fair “few trades” view. Overlays lift win rate through
-the 48% goal and roughly double expectancy vs this slice’s raw book.
-They do **not** replace the outstanding `SCAN_TIMEFRAMES=4h` live knob
-(frozen 10-name 4h A/A+ is still the engine table).
+These two gates are rare here and slightly **hurt** this slice (they cut
+winners on BTC-RED days and one late-stage ETH short). They stay as
+chase/regime vetoes, not an expectancy engine. Do not treat this as a
+new frozen OOS.
 
-Skipped-reason counts can sum over 175 because a row may fail more than
-one gate.
-
-## Sample (first A/A+ per symbol-day, overlays kept)
-
-| When (UTC) | Symbol | Side | Out | R | Overlay |
-|---|---|---|---|---:|---|
-| 2025-01-05 20:00 | SOLUSDT | BUY | WIN | +1.67 | keep |
-| 2025-01-06 04:00 | BTCUSDT | BUY | WIN | +1.67 | keep |
-| 2025-01-07 00:00 | BTCUSDT | BUY | LOSS | −1.00 | keep |
-| 2025-02-06 08:00 | ETHUSDT | SELL | WIN | +1.67 | keep |
-| 2025-02-24 08:00 | SOLUSDT | SELL | WIN | +1.67 | keep |
-
-## Sample skips (same de-dupe)
+## Sample skips
 
 | When (UTC) | Symbol | Out | R | Why |
 |---|---|---|---:|---|
-| 2025-01-03 08:00 | BTCUSDT | WIN | +1.67 | `btc_regime` (BTC RED — costs a winner) |
+| 2025-01-03 08:00 | BTCUSDT | WIN | +1.67 | `btc_regime` |
 | 2025-01-04 08:00 | ETHUSDT | WIN | +1.67 | `btc_regime` |
 | 2025-01-04 16:00 | SOLUSDT | LOSS | −1.00 | `btc_regime` |
-| 2025-01-06 04:00 | ETHUSDT | LOSS | −1.00 | `cooldown` |
-| 2025-04-08 04:00 | ETHUSDT | WIN | +1.67 | `too_late` (costs a winner) |
+| 2025-04-08 04:00 | ETHUSDT | WIN | +1.67 | `too_late` |
 | 2025-08-13 04:00 | ETHUSDT | LOSS | −1.00 | `too_late` |
-
-`too_late` and `btc_regime` are rare here and **not** free — they each
-cut at least one winner. **Cooldown** is the workhorse (mostly clustered
-losers after two losses on that name).
 
 ## Verdict
 
-Overlays are **okay to keep on the checklist** with the 24h per-symbol
-pause. Do not promote them into `compute_signal`. Do not treat the
-clustered 60% WR as the frozen OOS (alert clustering inflates it).
-One-per-day +0.345R / 50.4% WR is the number to remember. Re-run after
-`SCAN_TIMEFRAMES=4h` is live before calling this a new frozen baseline.
+Keep `too_late` and BTC `buys_allowed` as discretionary overlays. Do **not**
+code a loss-streak cooldown into the 4h scanner. Re-run after
+`SCAN_TIMEFRAMES=4h` is live before calling any overlay a frozen baseline.

@@ -170,7 +170,6 @@ def checklist_agent(
     radar: Optional[dict[str, Any]],
     *,
     limit: int = 8,
-    fills: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     cards = []
     for row in signals:
@@ -181,7 +180,7 @@ def checklist_agent(
         is_bo = "DailyBreakout" in strat
         if not (is_aa or is_bo):
             continue
-        card = evaluate_native(row, radar=radar, fills=fills)
+        card = evaluate_native(row, radar=radar)
         cards.append(card.as_dict())
         if len(cards) >= limit:
             break
@@ -197,8 +196,8 @@ def checklist_agent(
         "mix": mix,
         "cards": cards,
         "note": (
-            "Native overlay (no MCP). too_late / BTC buys_allowed / 24h "
-            "per-symbol cooldown are checklist gates, not W_*. MCP /qmie-setup remains optional."
+            "Native overlay (no MCP). too_late / BTC buys_allowed are checklist "
+            "gates, not W_*. No loss-streak cooldown. MCP /qmie-setup remains optional."
         ),
     })
 
@@ -272,14 +271,13 @@ async def run_briefing(
     reviews_dir: Path = DEFAULT_REVIEWS,
     goals_path: Path = DEFAULT_GOALS,
     baseline_path: Path = DEFAULT_BASELINE,
-    fills: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     raw = await asyncio.gather(
         asyncio.to_thread(scanner_agent, signals),
         asyncio.to_thread(radar_agent, radar),
         asyncio.to_thread(book_agent, allocation),
-        asyncio.to_thread(checklist_agent, signals, radar, fills=fills),
+        asyncio.to_thread(checklist_agent, signals, radar),
         asyncio.to_thread(
             review_agent,
             reviews_dir=reviews_dir,
@@ -326,16 +324,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     async def _run() -> dict[str, Any]:
         db_path = args.db or _default_db()
         signals: list[dict[str, Any]] = []
-        fills: list[dict[str, Any]] = []
         if db_path and db_path.exists():
             from db import Database
             db = Database(f"sqlite+aiosqlite:///{db_path}")
             await db.init()
             signals = await db.recent_signals(limit=40)
-            fills = await db.recent_fills(limit=50)
         return await run_briefing(
             signals=signals, radar=None, allocation=None, db_path=db_path,
-            fills=fills,
         )
 
     print(json.dumps(asyncio.run(_run()), indent=2, default=str))

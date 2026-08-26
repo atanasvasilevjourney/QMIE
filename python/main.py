@@ -437,7 +437,6 @@ async def agents_briefing() -> dict[str, Any]:
     if state.db is None:
         raise HTTPException(503, "db_not_ready")
     signals = await state.db.recent_signals(limit=50)
-    fills = await state.db.recent_fills(limit=50)
     radar = None
     allocation = None
     if state.scheduler is not None:
@@ -450,7 +449,6 @@ async def agents_briefing() -> dict[str, Any]:
         radar=radar,
         allocation=allocation,
         db_path=Path(state.db.path),
-        fills=fills,
     )
 
 
@@ -460,7 +458,6 @@ async def agents_desk() -> dict[str, Any]:
     if state.db is None:
         raise HTTPException(503, "db_not_ready")
     signals = await state.db.recent_signals(limit=50)
-    fills = await state.db.recent_fills(limit=50)
     radar = None
     allocation = None
     if state.scheduler is not None:
@@ -468,7 +465,7 @@ async def agents_desk() -> dict[str, Any]:
             radar = state.scheduler.last_radar.as_dict()
         if state.scheduler.last_allocation is not None:
             allocation = state.scheduler.last_allocation.as_dict()
-    return run_desk(signals=signals, radar=radar, allocation=allocation, fills=fills)
+    return run_desk(signals=signals, radar=radar, allocation=allocation)
 
 
 @app.get("/agents/checklist/{signal_id}")
@@ -481,8 +478,7 @@ async def agents_checklist(signal_id: int) -> dict[str, Any]:
     radar = None
     if state.scheduler is not None and state.scheduler.last_radar is not None:
         radar = state.scheduler.last_radar.as_dict()
-    fills = await state.db.recent_fills(limit=50)
-    return evaluate_native(row, radar=radar, fills=fills).as_dict()
+    return evaluate_native(row, radar=radar).as_dict()
 
 
 @app.get("/guide")
@@ -585,7 +581,6 @@ async def agents_analysis(signal_id: int) -> dict[str, Any]:
     radar = None
     if state.scheduler is not None and state.scheduler.last_radar is not None:
         radar = state.scheduler.last_radar.as_dict()
-    fills = await state.db.recent_fills(limit=50)
     s = state.settings
     return await analyze_signal(
         row,
@@ -594,7 +589,6 @@ async def agents_analysis(signal_id: int) -> dict[str, Any]:
         timeout_sec=s.openai_timeout_sec if s else 20.0,
         base_url=s.openai_base_url if s else "https://api.openai.com/v1",
         radar=radar,
-        fills=fills,
     )
 
 
