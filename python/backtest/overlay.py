@@ -143,10 +143,12 @@ def result_to_signal_row(r: Any, *, signal_id: int) -> dict[str, Any]:
         "signal_price": r.get("entry") or r.get("signal_price"),
         "stop_loss": r.get("stop_loss"),
         "daily_trend": r.get("daily_trend") or "unknown",
+        "timestamp": r.get("timestamp"),
         "raw": json.dumps({
             "timeframe": r.get("timeframe"),
             "adx": r.get("adx_value") if r.get("adx_value") is not None else r.get("adx"),
             "atr_pct": r.get("atr_pct"),
+            "bar_time": str(r.get("timestamp")) if r.get("timestamp") is not None else None,
         }),
     }
 
@@ -213,6 +215,8 @@ def annotate_closed(
                 "id": fill_id,
                 "source": "manual",
                 "outcome": str(r["outcome"]).upper(),
+                "symbol": str(r.get("symbol") or "").upper(),
+                "updated_at": r.get("timestamp"),
             })
     return out
 

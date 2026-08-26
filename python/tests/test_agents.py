@@ -174,12 +174,55 @@ def test_too_late_false_stays_go():
 def test_two_manual_losses_cooldown_skips():
     radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
     fills = [
-        {"id": 2, "source": "manual", "outcome": "LOSS"},
-        {"id": 1, "source": "manual", "outcome": "LOSS"},
+        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-06-02T12:00:00+00:00"},
+        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-06-02T08:00:00+00:00"},
     ]
-    v = evaluate_native(_row(), radar=radar, fills=fills)
+    v = evaluate_native(
+        _row(timestamp="2025-06-02T16:00:00+00:00"),
+        radar=radar,
+        fills=fills,
+    )
     assert v.verdict == "SKIP"
     assert any(i.id == "cooldown" and i.required and not i.passed for i in v.items)
+
+
+def test_cooldown_is_per_symbol():
+    radar = {"rows": [
+        {"symbol": "ETHUSDT", "color": "GREEN"},
+        {"symbol": "BTCUSDT", "color": "GREEN"},
+    ]}
+    fills = [
+        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-06-02T12:00:00+00:00"},
+        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-06-02T08:00:00+00:00"},
+    ]
+    v = evaluate_native(
+        _row(symbol="ETHUSDT", timestamp="2025-06-02T16:00:00+00:00"),
+        radar=radar,
+        fills=fills,
+    )
+    assert v.verdict == "GO"
+    assert any(i.id == "cooldown" and i.passed for i in v.items)
+
+
+def test_cooldown_expires_after_24h():
+    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
+    fills = [
+        {"id": 2, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-06-01T00:00:00+00:00"},
+        {"id": 1, "source": "manual", "outcome": "LOSS", "symbol": "BTCUSDT",
+         "updated_at": "2025-05-31T20:00:00+00:00"},
+    ]
+    v = evaluate_native(
+        _row(timestamp="2025-06-02T08:00:00+00:00"),
+        radar=radar,
+        fills=fills,
+    )
+    assert v.verdict == "GO"
+    assert any(i.id == "cooldown" and i.passed for i in v.items)
 
 
 def test_paper_losses_do_not_trigger_cooldown():

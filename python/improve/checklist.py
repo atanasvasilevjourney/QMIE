@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 
@@ -77,15 +78,26 @@ def radar_color_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[st
     return c or None
 
 
-def consecutive_manual_losses(fills: Optional[list[dict[str, Any]]]) -> int:
-    """Newest-first streak of closed *manual* losses. Paper rows do not count."""
+def consecutive_manual_losses(
+    fills: Optional[list[dict[str, Any]]],
+    *,
+    symbol: Optional[str] = None,
+) -> int:
+    """Newest-first streak of closed *manual* losses. Paper rows do not count.
+
+    When ``symbol`` is set, only that ticker's fills count (book-wide
+    cooldown starves a 4h alert stream — skip-next is per name).
+    """
     if not fills:
         return 0
+    want = _s(symbol).upper()
     closed = [
         f for f in fills
         if _s(f.get("outcome")).upper() in ("WIN", "LOSS")
     ]
-    closed.sort(key=lambda f: int(f.get("id") or 0), reverse=True)
+    if want:
+        closed = [f for f in closed if _s(f.get("symbol")).upper() == want]
+    closed.sort(key=_fill_sort_key, reverse=True)
     streak = 0
     for f in closed:
         if _s(f.get("source")).lower() == "paper":
@@ -95,6 +107,59 @@ def consecutive_manual_losses(fills: Optional[list[dict[str, Any]]]) -> int:
             continue
         break
     return streak
+
+
+def _parse_ts(v: Any) -> Optional[datetime]:
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        dt = v
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    s = str(v).replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _fill_sort_key(f: dict[str, Any]) -> tuple[float, int]:
+    ts = _parse_ts(f.get("updated_at") or f.get("timestamp"))
+    epoch = ts.timestamp() if ts is not None else 0.0
+    try:
+        fid = int(f.get("id") or 0)
+    except (TypeError, ValueError):
+        fid = 0
+    return (epoch, fid)
+
+
+def last_manual_close_ts(
+    fills: Optional[list[dict[str, Any]]],
+    *,
+    symbol: Optional[str] = None,
+) -> Optional[datetime]:
+    if not fills:
+        return None
+    want = _s(symbol).upper()
+    best: Optional[datetime] = None
+    for f in fills:
+        if _s(f.get("outcome")).upper() not in ("WIN", "LOSS"):
+            continue
+        if _s(f.get("source")).lower() == "paper":
+            continue
+        if want and _s(f.get("symbol")).upper() != want:
+            continue
+        ts = _parse_ts(f.get("updated_at") or f.get("timestamp"))
+        if ts is not None and (best is None or ts > best):
+            best = ts
+    return best
+
+
+COOLDOWN_HOURS = 24.0
 
 
 @dataclass
@@ -306,20 +371,39 @@ def evaluate_native(
     else:
         items.append(CheckItem("too_late", True, False, "not late-stage"))
 
-    streak = consecutive_manual_losses(fills)
-    if streak >= 2:
+    streak = consecutive_manual_losses(fills, symbol=symbol)
+    last_loss_book = last_manual_close_ts(fills, symbol=symbol)
+    sig_ts = _parse_ts(flat.get("timestamp") or flat.get("bar_time"))
+    if streak >= 2 and last_loss_book is not None and sig_ts is not None:
+        hours = (sig_ts - last_loss_book).total_seconds() / 3600.0
+        if hours < COOLDOWN_HOURS:
+            items.append(CheckItem(
+                "cooldown",
+                False,
+                True,
+                f"{streak} consecutive {symbol} manual losses — "
+                f"{hours:.1f}h < {COOLDOWN_HOURS:.0f}h pause",
+            ))
+        else:
+            items.append(CheckItem(
+                "cooldown",
+                True,
+                False,
+                f"{symbol} streak {streak} but pause expired ({hours:.0f}h)",
+            ))
+    elif streak >= 2:
         items.append(CheckItem(
             "cooldown",
             False,
-            True,
-            f"{streak} consecutive manual losses — skip next setup",
+            False,
+            f"{streak} consecutive {symbol} losses — no clocks; confirm skip-next",
         ))
     else:
         items.append(CheckItem(
             "cooldown",
             True,
             False,
-            f"cooldown clear (manual loss streak {streak}; paper ignored)",
+            f"cooldown clear ({symbol} manual loss streak {streak}; paper ignored)",
         ))
 
     fr = _f(flat.get("funding_rate"))

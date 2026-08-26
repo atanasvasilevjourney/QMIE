@@ -107,9 +107,27 @@ def main(argv=None) -> int:
                 reason_counts[bit] = reason_counts.get(bit, 0) + 1
 
     print("\nBook (closed A/A+ 4h, frozen ATR/ADX gates, then overlays)")
-    print(f"  raw     n={raw_s['n']:4d}  win={raw_s['win_pct']}%  E[R]={raw_s['expectancy_r']}  PF={raw_s['pf']}")
+    print(f"  raw      n={raw_s['n']:4d}  win={raw_s['win_pct']}%  E[R]={raw_s['expectancy_r']}  PF={raw_s['pf']}")
     print(f"  overlays n={kept_s['n']:4d}  win={kept_s['win_pct']}%  E[R]={kept_s['expectancy_r']}  PF={kept_s['pf']}")
     print(f"  skipped {len(skipped)}  reasons {reason_counts or '{}'}")
+
+    adf = pd.DataFrame(annotated)
+    adf["timestamp"] = pd.to_datetime(adf["timestamp"], utc=True)
+    adf["day"] = adf["timestamp"].dt.floor("D")
+    first = adf.sort_values("timestamp").drop_duplicates(["symbol", "day"], keep="first")
+    first_recs = first.to_dict(orient="records")
+    d_raw = summarize(first_recs, kept_only=False)
+    d_ovl = summarize(first_recs, kept_only=True)
+    d_skip = [r for r in first_recs if r.get("overlay_skip")]
+    d_reasons: dict[str, int] = {}
+    for r in d_skip:
+        for bit in str(r.get("overlay_reasons") or "").split(","):
+            if bit:
+                d_reasons[bit] = d_reasons.get(bit, 0) + 1
+    print("\nOne A/A+ per symbol per UTC day (swing-style, fewer clustered 4h alerts)")
+    print(f"  raw      n={d_raw['n']:4d}  win={d_raw['win_pct']}%  E[R]={d_raw['expectancy_r']}  PF={d_raw['pf']}")
+    print(f"  overlays n={d_ovl['n']:4d}  win={d_ovl['win_pct']}%  E[R]={d_ovl['expectancy_r']}  PF={d_ovl['pf']}")
+    print(f"  skipped {len(d_skip)}  reasons {d_reasons or '{}'}")
 
     # Sample: first skips + first kept, time-ordered mix
     print(f"\nSample trades (up to {args.sample}, time order)")

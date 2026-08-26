@@ -197,8 +197,8 @@ def checklist_agent(
         "mix": mix,
         "cards": cards,
         "note": (
-            "Native overlay (no MCP). too_late / BTC buys_allowed / 2-loss "
-            "cooldown are checklist gates, not W_*. MCP /qmie-setup remains optional."
+            "Native overlay (no MCP). too_late / BTC buys_allowed / 24h "
+            "per-symbol cooldown are checklist gates, not W_*. MCP /qmie-setup remains optional."
         ),
     })
 
