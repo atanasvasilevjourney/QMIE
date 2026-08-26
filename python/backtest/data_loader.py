@@ -120,6 +120,35 @@ def load_klines(
     return result.loc[start_ts:end_ts]
 
 
+_MIN_BARS = 350
+
+
+def load_tf_ohlcv(
+    symbol: str,
+    tf: str,
+    start: date,
+    end: date,
+    cache_dir: Path = _DEFAULT_CACHE,
+) -> tuple[pd.DataFrame, str]:
+    """Load native klines. Daily with a short archive is 4h resampled to 1D.
+
+    Native Vision ``1d`` in this cache often starts mid-sample; 4h months
+    cover the frozen window. Crypto 24/7 so the resample matches exchange
+    daily OHLC. Returns (df, source) where source is ``native`` or ``4h->1D``.
+    """
+    tf_n = str(tf).lower()
+    df = load_klines(symbol, tf_n, start, end, cache_dir=cache_dir)
+    if tf_n == "1d" and len(df) < _MIN_BARS:
+        src = load_klines(symbol, "4h", start, end, cache_dir=cache_dir)
+        if len(src) >= _MIN_BARS:
+            logger.info(
+                "Resampling %s 4h → 1D (native 1d had %d bars)",
+                symbol, len(df),
+            )
+            return resample_ohlcv(src, "1D"), "4h->1D"
+    return df, "native"
+
+
 def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
     """
     Resample OHLCV DataFrame to a lower frequency.
