@@ -381,6 +381,27 @@ class TestDailyBreakoutInbound:
         assert sig.setup_type == "breakout"
         assert sig.reason == "trend_start_long"
 
+    def test_trend_start_maps_to_sell_1d(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "ETHUSDT",
+            "price": 3000.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+            "reason": "trend_start_short+coil_breakout_down",
+            "breakout": "DOWN",
+            "coil_high": 3120.0,
+            "side": "SELL",
+        })
+        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.side.value == "SELL"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "breakout"
+        assert sig.action == "sell"
+        assert sig.trend == "bearish"
+        assert sig.daily_trend == "bearish"
+        assert sig.stop_loss == 3120.0
+        assert sig.reason == "trend_start_short+coil_breakout_down"
+
     @pytest.mark.asyncio
     async def test_dispatch_inbound_persists_and_notifies(self):
         received: list = []

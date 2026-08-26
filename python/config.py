@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     radar_kline_limit:        int = 250
     radar_notify:             bool = False   # opt-in digests; /radar still fills
     radar_min_coverage_pct:   float = 50.0
-    # Persist + notify 1D GREEN flip / coil-UP as a breakout long (manual only)
+    # Persist + notify 1D GREEN/RED flip and coil-UP/DOWN as breakout setups (manual only)
     radar_dispatch_trend_start: bool = True
 
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─

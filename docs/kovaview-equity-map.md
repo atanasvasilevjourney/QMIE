@@ -85,7 +85,7 @@ out of scope in the KovaView brief. Do not add it here either.
 | Convergence / 7 votes | Seven weights summing to 100 (TMA, EMA199, RSI, ADX, HTF, S/R, vol) | No new votes. Ribbon / BOS / sweep stay cut |
 | ADX≥20, DI+>DI− for GREEN | Radar enter_adx=25 / exit_adx=20; live `sig_min_adx` still **0.0**; measurement protocol ADX≥20 | **Next knob after 4h is live** (`strategy/reviews/2026-08-25.md`) |
 | `too_late` hard block | Radar `is_late_stage` (GREEN ≥30d and ≥50% since flip) — chase-risk | **Not coded.** 4h slice cut winners. Operator habit only |
-| Coil / ATR compression | Radar tight GREY coils + coil-UP (`QMIE-DailyBreakout`, unranked) | Already a screen, not A/A+ |
+| Coil / ATR compression | Radar tight GREY coils + coil-UP/DOWN (`QMIE-DailyBreakout` long/short, unranked) | Already a screen, not A/A+ |
 | SPY SMA200 + RV≤75 | `daily_trend` (close vs EMA199); `ALLOC_MODE=rotation` BTC-weak → CASH/PAXG. Live default is **ranked** | Crypto analog is **BTC 1D vs EMA200 + vol%**, not SPY |
 | Universe RS | Ranked allocator by QMIE score, `cluster_max=1`; ARS `norm_score` is lookback ROC | Measure rotation vs ranked **after** 4h. Do not add z_mom / z_52 / EWMAC |
 | ATR×2.5 stop, 1.25% equity | Info-only SL **1.5×ATR** / TP **2.5×ATR**. Desk `quantity` always 0 | Operator math only. Changing SL to 2.5 ATR needs a **new** frozen OOS |

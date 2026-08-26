@@ -53,6 +53,24 @@ def test_discord_breakout_title():
     assert "Setup" in names
 
 
+def test_discord_breakout_short_title():
+    n = DiscordNotifier(webhook_url="https://example.invalid/webhook")
+    sig = TVSignal(
+        strategy="QMIE-DailyBreakout",
+        event=EventType.ENTRY,
+        symbol="ETHUSDT",
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.SELL,
+        signal_price=3000.0,
+        reason="trend_start_short",
+        setup_type="breakout",
+    )
+    embed = n._build_embed(sig, None)
+    assert "BREAKOUT SHORT" in embed["title"]
+    assert "BREAKOUT LONG" not in embed["title"]
+
+
 def test_telegram_includes_ranked_line():
     n = TelegramNotifier(bot_token="x", chat_id="1")
     text = n._format(

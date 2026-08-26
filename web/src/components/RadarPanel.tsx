@@ -25,8 +25,9 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
       </div>
       <p className="mt-3 font-mono text-xs leading-relaxed text-chrome/50">
-        Daily GREY→GREEN / coil-UP also dispatch as BREAKOUT LONG on the Daily breakout table (OPS).
-        Manual only — not an A/A+ grade. Confirm on the 1D visualizer before clicking.
+        Daily GREY→GREEN / coil-UP dispatch as BREAKOUT LONG; GREY→RED / coil-DOWN as
+        BREAKOUT SHORT on the Daily breakout table (OPS). Manual only — not an A/A+ grade.
+        Confirm on the 1D visualizer before clicking.
       </p>
     </PanelShell>
   )

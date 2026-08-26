@@ -51,7 +51,7 @@ These are **operator views over existing data**. They are not five new
 | **Momentum leaders** (top 5% 1m/3m RS) | Fast swing RS | `ALLOC_MODE=rotation` lookback ROC; 1h A/A+ as a *secondary* list | **Secondary.** 1h dilutes OOS — do not make it the live book. |
 | **Liquid leaders** ($100M+ ADV, ~100 names) | Cleaner tape, part-time universe | `SymbolUniverse` auto top-N by quote volume + static list | **Yes as universe**, already built. Do not rescan 11k perps. |
 | **IPO 2y wide** | Young names, first stage-2 | No IPO in USDT perps | **Reject** (or later: “listed < N days” — out of scope now) |
-| **Gaps and strong moves** (gap ≥5% or day ≥10%) | Theme ignition | **Daily breakout** GREY→GREEN / coil-UP + radar breakouts | **Yes as the specialist view.** Not an A/A+ grade. |
+| **Gaps and strong moves** (gap ≥5% or day ≥10%) | Theme ignition | **Daily breakout** GREY→GREEN/RED + coil-UP/DOWN + radar breakouts | **Yes as the specialist view.** Not an A/A+ grade. Long and short. |
 
 ## Workflow to steal (without changing the engine)
 

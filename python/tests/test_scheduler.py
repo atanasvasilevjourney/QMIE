@@ -237,6 +237,57 @@ class TestRadarPass:
         finally:
             scheduler._radar_lock.release()
 
+    async def test_dispatch_trend_starts_sends_long_and_short(self, fake_components):
+        client, universe, dispatcher = fake_components
+        dispatcher.dispatch_inbound = AsyncMock(return_value=True)
+        dispatcher.paper = None
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            radar_enabled=True,
+            radar_dispatch_trend_start=True,
+        )
+        snap = MagicMock()
+        snap.rows = [
+            {
+                "symbol": "ETHUSDT",
+                "color": "GREEN",
+                "days_in_state": 1,
+                "state_censored": False,
+                "breakout": "UP",
+                "coil_low": 2900.0,
+                "price": 3000.0,
+                "adx": 28.0,
+                "bar_time": "2026-08-16T00:00:00+00:00",
+            },
+            {
+                "symbol": "SOLUSDT",
+                "color": "RED",
+                "days_in_state": 1,
+                "state_censored": False,
+                "breakout": "DOWN",
+                "coil_high": 160.0,
+                "price": 145.0,
+                "adx": 30.0,
+                "bar_time": "2026-08-16T00:00:00+00:00",
+            },
+        ]
+        n = await scheduler._dispatch_trend_starts(snap)
+        assert n == 2
+        assert dispatcher.dispatch_inbound.await_count == 2
+        sides = {c.args[0].side.value for c in dispatcher.dispatch_inbound.await_args_list}
+        assert sides == {"BUY", "SELL"}
+        shorts = [
+            c.args[0]
+            for c in dispatcher.dispatch_inbound.await_args_list
+            if c.args[0].side.value == "SELL"
+        ]
+        assert shorts[0].stop_loss == 160.0
+        assert shorts[0].strategy == "QMIE-DailyBreakout"
+
 
 class TestDailyDfRouting:
     """Verify that scan_one passes the correct daily_df to compute_signal."""

@@ -83,6 +83,24 @@ def test_combo_or_dedupes_breakout_and_tema():
     assert set(out["rows"][0]["sources"]) == {"breakouts", "leaders"}
 
 
+def test_radar_down_breakout_is_short():
+    radar = {
+        "rows": [{"symbol": "SOLUSDT", "color": "RED", "adx": 32.0, "breakout": "DOWN"}],
+        "tight_coils": [],
+        "breakouts": [
+            {"symbol": "SOLUSDT", "price": 145.0, "adx": 32.0, "breakout": "DOWN"}
+        ],
+    }
+    out = build_screens(signals=[], radar=radar, view="breakouts")
+    assert out["count"] == 1
+    row = out["rows"][0]
+    assert row["symbol"] == "SOLUSDT"
+    assert row["side"] == "SELL"
+    assert row["breakout"] == "DOWN"
+    assert "breakouts" in row["sources"]
+    assert row["quantity"] == 0
+
+
 def test_coil_only_symbol_included():
     radar = {
         "rows": [{"symbol": "ADAUSDT", "color": "GREY", "adx": 18.0, "is_tight_coil": True, "coil_width_pct": 2.4}],

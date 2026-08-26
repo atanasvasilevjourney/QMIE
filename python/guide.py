@@ -12,7 +12,7 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.1",
+        "version": "1.2",
         "headline": "Signal-only desk. Paper fills every alert. You click live size yourself.",
         "sections": [
             {
@@ -29,7 +29,8 @@ def trading_guide() -> dict[str, Any]:
                 "id": "tema",
                 "title": "TEMA scanner (graded)",
                 "body": (
-                    "Take A / A+ only. Frozen OOS was strongest on 4h. Confirm side and "
+                    "Take A / A+ only, both BUY and SELL. Frozen OOS was strongest on 4h "
+                    "(SELL actually outnumbered BUY on that slice). Confirm side and "
                     "grade on quant_visualizer.pine. A higher-low (e.g. BTC 67–68k) is "
                     "an entry only if that closed bar actually graded A/A+ — the table "
                     "does not reconstruct chart patterns."
@@ -45,14 +46,15 @@ def trading_guide() -> dict[str, Any]:
                 "id": "breakout",
                 "title": "Daily breakout (unranked)",
                 "body": (
-                    "1D GREY→GREEN or coil-UP is a long trend-start, not an A/A+ grade. "
-                    "Checklist is usually WATCH. Confirm on the Daily visualizer. Paper "
-                    "still fills it so you can see how those alerts behave."
+                    "1D GREY→GREEN / coil-UP is a long trend-start; GREY→RED / coil-DOWN "
+                    "is a short. Neither is an A/A+ grade. Checklist is usually WATCH. "
+                    "Confirm on the Daily visualizer. Paper still fills both so you can "
+                    "see how those alerts behave."
                 ),
                 "rules": [
                     "Not the 4h A/A+ OOS path",
-                    "SL is coil_low when present",
-                    "Late-stage GREEN is not a fresh start",
+                    "Long SL is coil_low when present; short SL is coil_high",
+                    "Late-stage GREEN or RED is not a fresh start",
                 ],
             },
             {
@@ -68,7 +70,7 @@ def trading_guide() -> dict[str, Any]:
                     "Leaders: 4h TEMA A/A+ (frozen OOS edge)",
                     "Themes: 1D radar G/Y/R, fresh flips, tight coils",
                     "Liquid book: ranked slots (quantity still 0)",
-                    "Specialist: daily GREY→GREEN / coil-UP — not an A/A+ grade",
+                    "Specialist: daily GREY→GREEN/RED and coil-UP/DOWN — not an A/A+ grade",
                     "SCREENS tab: combo unique(symbol) list",
                     "Space next · Shift+Space flag · Enter opens CHARTS",
                 ],
