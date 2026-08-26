@@ -12,12 +12,18 @@ Endpoints:
   GET  /universe              the symbol set the next pass will scan
   POST /scan/once             admin: force an immediate scan pass on a TF
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
+  GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
   GET  /agents/analysis/{id}  OpenAI/template Take + ATR levels (on-demand)
+  GET  /guide                 trading guide (operator module)
+  GET  /paper                 paper book snapshot (never orders)
+  POST /paper/sync            backfill paper fills + mark SL/TP exits
+  GET  /charts/book           equity curve from closed fills (SVG JSON)
+  GET  /charts/price          closed klines + entry/exit/SL/TP marks
   POST /journal               log a manual fill against a signal id
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
@@ -57,6 +63,10 @@ from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
+from paper import PaperBook
+from guide import trading_guide
+from screens import VIEWS, build_screens
+from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -80,6 +90,7 @@ class AppState:
         self.dispatcher: SignalDispatcher | None = None
         self.scheduler: ScannerScheduler | None = None
         self.client = None
+        self.paper: PaperBook | None = None
         self.start_time: float = 0.0
 
 
@@ -157,7 +168,16 @@ async def lifespan(app: FastAPI):
         min_alert_grade=min_grade,
         tv_chart_prefix=s.tv_chart_prefix,
         max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
+        paper=None,
     )
+    paper = PaperBook(
+        db,
+        enabled=s.paper_enabled,
+        notional_usdt=s.paper_notional_usdt,
+        notify_exits=s.paper_notify_exits,
+    )
+    dispatcher.paper = paper
+    state.paper = paper
     state.dispatcher = dispatcher
 
     # Scheduler
@@ -212,6 +232,16 @@ async def lifespan(app: FastAPI):
     )
     await scheduler.start()
     state.scheduler = scheduler
+
+    if paper.enabled:
+        try:
+            synced = await paper.sync_all(client)
+            logger.info(
+                "Paper book sync: opened=%s closed=%s checked=%s (never orders)",
+                synced.get("opened"), synced.get("closed"), synced.get("checked"),
+            )
+        except Exception:
+            logger.exception("paper startup sync failed (non-fatal)")
 
     logger.info("QMIE Scanner ready — TFs=%s min_grade=%s notifiers=%s",
                 s.timeframes_list, min_grade.value,
@@ -284,6 +314,10 @@ async def health() -> dict[str, Any]:
         "openai_configured": openai_configured(
             state.settings.openai_api_key if state.settings else None
         ),
+        "paper": {
+            "enabled": bool(state.settings.paper_enabled) if state.settings else False,
+            "places_orders": False,
+        },
     }
 
 
@@ -356,6 +390,29 @@ async def get_radar() -> dict[str, Any]:
     return out
 
 
+@app.get("/screens")
+async def get_screens(view: str = "all") -> dict[str, Any]:
+    """Combo review list: TEMA A/A+ ∪ daily breakout ∪ coils ∪ book.
+
+    unique(symbol). Leaders view is 4h A/A+ only. Not a new score. Never orders.
+    """
+    if state.db is None or state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    v = (view or "all").strip().lower()
+    if v not in VIEWS:
+        raise HTTPException(400, f"view must be one of {list(VIEWS)}")
+    signals = await state.db.recent_signals(limit=200)
+    radar = None
+    if state.scheduler.last_radar is not None:
+        radar = state.scheduler.last_radar.as_dict()
+    allocation = None
+    if state.scheduler.last_allocation is not None:
+        allocation = state.scheduler.last_allocation.as_dict()
+    return build_screens(
+        signals=signals, radar=radar, allocation=allocation, view=v,
+    )
+
+
 @app.post("/radar/once")
 async def radar_once(notify: bool = False) -> dict[str, Any]:
     """Admin: force a daily Trend Radar pass (no wait for next 1D close).
@@ -422,6 +479,91 @@ async def agents_checklist(signal_id: int) -> dict[str, Any]:
     if state.scheduler is not None and state.scheduler.last_radar is not None:
         radar = state.scheduler.last_radar.as_dict()
     return evaluate_native(row, radar=radar).as_dict()
+
+
+@app.get("/guide")
+async def get_guide() -> dict[str, Any]:
+    """Operator trading guide. Not a score. Never orders."""
+    return trading_guide()
+
+
+@app.get("/paper")
+async def get_paper() -> dict[str, Any]:
+    if state.paper is None:
+        raise HTTPException(503, "paper_not_ready")
+    snap = await state.paper.snapshot()
+    snap["places_orders"] = False
+    return snap
+
+
+@app.get("/charts/book")
+async def get_charts_book(limit: int = 500) -> dict[str, Any]:
+    """Cumulative paper/manual PnL. Starting equity 0. Never orders."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    limit = max(1, min(2000, limit))
+    fills = await state.db.recent_fills(limit=limit)
+    payload = equity_payload(fills)
+    payload["limit"] = limit
+    return payload
+
+
+@app.get("/charts/price")
+async def get_charts_price(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 180,
+) -> dict[str, Any]:
+    """Closed-bar OHLC + trade marks for one symbol. SVG JSON. Never orders."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    sym = (symbol or "").upper().replace("-", "").replace(".P", "")
+    if not sym.endswith("USDT") or not sym[:-4].isalnum() or len(sym) < 7:
+        raise HTTPException(400, "symbol_must_be_usdt_perp")
+    tf = (timeframe or "1h").lower()
+    if tf not in ALLOWED_CHART_TFS:
+        raise HTTPException(400, "bad_timeframe")
+    lim = max(20, min(300, limit))
+    fills = await state.db.fills_for_symbol(sym, limit=200)
+    payload: dict[str, Any] = {
+        "symbol": sym,
+        "timeframe": tf,
+        "places_orders": False,
+        "bars": [],
+        "trades": trades_payload(fills),
+        "fills": len(fills),
+        "note": None,
+    }
+    if state.client is None:
+        payload["note"] = "client_not_ready"
+        return payload
+    try:
+        df = await state.client.fetch_klines(sym, tf, limit=lim)
+    except Exception as e:
+        logger.warning("charts klines failed %s %s: %s", sym, tf, e)
+        payload["note"] = "klines_unavailable"
+        return payload
+    if df is None or getattr(df, "empty", True):
+        payload["note"] = "no_klines"
+        return payload
+    payload["bars"] = bars_payload(df)
+    payload["trades"] = align_trades(payload["bars"], payload["trades"], chart_tf=tf)
+    return payload
+
+
+@app.post("/paper/sync")
+async def post_paper_sync() -> dict[str, Any]:
+    """Backfill paper fills for stored entries and mark SL/TP exits.
+
+    Never places orders. Uses closed klines only.
+    """
+    if state.paper is None:
+        raise HTTPException(503, "paper_not_ready")
+    if not state.paper.enabled:
+        raise HTTPException(400, "paper_disabled")
+    result = await state.paper.sync_all(state.client)
+    result["places_orders"] = False
+    return result
 
 
 @app.get("/agents/analysis/{signal_id}")

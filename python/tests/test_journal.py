@@ -8,9 +8,11 @@ import pytest
 from db import Database
 from journal import (
     JournalError,
+    cash_pnl,
     close_fill,
     create_fill,
     drift_message,
+    outcome_from_close,
     outcome_from_r,
     realized_r,
 )
@@ -28,6 +30,14 @@ def test_realized_r_sell_loss():
 
 def test_realized_r_none_without_stop():
     assert realized_r("BUY", 100.0, 110.0, None) is None
+
+
+def test_cash_pnl_buy():
+    assert cash_pnl("BUY", 100.0, 110.0, 0.5) == pytest.approx(5.0)
+
+
+def test_outcome_from_close_pnl_fallback():
+    assert outcome_from_close(r=None, pnl=1.0, has_exit=True) == "WIN"
 
 
 def test_outcome_from_r():

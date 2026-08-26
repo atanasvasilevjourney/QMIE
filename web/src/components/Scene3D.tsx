@@ -366,9 +366,11 @@ function UniverseFX() {
 export function Scene3D({
   radar,
   signalCount = 0,
+  allowZoom = false,
 }: {
   radar: RadarSnapshot | null
   signalCount?: number
+  allowZoom?: boolean
 }) {
   const green = radar?.green ?? 0
   const grey = radar?.grey ?? 0
@@ -382,7 +384,7 @@ export function Scene3D({
         <div className="absolute inset-0 z-10 grid place-items-center bg-void/80">
           <div className="text-center">
             <p className="font-display text-xs tracking-[0.4em] text-cyan animate-pulse">
-              BOOTING UNIVERSE
+              BOOTING ORBIS
             </p>
             <p className="mt-2 font-mono text-[10px] text-chrome/50">WebGL · bloom · orbit tokens</p>
           </div>
@@ -430,7 +432,9 @@ export function Scene3D({
 
         <OrbitControls
           enablePan={false}
-          enableZoom={false}
+          enableZoom={allowZoom}
+          minDistance={5.5}
+          maxDistance={14}
           minPolarAngle={Math.PI / 3.2}
           maxPolarAngle={Math.PI / 1.85}
           autoRotate
@@ -442,11 +446,11 @@ export function Scene3D({
       </Canvas>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
-        <div className="rounded-xl border border-cyan/20 bg-black/35 px-3 py-1.5 backdrop-blur-md">
-          <p className="font-display text-[10px] tracking-[0.35em] text-cyan uppercase">Universe</p>
-          <p className="font-mono text-[10px] text-chrome/60">memecoin orbit · RGG nebula</p>
+        <div className="card rounded-xl px-3 py-1.5 backdrop-blur-md">
+          <p className="font-display text-xs tracking-[0.35em] text-cyan uppercase">Orbis Universe</p>
+          <p className="font-mono text-xs text-chrome/60">memecoin orbit · RGG nebula</p>
         </div>
-        <div className="rounded-xl border border-magenta/25 bg-black/35 px-3 py-1.5 font-mono text-[10px] text-magenta backdrop-blur-md">
+        <div className="card rounded-xl px-3 py-1.5 font-mono text-[10px] text-magenta backdrop-blur-md">
           BLOOM · ACES · FOG
         </div>
       </div>
@@ -463,7 +467,7 @@ export function Scene3D({
                 : 'awaiting daily snapshot · decorative nebula active'}
             </p>
           </div>
-          <div className="flex gap-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] backdrop-blur-md">
+          <div className="card flex gap-3 rounded-xl px-3 py-2 font-mono text-[11px] backdrop-blur-md">
             <span className="text-lime">G {green}</span>
             <span className="text-chrome/70">Gy {grey}</span>
             <span className="text-magenta">R {red}</span>

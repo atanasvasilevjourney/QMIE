@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from backtest.data_loader import (
     _months_in_range,
     load_klines,
+    load_tf_ohlcv,
     resample_ohlcv,
 )
 
@@ -136,3 +137,55 @@ def test_load_klines_404_returns_empty(tmp_path):
         df = load_klines("BTCUSDT", "1h", date(2024, 1, 1), date(2024, 1, 31),
                          cache_dir=tmp_path)
     assert df.empty
+
+
+def test_load_tf_ohlcv_1d_resamples_short_native(tmp_path):
+    """Native 1d archive is often short; 4h months cover the frozen window."""
+    idx = pd.date_range("2024-01-01", periods=400, freq="4h", tz="UTC")
+    four = pd.DataFrame(
+        {
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.5,
+            "volume": 1000.0,
+        },
+        index=idx,
+    )
+
+    def fake_load(symbol, tf, start, end, cache_dir=None):
+        if tf == "1d":
+            return four.iloc[:10].copy()
+        if tf == "4h":
+            return four
+        raise AssertionError(tf)
+
+    with patch("backtest.data_loader.load_klines", side_effect=fake_load):
+        df, source = load_tf_ohlcv(
+            "BTCUSDT", "1d", date(2024, 1, 1), date(2024, 3, 1), cache_dir=tmp_path
+        )
+    assert source == "4h->1D"
+    assert len(df) >= 60
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+
+
+def test_overlay_gate_matches_1d_tf():
+    from argparse import Namespace
+
+    from backtest.overlay_run import _gate
+
+    idx = pd.date_range("2025-02-01", periods=3, freq="1D", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "grade": ["A", "A+", "B"],
+            "timeframe": ["1d", "1d", "1d"],
+            "atr_pct": [1.2, 1.1, 1.0],
+            "adx_value": [25.0, 22.0, 30.0],
+            "outcome": ["WIN", "LOSS", "WIN"],
+            "timestamp": idx,
+            "symbol": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        }
+    )
+    args = Namespace(tf="1d", min_atr_pct=0.4, max_atr_pct=4.0, min_adx=20.0, split="2025-01-01")
+    gated = _gate(df, args)
+    assert list(gated["grade"]) == ["A", "A+"]

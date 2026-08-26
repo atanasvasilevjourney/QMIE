@@ -8,11 +8,13 @@ export function JournalFlow({
   fills,
   stats,
   onDone,
+  onViewChart,
 }: {
   selected: SignalRow | null
   fills: JournalFill[]
   stats: JournalStats | null
   onDone: () => void
+  onViewChart?: (symbol: string, timeframe?: string) => void
 }) {
   const [fillPrice, setFillPrice] = useState('')
   const [size, setSize] = useState('0.01')
@@ -80,11 +82,11 @@ export function JournalFlow({
         subtitle={
           selected
             ? `Selected signal #${selected.id} ${selected.symbol} ${selected.side}/${selected.grade}`
-            : 'Select a signal on DESK to start'
+            : 'Select a signal on OPS (TEMA or Daily breakout DETAILS) to start'
         }
       >
         <ol className="mb-4 space-y-2 font-mono text-[11px] text-chrome/70">
-          <li>1. Pick an alert from Live Signals</li>
+          <li>1. Pick an alert from OPS strategy tables</li>
           <li>2. Enter your real fill price & size</li>
           <li>3. Optional exit → realized R (needs stop_loss on signal)</li>
           <li>4. Sync — compare vs OOS baseline later</li>
@@ -100,7 +102,7 @@ export function JournalFlow({
             type="button"
             disabled={!selected || busy}
             onClick={() => void createFill()}
-            className="rounded-xl border border-lime/40 bg-lime/10 px-4 py-2 font-display text-[11px] tracking-widest text-lime disabled:opacity-40"
+            className="rounded-2xl border border-lime/40 bg-lime/10 px-5 py-3 font-display text-xs tracking-widest text-lime disabled:opacity-40"
           >
             LOG FILL
           </button>
@@ -123,27 +125,41 @@ export function JournalFlow({
         </div>
         <div className="max-h-64 space-y-2 overflow-auto">
           {fills.map((f) => (
-            <div key={f.id} className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+            <div key={f.id} className="card rounded-2xl px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[11px] text-white">
-                  #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}
+                <span className="font-mono text-[11px] text-ink">
+                  #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}{' '}
+                  {f.source === 'paper' ? 'PAPER' : ''}
                 </span>
                 <span className="font-mono text-[10px] text-chrome/60">{f.outcome}</span>
               </div>
               <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-chrome/55">
                 <span>
                   {f.fill_price} → {f.exit_price ?? 'open'} · sz {f.size}
+                  {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
+                  {f.exit_reason ? ` · ${f.exit_reason}` : ''}
                 </span>
-                {!f.exit_price && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void closeFill(f.id)}
-                    className="text-magenta hover:underline"
-                  >
-                    CLOSE
-                  </button>
-                )}
+                <span className="flex gap-3">
+                  {onViewChart && f.symbol && (
+                    <button
+                      type="button"
+                      onClick={() => onViewChart(f.symbol as string, f.timeframe)}
+                      className="text-cyan hover:underline"
+                    >
+                      CHART
+                    </button>
+                  )}
+                  {!f.exit_price && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void closeFill(f.id)}
+                      className="text-magenta hover:underline"
+                    >
+                      CLOSE
+                    </button>
+                  )}
+                </span>
               </div>
             </div>
           ))}
@@ -175,7 +191,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan/50"
+            className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-4 py-3 font-mono text-sm text-ink outline-none focus:border-cyan/50"
       />
     </label>
   )
@@ -183,7 +199,7 @@ function Field({
 
 function Mini({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
+    <div className="card rounded-xl px-2 py-2">
       <div className="font-display text-[9px] tracking-widest text-chrome/50">{label}</div>
       <div className="font-mono text-lg text-cyan">{value}</div>
     </div>

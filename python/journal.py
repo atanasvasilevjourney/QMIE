@@ -42,12 +42,44 @@ def realized_r(
     return None
 
 
+def cash_pnl(
+    side: Optional[str],
+    fill: float,
+    exit_px: float,
+    size: float,
+) -> Optional[float]:
+    """Signed USDT PnL. Positive = in favour of the side. Not an order."""
+    if size <= 0:
+        return None
+    side_u = (side or "").upper()
+    if side_u == "BUY":
+        return round(size * (exit_px - fill), 4)
+    if side_u == "SELL":
+        return round(size * (fill - exit_px), 4)
+    return None
+
+
 def outcome_from_r(r: Optional[float], has_exit: bool) -> str:
     if not has_exit:
         return "OPEN"
     if r is None:
         return "OPEN"
     return "WIN" if r > 0 else "LOSS"
+
+
+def outcome_from_close(
+    *,
+    r: Optional[float],
+    pnl: Optional[float],
+    has_exit: bool,
+) -> str:
+    if not has_exit:
+        return "OPEN"
+    if r is not None:
+        return "WIN" if r > 0 else "LOSS"
+    if pnl is not None:
+        return "WIN" if pnl > 0 else "LOSS"
+    return "OPEN"
 
 
 def drift_message(
@@ -86,7 +118,11 @@ async def create_fill(db: Database, body: JournalCreate) -> dict[str, Any]:
         realized_r(sig.get("side"), body.fill_price, body.exit_price, sig.get("stop_loss"))
         if has_exit else None
     )
-    outcome = outcome_from_r(r, has_exit)
+    pnl = (
+        cash_pnl(sig.get("side"), body.fill_price, body.exit_price, body.size)
+        if has_exit else None
+    )
+    outcome = outcome_from_close(r=r, pnl=pnl, has_exit=has_exit)
     return await db.insert_fill(
         signal_id=body.signal_id,
         fill_price=body.fill_price,
@@ -95,6 +131,9 @@ async def create_fill(db: Database, body: JournalCreate) -> dict[str, Any]:
         notes=body.notes,
         realized_r=r,
         outcome=outcome,
+        pnl=pnl,
+        source="manual",
+        exit_reason="manual" if has_exit else None,
     )
 
 
@@ -108,11 +147,14 @@ async def close_fill(db: Database, fill_id: int, body: JournalClose) -> dict[str
     if sig is None:
         raise JournalError(404, "signal_not_found")
     r = realized_r(sig.get("side"), float(row["fill_price"]), body.exit_price, sig.get("stop_loss"))
+    pnl = cash_pnl(sig.get("side"), float(row["fill_price"]), body.exit_price, float(row["size"]))
     notes = body.notes if body.notes is not None else row.get("notes")
     return await db.update_fill_exit(
         fill_id,
         exit_price=body.exit_price,
         realized_r=r,
-        outcome=outcome_from_r(r, True),
+        outcome=outcome_from_close(r=r, pnl=pnl, has_exit=True),
         notes=notes,
+        pnl=pnl,
+        exit_reason=row.get("exit_reason") or "manual",
     )

@@ -99,6 +99,7 @@ def radar_agent(radar: Optional[dict[str, Any]]) -> dict[str, Any]:
             "breadth_pct": {"green": 0.0, "grey": 0.0, "red": 0.0},
             "bias": "UNKNOWN",
             "btc_color": None,
+            "buys_allowed": None,
             "fresh_green": 0, "fresh_red": 0,
             "breakouts": 0, "tight_coils": 0,
         })
@@ -121,6 +122,7 @@ def radar_agent(radar: Optional[dict[str, Any]]) -> dict[str, Any]:
         if str(row.get("symbol") or "").upper() == "BTCUSDT":
             btc = row.get("color")
             break
+    btc_u = str(btc).upper() if btc is not None else None
     return _agent_ok("radar", {
         "headline": f"breadth {bias} · G{g} Y{y} R{r}",
         "status": radar.get("status") or radar.get("note"),
@@ -129,6 +131,7 @@ def radar_agent(radar: Optional[dict[str, Any]]) -> dict[str, Any]:
         "breadth_pct": {"green": pct(g), "grey": pct(y), "red": pct(r)},
         "bias": bias,
         "btc_color": btc,
+        "buys_allowed": None if btc_u is None else (btc_u != "RED"),
         "fresh_green": len(radar.get("fresh_green") or []),
         "fresh_red": len(radar.get("fresh_red") or []),
         "breakouts": len(radar.get("breakouts") or []),
@@ -192,7 +195,10 @@ def checklist_agent(
         "count": len(cards),
         "mix": mix,
         "cards": cards,
-        "note": "Native overlay (no MCP). MCP /qmie-setup remains optional confirm/skip.",
+        "note": (
+            "Native overlay (no MCP). No too_late / BTC-RED / cooldown skips "
+            "(they cut winners on the 4h slice). MCP /qmie-setup remains optional."
+        ),
     })
 
 

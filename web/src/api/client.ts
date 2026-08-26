@@ -9,6 +9,11 @@ import type {
   RadarSnapshot,
   SignalRow,
   AnalysisCard,
+  TradingGuide,
+  PaperSnapshot,
+  ChartBook,
+  ChartPrice,
+  ScreenBook,
 } from '../types'
 
 const BASES: string[] = [
@@ -96,4 +101,17 @@ export const api = {
   desk: () => getJson<DeskGraph>('/agents/desk'),
   checklist: (signalId: number) => getJson<ChecklistCard>(`/agents/checklist/${signalId}`),
   analysis: (signalId: number) => getJson<AnalysisCard>(`/agents/analysis/${signalId}`),
+  guide: () => getJson<TradingGuide>('/guide'),
+  paper: () => getJson<PaperSnapshot>('/paper'),
+  paperSync: () =>
+    sendJson<{ opened?: number; closed?: number; checked?: number; places_orders?: boolean }>(
+      '/paper/sync',
+      'POST',
+    ),
+  chartsBook: (limit = 500) => getJson<ChartBook>(`/charts/book?limit=${limit}`),
+  chartsPrice: (symbol: string, timeframe = '1h', limit = 180) =>
+    getJson<ChartPrice>(
+      `/charts/price?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
+    ),
+  screens: (view = 'all') => getJson<ScreenBook>(`/screens?view=${encodeURIComponent(view)}`),
 }

@@ -6,40 +6,48 @@ const STEPS = [
     body: 'Confirm ONLINE + universe count. Radar warms on boot; force RADAR ONCE if empty.',
   },
   {
-    title: 'Read Trend Radar',
-    body: 'RGG map is context. Fresh GREEN or coil-UP on the daily close is a BREAKOUT LONG / trend-start candidate.',
+    title: 'Land on Orbis',
+    body: 'ORBIT is the landing page (3D universe). OPS is radar + separate TEMA / daily-breakout / EXIT tables.',
   },
   {
-    title: 'Wait for A/A+ or daily breakout',
-    body: 'Live Signals: graded 1H/4H A/A+ or 1D BREAKOUT. Open the TradingView deep-link (visualizer on Daily for trend-start).',
+    title: 'Read the trading guide',
+    body: 'GUIDE tab: TEMA vs daily breakout, paper fills, EXIT + PnL. Signal-only — you click live size.',
+  },
+  {
+    title: 'Wait for TEMA A/A+ or daily breakout',
+    body: 'OPS tables are split: TEMA scanner vs 1D BREAKOUT vs EXIT. Open DETAILS, then the visualizer.',
+  },
+  {
+    title: 'Paper book',
+    body: 'PAPER SYNC auto-fills every ENTRY at signal_price ($1000 notional). EXIT rows show close + PnL. Never an order.',
+  },
+  {
+    title: 'Combo screens',
+    body: 'SCREENS tab unions 4h A/A+, breakouts, coils, and the book into unique symbols. Space / Shift+Space. Not a new score.',
   },
   {
     title: 'Confirm on chart',
-    body: 'Pine visualizer should match side/grade. Optional MCP setup review on desktop Cursor.',
+    body: 'CHARTS tab: SVG equity + closed candles with entry/exit and SL/TP. Pine visualizer should still match side/grade.',
   },
   {
-    title: 'Agent checklist',
-    body: 'AGENTS tab: briefing specialists plus desk DAG (start→data→strategy→risk→portfolio). suggest_long is not an order (quantity 0). ANALYZE is on-demand Take. Confirm on the visualizer, then click yourself.',
-  },
-  {
-    title: 'Manual fill',
-    body: 'Execute yourself. Log fill + exit in JOURNAL so live edge can be measured.',
+    title: 'Manual live fill',
+    body: 'If you click it live, log the real fill in JOURNAL (not the paper row). Need 30 closed before retune talk.',
   },
 ]
 
 export function FlowsPanel() {
   return (
     <PanelShell title="Operator Flows" subtitle="best-path manual trading loop · no broker">
-      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         {STEPS.map((s, i) => (
           <div
             key={s.title}
-            className="relative rounded-2xl border border-cyan/20 bg-gradient-to-b from-cyan/10 to-transparent p-3"
+            className="relative rounded-2xl border border-cyan/20 bg-gradient-to-b from-cyan/10 to-transparent p-4"
           >
             <div className="font-display text-[10px] tracking-[0.3em] text-magenta">
               STEP 0{i + 1}
             </div>
-            <h3 className="mt-2 font-display text-xs tracking-wide text-white">{s.title}</h3>
+            <h3 className="mt-2 font-display text-xs tracking-wide text-ink">{s.title}</h3>
             <p className="mt-2 font-mono text-[10px] leading-relaxed text-chrome/65">{s.body}</p>
             {i < STEPS.length - 1 && (
               <div className="pointer-events-none absolute -right-2 top-1/2 hidden h-px w-4 bg-cyan/40 md:block" />
@@ -58,7 +66,7 @@ export function FlowsPanel() {
 
 function Tip({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-magenta/20 bg-magenta/5 p-3">
+    <div className="rounded-2xl border border-magenta/20 bg-magenta/5 p-4">
       <div className="font-display text-[10px] tracking-widest text-magenta uppercase">{title}</div>
       <p className="mt-2 font-mono text-[11px] text-chrome/70">{body}</p>
     </div>

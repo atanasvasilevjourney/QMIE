@@ -59,15 +59,22 @@ def atr_pct_of(flat: dict[str, Any]) -> Optional[float]:
     return None
 
 
-def radar_color_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[str]:
+def radar_row_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     if not radar:
         return None
     want = _s(symbol).upper()
     for row in radar.get("rows") or []:
-        if _s(row.get("symbol")).upper() == want:
-            c = _s(row.get("color")).upper()
-            return c or None
+        if isinstance(row, dict) and _s(row.get("symbol")).upper() == want:
+            return row
     return None
+
+
+def radar_color_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[str]:
+    row = radar_row_for(symbol, radar)
+    if not row:
+        return None
+    c = _s(row.get("color")).upper()
+    return c or None
 
 
 @dataclass
@@ -111,7 +118,11 @@ def evaluate_native(
     *,
     radar: Optional[dict[str, Any]] = None,
 ) -> NativeChecklist:
-    """Checklist using persisted QMIE fields + optional radar snapshot."""
+    """Checklist using persisted QMIE fields + optional radar snapshot.
+
+    KovaView skip gates (too_late, btc_regime, cooldown) are not coded.
+    A 4h A/A+ slice showed too_late and BTC-RED skips cut winners.
+    """
     flat = flatten_signal(row)
     symbol = _s(flat.get("symbol")).upper() or "?"
     side = _s(flat.get("side")).upper()

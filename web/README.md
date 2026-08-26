@@ -14,6 +14,8 @@ npm run dev
 
 Open `http://localhost:5173`. API calls go to `/qmie/*` and are proxied to `http://127.0.0.1:8080`.
 
+Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light mode is a white desk chrome; the Orbis WebGL canvas stays dark.
+
 ## Scripts
 
 - `npm run dev` — desk UI with HMR
@@ -25,9 +27,13 @@ Open `http://localhost:5173`. API calls go to `/qmie/*` and are proxied to `http
 
 | Tab | Purpose |
 |---|---|
-| DESK | 3D radar core + Trend Radar + Live Signals |
+| ORBIT | Landing page: Orbis Universe 3D (RGG nebula + orbit tokens) |
+| OPS | Trend Radar + TEMA / Daily breakout / Exit tables |
+| CHARTS | SVG equity curve + closed candles with entry/exit/SL/TP |
+| GUIDE | Trading guide (paper fills, SL/TP exits, PnL) |
+| AGENTS | Briefing + desk DAG (quantity always 0) |
 | BOOK | Ranked allocation weights (suggested only) |
 | JOURNAL | Manual fill / exit logging |
-| FLOWS | Operator path (radar → A/A+ → chart → fill) |
+| FLOWS | Operator path (orbit → ops tables → chart → fill) |
 
 Signal-only: this UI never places orders.

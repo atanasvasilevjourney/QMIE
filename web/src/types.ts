@@ -58,6 +58,11 @@ export type SignalRow = {
   strategy?: string
   reason?: string
   setup_type?: string
+  event?: string
+  pnl?: number | null
+  realized_r?: number | null
+  fill_id?: number | null
+  entry_price?: number | null
 }
 
 /** Flat slot shape from AllocationPlan.as_dict() — not nested under `result`. */
@@ -101,6 +106,7 @@ export type Health = {
   }
   data_source?: string
   openai_configured?: boolean
+  paper?: { enabled?: boolean; places_orders?: boolean }
 }
 
 export type JournalFill = {
@@ -115,6 +121,10 @@ export type JournalFill = {
   symbol?: string
   side?: string
   grade?: string
+  pnl?: number | null
+  source?: string
+  exit_reason?: string | null
+  timeframe?: string
 }
 
 export type JournalStats = {
@@ -124,9 +134,86 @@ export type JournalStats = {
   losses: number
   win_pct: number
   avg_realized_r?: number | null
+  sum_pnl?: number | null
 }
 
-export type DeskTab = 'desk' | 'book' | 'journal' | 'flows' | 'agents'
+export type DeskTab =
+  | 'orbit'
+  | 'ops'
+  | 'screens'
+  | 'charts'
+  | 'book'
+  | 'journal'
+  | 'flows'
+  | 'agents'
+  | 'guide'
+
+export type ChartEquityPoint = {
+  t: number | null
+  equity: number
+  pnl: number
+  n: number
+  fill_id?: number
+  symbol?: string
+  outcome?: string
+  source?: string
+}
+
+export type ChartBook = {
+  places_orders: boolean
+  starting_eq: number
+  fills: number
+  closed: number
+  open: number
+  sum_pnl: number
+  points: ChartEquityPoint[]
+  symbols: { symbol: string; fills: number }[]
+  timeframes?: { timeframe: string; fills: number }[]
+}
+
+export type ChartBar = {
+  t: number
+  o: number
+  h: number
+  l: number
+  c: number
+  v: number
+}
+
+export type ChartMark = {
+  t: number
+  price: number
+  i?: number
+}
+
+export type ChartTrade = {
+  fill_id: number
+  symbol?: string
+  side: string
+  grade?: string | null
+  source?: string
+  outcome?: string
+  size?: number
+  timeframe?: string | null
+  aligned?: boolean
+  on_ohlc?: boolean
+  entry: ChartMark
+  exit?: { t: number; price: number; i?: number; on_ohlc?: boolean; pnl?: number | null; reason?: string | null } | null
+  stop_loss?: number | null
+  take_profit?: number | null
+}
+
+export type ChartPrice = {
+  symbol: string
+  timeframe: string
+  places_orders: boolean
+  bars: ChartBar[]
+  trades: ChartTrade[]
+  fills: number
+  note?: string | null
+}
+
+export type DeskTheme = 'dark' | 'light'
 
 export type ChecklistItem = {
   id: string
@@ -172,6 +259,7 @@ export type AgentBriefing = {
     radar?: AgentBlock & {
       bias?: string
       btc_color?: string | null
+      buys_allowed?: boolean | null
       green?: number
       grey?: number
       red?: number
@@ -242,4 +330,70 @@ export type AnalysisCard = {
   levels: AnalysisLevel[]
   places_orders?: boolean
   note?: string
+}
+
+export type GuideSection = {
+  id: string
+  title: string
+  body: string
+  rules?: string[]
+}
+
+export type TradingGuide = {
+  title: string
+  places_orders: boolean
+  version?: string
+  headline?: string
+  sections: GuideSection[]
+}
+
+export type PaperSnapshot = {
+  enabled: boolean
+  notional_usdt: number
+  places_orders: boolean
+  fills: number
+  open: number
+  closed: number
+  closed_pnl: number
+}
+
+export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'book'
+
+export type ScreenRow = {
+  symbol: string
+  cluster?: string
+  sources: string[]
+  side?: string | null
+  grade?: string | null
+  score?: number | null
+  timeframe?: string | null
+  signal_id?: number | null
+  signal_price?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+  atr_pct?: number | null
+  adx?: number | null
+  radar_color?: string | null
+  coil_width_pct?: number | null
+  pct_since_flip?: number | null
+  is_tight_coil?: boolean
+  is_fresh_flip?: boolean
+  breakout?: string | null
+  weight_pct?: number | null
+  book_rank?: number | null
+  quantity: number
+  places_orders: boolean
+}
+
+export type ScreenBook = {
+  places_orders: boolean
+  quantity: number
+  view: ScreenView | string
+  views: string[]
+  count: number
+  union_count: number
+  modal_cluster?: string | null
+  source_counts?: Record<string, number>
+  note?: string
+  rows: ScreenRow[]
 }

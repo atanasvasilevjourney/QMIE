@@ -65,6 +65,8 @@ qmie/
 │   ├── architecture.md               How things fit + scaling cliffs
 │   ├── streaming-data-sources.md     Binance vs Hyperliquid vs OKX (data only)
 │   ├── development-status.md         Completeness score + sprint plan
+│   ├── deepview-screening-map.md     Equities Deep View → QMIE views
+│   ├── kovaview-equity-map.md        KovaView EOD swing → overlays only
 │   └── tradingview-mcp.md            Cursor TradingView MCP (shadow stdio)
 ├── README.md
 └── REVIEW.md                         Audit findings (partially stale; see status doc)
@@ -132,10 +134,17 @@ pytest tests/test_signal_engine.py::TestComputeSignal::test_clear_uptrend_yields
    `test_cut_components_not_in_score`.
 
 8. **TradingView MCP is not the scanner.** `.cursor/mcp.json` launches
-   atilaahmettaner/tradingview-mcp (`uvx`, shadow stdio). Use it for
-   live quotes and the ruled overlay (`python -m improve.setup_review`,
-   `/qmie-setup`). Do not retune `W_*` or Pine from it. QMIE signal
-   backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
+ atilaahmettaner/tradingview-mcp (`uvx`, shadow stdio). Use it for
+ live quotes and the ruled overlay (`python -m improve.setup_review`,
+ `/qmie-setup`). Do not retune `W_*` or Pine from it. QMIE signal
+ backtests stay `python -m backtest.run`. See `docs/tradingview-mcp.md`.
+
+9. **KovaView / TQQQ / KAMA-DF notebooks are not a live-engine upgrade.**
+ Equities EOD swing (GREEN/GREY/RED, SPY SMA200, ATR×2.5, SMA20 trail)
+ maps to overlays in `docs/kovaview-equity-map.md`. Do not add KAMA or
+ EWMAC as score votes. Do not Optuna per symbol. Do not import TQQQ
+ EMA periods. Outstanding knob remains `SCAN_TIMEFRAMES=4h`, then
+ `sig_min_adx` 0→20 — one variable.
 
 9. **OpenAI analysis is overlay.** `GET /agents/analysis/{id}` may call
    OpenAI via aiohttp (`/v1/chat/completions`). Do not add the `openai`

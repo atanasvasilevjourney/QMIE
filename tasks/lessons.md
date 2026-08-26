@@ -52,3 +52,11 @@ score votes (~128) before a frozen OOS write-up existed.
 **Rule**: Keep-or-cut means cut if they have not helped OOS. Restore the
 original 7-component engine (weights sum 100) and matching Pine. Do not
 leave display-only ribbon plots that imply they still score.
+
+### L009 — Overlay skip gates that cut winners stay off
+**Mistake**: Ported KovaView `too_late` and BTC-RED `buys_allowed` onto
+the 4h A/A+ checklist. On BTC/ETH/SOL OOS they skipped 5–9 trades and
+cut winners (BTC-RED days, late-stage ETH short). Expectancy fell.
+**Rule**: Do not SKIP A/A+ because a borrowed EOD equity gate fired. If
+a post-filter takes winners off the book, take the gate off. Operator
+habit only until a new frozen OOS says otherwise. Do not retune `W_*`.

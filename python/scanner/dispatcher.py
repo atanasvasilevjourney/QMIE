@@ -95,6 +95,7 @@ class SignalDispatcher:
         min_alert_grade: Grade = Grade.A,
         tv_chart_prefix: str = "BINANCE",
         max_signals_per_symbol_per_day: int = 4,
+        paper: object | None = None,
     ):
         self.db = db
         self.notifiers = notifiers
@@ -102,6 +103,7 @@ class SignalDispatcher:
         self.min_alert_grade = min_alert_grade
         self.tv_prefix = tv_chart_prefix
         self.max_per_day = max_signals_per_symbol_per_day
+        self.paper = paper
         # (utc_date_iso, symbol) → count of alerts already dispatched that day
         self._day_counts: dict[tuple[str, str], int] = defaultdict(int)
 
@@ -166,10 +168,12 @@ class SignalDispatcher:
         )
 
         # Persist (idempotent by idempotency_key)
+        sig_id = 0
         try:
-            await self.db.insert_signal(sig)
+            sig_id = await self.db.insert_signal(sig)
         except Exception:
             logger.exception("DB insert_signal failed (non-fatal)")
+        await self._maybe_paper(sig, sig_id)
 
         chart_url = tv_chart_url(result.symbol, result.timeframe, self.tv_prefix)
         # Stash deep link inside metadata for notifiers that want it.
@@ -208,10 +212,12 @@ class SignalDispatcher:
         """
         if await self.idem.seen_or_mark(sig.idempotency_key):
             return False
+        sig_id = 0
         try:
-            await self.db.insert_signal(sig)
+            sig_id = await self.db.insert_signal(sig)
         except Exception:
             logger.exception("DB insert_signal failed (non-fatal)")
+        await self._maybe_paper(sig, sig_id)
 
         tf = sig.timeframe or "1d"
         chart_url = tv_chart_url(sig.symbol, tf, self.tv_prefix)
@@ -228,3 +234,14 @@ class SignalDispatcher:
             sig.strategy, sig.reason,
         )
         return True
+
+    async def _maybe_paper(self, sig: TVSignal, signal_id: int) -> None:
+        paper = self.paper
+        if paper is None or not signal_id:
+            return
+        if sig.event in (EventType.EXIT, EventType.CLOSE):
+            return
+        try:
+            await paper.open_entry(signal_id)  # type: ignore[attr-defined]
+        except Exception:
+            logger.exception("paper open failed (non-fatal)")
