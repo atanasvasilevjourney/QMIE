@@ -96,3 +96,6 @@ does not save it (same 42-trade ADX book, E[R] −0.111).
 
 **Do not add `1d` to `SCAN_TIMEFRAMES`.** Radar already runs daily.
 Outstanding knob remains `SCAN_TIMEFRAMES=4h`.
+
+Paper $1000 / $100 notional replay of the 4h book: `docs/cash-sim-4h.md`
+(`python -m backtest.cash_sim`). Not an order.
