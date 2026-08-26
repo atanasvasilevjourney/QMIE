@@ -30,3 +30,34 @@ BTC/ETH/SOL only (606 clustered alerts): FIFO **$1,239** (+$239); one-per-symbol
 
 A $100 *stop* would need ~$2,700 notional per trade. QMIE does not size that
 leverage. Do not treat this as live edge until 30 closed manual fills.
+
+## 25x isolated, max 3 open, best score fills
+
+`$100` is **isolated margin**. 25x → **$2,500 notional** per fill. At most
+**3** names open. A 4th alert is skipped until one of the 3 closes. At each
+4h bar, free slots fill with the **highest QMIE score** (A+ before A).
+One open per symbol. Isolated loss is capped at the $100 margin (a 1R stop
+is ~$92; ATR at the top of the 4.0% band liquidates the slot).
+
+```bash
+cd python
+python -m backtest.cash_sim --start 2025-01-01 --cash 1000 --stake 100 \
+  --leverage 25 --max-slots 3 --rank-score
+```
+
+| Policy | Taken | Liq | Final | PnL | Max DD | Min equity |
+|---|---:|---:|---:|---:|---:|---:|
+| One per symbol, best score, max 3 | 373 | 87 | **$5,691** | **+$4,691** | −$1,190 | $187 |
+| First / symbol / day, then same cap | 355 | 82 | **$5,935** | **+$4,935** | −$1,404 | — |
+| FIFO, allow 3 of the same name | 14 | 10 | **$5** | **−$995** | −$995 | blown |
+
+Same-name stacking at 25x **wipes the $1000**. The surviving book is 3
+different names, score-ranked. Path is violent: 2025-01 **−$813**, 2025-11
+**+$1,604**, 2026-07 **−$1,074**. Win rate on taken fills is **41%** (book
+is 49%) because the slot cap skips most alerts. 87 / 220 losses are
+isolated liquidations.
+
+Calendar on one-per-symbol: **2025 +$3,267** (241 fills), **2026 through 29 Jul +$1,424** (132 fills).
+
+QMIE still does not send 25x to a venue. Fees and funding are omitted.
+This is not a frozen OOS and not a reason to retune `W_*`.
