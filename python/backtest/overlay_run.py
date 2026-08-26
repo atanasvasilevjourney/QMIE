@@ -81,7 +81,7 @@ def _print_grade_table(label: str, subset: pd.DataFrame) -> None:
     if closed.empty:
         print("  (no closed trades)")
         return
-    print(f"  {'Grade':<6} {'N':>5} {'Win':>7} {'E[R]':>7} {'PF':>6} {'bars':>6}")
+    print(f"  {'Grade':<6} {'N':>5} {'Win':>7} {'E[R]':>7} {'PF':>6} {'bars':>6} {'max':>5}")
     for g in ("A+", "A", "B", "C"):
         part = closed[closed["grade"] == g]
         if part.empty:
@@ -89,20 +89,24 @@ def _print_grade_table(label: str, subset: pd.DataFrame) -> None:
         recs = part.to_dict(orient="records")
         s = summarize(recs, kept_only=False)
         bars = part["bars_to_outcome"].mean() if "bars_to_outcome" in part else float("nan")
+        mx = part["score"].max() if "score" in part else float("nan")
         print(
             f"  {g:<6} {s['n']:5d} {s['win_pct']:6.1f}% "
             f"{s['expectancy_r']:7.3f} {s['pf'] if s['pf'] is not None else float('nan'):6.2f} "
-            f"{bars:6.1f}"
+            f"{bars:6.1f} {mx:5.0f}"
         )
     aa = closed[closed["grade"].isin(["A", "A+"])]
     if not aa.empty:
         s = summarize(aa.to_dict(orient="records"), kept_only=False)
         bars = aa["bars_to_outcome"].mean() if "bars_to_outcome" in aa else float("nan")
+        mx = aa["score"].max() if "score" in aa else float("nan")
         print(
             f"  {'A/A+':<6} {s['n']:5d} {s['win_pct']:6.1f}% "
             f"{s['expectancy_r']:7.3f} {s['pf'] if s['pf'] is not None else float('nan'):6.2f} "
-            f"{bars:6.1f}"
+            f"{bars:6.1f} {mx:5.0f}"
         )
+    if "score" in closed:
+        print(f"  all-grade max score {closed['score'].max():.0f}")
 
 
 def main(argv=None) -> int:
@@ -139,7 +143,11 @@ def main(argv=None) -> int:
         if symbol in symbols:
             results = run_backtest(symbol, args.tf, df, htf_rule=htf)
             all_results.extend(results)
-            print(f"{len(results)} raw signals ({source}, {len(df)} bars)")
+            weekly = resample_ohlcv(df, "1W") if args.tf == "1d" else None
+            extra = ""
+            if weekly is not None:
+                extra = f", weekly={len(weekly)} (HTF needs 220)"
+            print(f"{len(results)} raw signals ({source}, {len(df)} bars{extra})")
         else:
             print(f"radar only ({source}, {len(daily[symbol])} daily)")
 
@@ -150,9 +158,14 @@ def main(argv=None) -> int:
     raw = results_to_dataframe(all_results)
     if args.split:
         split_ts = pd.Timestamp(args.split, tz="UTC")
-        oos = raw[pd.to_datetime(raw["timestamp"], utc=True) >= split_ts].copy()
+        ts_all = pd.to_datetime(raw["timestamp"], utc=True)
+        is_df = raw[ts_all < split_ts].copy()
+        oos = raw[ts_all >= split_ts].copy()
     else:
+        is_df = raw.iloc[0:0].copy()
         oos = raw
+    if not is_df.empty:
+        _print_grade_table(f"All grades IS <{args.split} (ungated ATR/ADX)", is_df)
     _print_grade_table(f"All grades OOS >={args.split} (ungated ATR/ADX)", oos)
 
     aa_ungated = _aa_closed(raw, args.tf, args.split)
@@ -170,9 +183,16 @@ def main(argv=None) -> int:
     print(
         f"\nClosed {args.tf} A/A+ after frozen ATR/ADX protocol: {len(gated)}"
     )
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    raw.to_parquet(out_dir / f"overlay_raw_{args.tf}.parquet", index=False)
     if gated.empty:
-        print("No gated A/A+ rows. ATR band on daily is often wider than 4h — see ATR% line.")
-        return 1
+        print(
+            "No gated A/A+ rows. On 1d, W_HTF needs 220 weekly bars "
+            "(~4.2y) or A+ is unreachable and A needs a perfect 80. "
+            "Not an order. Not a W_* retune."
+        )
+        return 0
 
     tables = {sym: radar_state_table(d, sym) for sym, d in daily.items()}
     records = gated.to_dict(orient="records")
