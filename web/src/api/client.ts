@@ -13,6 +13,7 @@ import type {
   PaperSnapshot,
   ChartBook,
   ChartPrice,
+  ScreenBook,
 } from '../types'
 
 const BASES: string[] = [
@@ -112,4 +113,5 @@ export const api = {
     getJson<ChartPrice>(
       `/charts/price?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
     ),
+  screens: (view = 'all') => getJson<ScreenBook>(`/screens?view=${encodeURIComponent(view)}`),
 }

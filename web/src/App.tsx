@@ -13,6 +13,7 @@ import { FlowsPanel } from './components/FlowsPanel'
 import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
 import { ChartsPanel } from './components/ChartsPanel'
+import { ScreensPanel } from './components/ScreensPanel'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
@@ -186,6 +187,28 @@ export default function App() {
                 onSelect={goJournal}
                 onChart={goChart}
               />
+            </motion.div>
+          )}
+
+          {tab === 'screens' && (
+            <motion.div
+              key="screens"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <div className="mb-5">
+                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Screens</p>
+                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
+                  Combo <span className="text-cyan">review list</span>
+                </h2>
+                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
+                  Unique symbols from 4h A/A+, daily breakout, coils, and the ranked book. Not a new
+                  score. Never orders.
+                </p>
+              </div>
+              <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />
             </motion.div>
           )}
 

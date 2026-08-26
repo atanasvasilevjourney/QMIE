@@ -12,6 +12,7 @@ Endpoints:
   GET  /universe              the symbol set the next pass will scan
   POST /scan/once             admin: force an immediate scan pass on a TF
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
+  GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
@@ -64,6 +65,7 @@ from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
 from paper import PaperBook
 from guide import trading_guide
+from screens import VIEWS, build_screens
 from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
@@ -386,6 +388,29 @@ async def get_radar() -> dict[str, Any]:
     out = snap.as_dict()
     out.setdefault("enabled", state.scheduler.radar_enabled)
     return out
+
+
+@app.get("/screens")
+async def get_screens(view: str = "all") -> dict[str, Any]:
+    """Combo review list: TEMA A/A+ ∪ daily breakout ∪ coils ∪ book.
+
+    unique(symbol). Leaders view is 4h A/A+ only. Not a new score. Never orders.
+    """
+    if state.db is None or state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    v = (view or "all").strip().lower()
+    if v not in VIEWS:
+        raise HTTPException(400, f"view must be one of {list(VIEWS)}")
+    signals = await state.db.recent_signals(limit=200)
+    radar = None
+    if state.scheduler.last_radar is not None:
+        radar = state.scheduler.last_radar.as_dict()
+    allocation = None
+    if state.scheduler.last_allocation is not None:
+        allocation = state.scheduler.last_allocation.as_dict()
+    return build_screens(
+        signals=signals, radar=radar, allocation=allocation, view=v,
+    )
 
 
 @app.post("/radar/once")

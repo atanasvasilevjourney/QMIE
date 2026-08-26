@@ -22,6 +22,10 @@ const STEPS = [
     body: 'PAPER SYNC auto-fills every ENTRY at signal_price ($1000 notional). EXIT rows show close + PnL. Never an order.',
   },
   {
+    title: 'Combo screens',
+    body: 'SCREENS tab unions 4h A/A+, breakouts, coils, and the book into unique symbols. Space / Shift+Space. Not a new score.',
+  },
+  {
     title: 'Confirm on chart',
     body: 'CHARTS tab: SVG equity + closed candles with entry/exit and SL/TP. Pine visualizer should still match side/grade.',
   },
@@ -34,7 +38,7 @@ const STEPS = [
 export function FlowsPanel() {
   return (
     <PanelShell title="Operator Flows" subtitle="best-path manual trading loop · no broker">
-      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         {STEPS.map((s, i) => (
           <div
             key={s.title}

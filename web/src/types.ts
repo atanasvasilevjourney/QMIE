@@ -137,7 +137,16 @@ export type JournalStats = {
   sum_pnl?: number | null
 }
 
-export type DeskTab = 'orbit' | 'ops' | 'charts' | 'book' | 'journal' | 'flows' | 'agents' | 'guide'
+export type DeskTab =
+  | 'orbit'
+  | 'ops'
+  | 'screens'
+  | 'charts'
+  | 'book'
+  | 'journal'
+  | 'flows'
+  | 'agents'
+  | 'guide'
 
 export type ChartEquityPoint = {
   t: number | null
@@ -345,4 +354,45 @@ export type PaperSnapshot = {
   open: number
   closed: number
   closed_pnl: number
+}
+
+export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'book'
+
+export type ScreenRow = {
+  symbol: string
+  cluster?: string
+  sources: string[]
+  side?: string | null
+  grade?: string | null
+  score?: number | null
+  timeframe?: string | null
+  signal_id?: number | null
+  signal_price?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+  atr_pct?: number | null
+  adx?: number | null
+  radar_color?: string | null
+  coil_width_pct?: number | null
+  pct_since_flip?: number | null
+  is_tight_coil?: boolean
+  is_fresh_flip?: boolean
+  breakout?: string | null
+  weight_pct?: number | null
+  book_rank?: number | null
+  quantity: number
+  places_orders: boolean
+}
+
+export type ScreenBook = {
+  places_orders: boolean
+  quantity: number
+  view: ScreenView | string
+  views: string[]
+  count: number
+  union_count: number
+  modal_cluster?: string | null
+  source_counts?: Record<string, number>
+  note?: string
+  rows: ScreenRow[]
 }

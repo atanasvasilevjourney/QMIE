@@ -93,17 +93,12 @@ fundamentals.
   printed 1h/4h ATR; you click size)
 - Deep View AI as a replacement for `python -m backtest.run`
 
-## If we build next (order)
+## Landed (combo SCREENS)
 
-1. **Master review list** — union TEMA A/A+ + daily breakout + radar
-   coils, dedupe by symbol, keyboard + CHARTS follow.
-2. **Sortable columns** — score, TF, cluster, ATR%, ADX, coil width,
-   % since radar flip. Highlight the modal cluster (DV’s blue
-   subindustry trick).
-3. **Focus list** — flag rows (no fill). Shift+Space analog. Distinct
-   from paper JOURNAL.
-4. **Named views** (favorites) — `4h A/A+` · `liquid book` · `coils` ·
-   `breakouts` · `rotation`. Views, not engines.
-5. Stop. Measure 30 **manual** 4h fills before any new screen math.
+`GET /screens` + desk **SCREENS** tab: unique(symbol) OR of 4h A/A+, daily
+breakout, radar coils, ranked book. Named views, sortable columns, local
+focus list (Shift+Space), chart follows the cursor. Not a new engine.
+Do not add earnings/IPO next. Measure 30 **manual** 4h fills before any
+new screen math.
 
 `places_orders` stays false. Quantity on the desk DAG stays 0.

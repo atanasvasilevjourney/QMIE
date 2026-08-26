@@ -59,17 +59,18 @@ def trading_guide() -> dict[str, Any]:
                 "id": "screens",
                 "title": "Daily screens (four views)",
                 "body": (
-                    "Same idea as a growth-stock screener, mapped to QMIE: one wide "
-                    "net, one specialist, one liquidity book, one theme tape. Do not "
-                    "add earnings/IPO filters. Review unique symbols, not the same "
-                    "name on every table."
+                    "SCREENS tab is the combo list: unique symbols from 4h A/A+, "
+                    "daily breakout, radar coils, and the ranked book. Space next, "
+                    "Shift+Space flags a focus list (not a fill). Do not add "
+                    "earnings/IPO filters."
                 ),
                 "rules": [
                     "Leaders: 4h TEMA A/A+ (frozen OOS edge)",
                     "Themes: 1D radar G/Y/R, fresh flips, tight coils",
                     "Liquid book: ranked slots (quantity still 0)",
                     "Specialist: daily GREY→GREEN / coil-UP — not an A/A+ grade",
-                    "Skip 1h when time-boxed; it dilutes the 4h book",
+                    "SCREENS tab: combo unique(symbol) list",
+                    "Space next · Shift+Space flag · Enter opens CHARTS",
                 ],
             },
             {

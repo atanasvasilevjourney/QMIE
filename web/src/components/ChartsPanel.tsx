@@ -9,10 +9,12 @@ export function ChartsPanel({
   focusSymbol,
   focusTimeframe,
   fills,
+  compact = false,
 }: {
   focusSymbol?: string | null
   focusTimeframe?: string | null
   fills: JournalFill[]
+  compact?: boolean
 }) {
   const [book, setBook] = useState<ChartBook | null>(null)
   const [price, setPrice] = useState<ChartPrice | null>(null)
@@ -56,6 +58,7 @@ export function ChartsPanel({
   }, [symbol, symbols])
 
   useEffect(() => {
+    if (compact) return
     let cancelled = false
     setBusy(true)
     api
@@ -72,7 +75,7 @@ export function ChartsPanel({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [compact])
 
   useEffect(() => {
     if (!symbol) return
@@ -100,6 +103,7 @@ export function ChartsPanel({
 
   return (
     <div className="grid gap-5">
+      {!compact && (
       <PanelShell
         title="Paper equity"
         subtitle="Cumulative cash PnL from closed fills (paper + manual). Starting 0. Never an order."
@@ -113,11 +117,17 @@ export function ChartsPanel({
         <EquitySvg points={book?.points ?? []} />
         {busy && !book && <p className="mt-2 font-mono text-[11px] text-chrome/50">Loading book…</p>}
       </PanelShell>
+      )}
 
       <PanelShell
         title="Price + trade marks"
-        subtitle="Closed candles from the scanner data source. ▲ entry · ▼ exit · dashed SL/TP. Fetch only while this tab is open."
+        subtitle={
+          compact
+            ? 'Follows the combo list. Closed candles. Never an order.'
+            : 'Closed candles from the scanner data source. ▲ entry · ▼ exit · dashed SL/TP. Fetch only while this tab is open.'
+        }
       >
+        {!compact && (
         <div className="mb-4 flex flex-wrap gap-2">
           {symbols.map((s) => (
             <button
@@ -135,6 +145,7 @@ export function ChartsPanel({
           ))}
           {!symbols.length && <Empty>No fills yet — PAPER SYNC or JOURNAL first</Empty>}
         </div>
+        )}
         <div className="mb-4 flex flex-wrap gap-2">
           {TFS.map((t) => (
             <button
