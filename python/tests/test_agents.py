@@ -13,7 +13,13 @@ from improve.agents import (
     run_briefing,
     scanner_agent,
 )
-from improve.checklist import atr_pct_of, evaluate_native, flatten_signal, radar_color_for
+from improve.checklist import (
+    atr_pct_of,
+    consecutive_manual_losses,
+    evaluate_native,
+    flatten_signal,
+    radar_color_for,
+)
 
 
 def _row(**kw) -> dict:
@@ -107,7 +113,93 @@ def test_radar_agent_bias_long():
     ], "fresh_green": [1, 2], "breakouts": [], "tight_coils": []})
     assert out["bias"] == "LONG"
     assert out["btc_color"] == "GREEN"
+    assert out["buys_allowed"] is True
     assert out["breadth_pct"]["green"] > 50
+
+
+def test_radar_agent_btc_red_blocks_buys():
+    out = radar_agent({"green": 2, "grey": 0, "red": 8, "rows": [
+        {"symbol": "BTCUSDT", "color": "RED"},
+    ]})
+    assert out["buys_allowed"] is False
+
+
+def test_eth_buy_skipped_when_btc_red():
+    radar = {"rows": [
+        {"symbol": "ETHUSDT", "color": "GREEN"},
+        {"symbol": "BTCUSDT", "color": "RED"},
+    ]}
+    v = evaluate_native(_row(symbol="ETHUSDT"), radar=radar)
+    assert v.verdict == "SKIP"
+    assert any(i.id == "btc_regime" and i.required and not i.passed for i in v.items)
+
+
+def test_btc_grey_is_watch_not_skip_on_buy():
+    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREY"}]}
+    v = evaluate_native(_row(), radar=radar)
+    assert v.verdict == "WATCH"
+    assert any(i.id == "btc_regime" and (not i.required) and not i.passed for i in v.items)
+
+
+def test_sell_not_gated_by_btc_red():
+    radar = {"rows": [
+        {"symbol": "ETHUSDT", "color": "RED"},
+        {"symbol": "BTCUSDT", "color": "RED"},
+    ]}
+    v = evaluate_native(
+        _row(symbol="ETHUSDT", side="SELL", daily_trend="bearish"),
+        radar=radar,
+    )
+    assert v.verdict == "GO"
+    assert any(i.id == "btc_regime" and i.passed for i in v.items)
+
+
+def test_too_late_green_chase_is_skip():
+    radar = {"rows": [
+        {"symbol": "BTCUSDT", "color": "GREEN", "is_late_stage": True, "days_in_state": 40},
+    ]}
+    v = evaluate_native(_row(), radar=radar)
+    assert v.verdict == "SKIP"
+    assert any(i.id == "too_late" and i.required and not i.passed for i in v.items)
+
+
+def test_too_late_false_stays_go():
+    radar = {"rows": [
+        {"symbol": "BTCUSDT", "color": "GREEN", "is_late_stage": False},
+    ]}
+    v = evaluate_native(_row(), radar=radar)
+    assert v.verdict == "GO"
+
+
+def test_two_manual_losses_cooldown_skips():
+    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
+    fills = [
+        {"id": 2, "source": "manual", "outcome": "LOSS"},
+        {"id": 1, "source": "manual", "outcome": "LOSS"},
+    ]
+    v = evaluate_native(_row(), radar=radar, fills=fills)
+    assert v.verdict == "SKIP"
+    assert any(i.id == "cooldown" and i.required and not i.passed for i in v.items)
+
+
+def test_paper_losses_do_not_trigger_cooldown():
+    radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
+    fills = [
+        {"id": 2, "source": "paper", "outcome": "LOSS"},
+        {"id": 1, "source": "paper", "outcome": "LOSS"},
+    ]
+    v = evaluate_native(_row(), radar=radar, fills=fills)
+    assert v.verdict == "GO"
+    assert consecutive_manual_losses(fills) == 0
+
+
+def test_manual_win_clears_loss_streak():
+    fills = [
+        {"id": 3, "source": "manual", "outcome": "WIN"},
+        {"id": 2, "source": "manual", "outcome": "LOSS"},
+        {"id": 1, "source": "manual", "outcome": "LOSS"},
+    ]
+    assert consecutive_manual_losses(fills) == 0
 
 
 def test_book_agent_clusters():

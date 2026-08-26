@@ -259,6 +259,7 @@ export type AgentBriefing = {
     radar?: AgentBlock & {
       bias?: string
       btc_color?: string | null
+      buys_allowed?: boolean | null
       green?: number
       grey?: number
       red?: number

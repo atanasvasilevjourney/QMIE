@@ -59,15 +59,42 @@ def atr_pct_of(flat: dict[str, Any]) -> Optional[float]:
     return None
 
 
-def radar_color_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[str]:
+def radar_row_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     if not radar:
         return None
     want = _s(symbol).upper()
     for row in radar.get("rows") or []:
-        if _s(row.get("symbol")).upper() == want:
-            c = _s(row.get("color")).upper()
-            return c or None
+        if isinstance(row, dict) and _s(row.get("symbol")).upper() == want:
+            return row
     return None
+
+
+def radar_color_for(symbol: str, radar: Optional[dict[str, Any]]) -> Optional[str]:
+    row = radar_row_for(symbol, radar)
+    if not row:
+        return None
+    c = _s(row.get("color")).upper()
+    return c or None
+
+
+def consecutive_manual_losses(fills: Optional[list[dict[str, Any]]]) -> int:
+    """Newest-first streak of closed *manual* losses. Paper rows do not count."""
+    if not fills:
+        return 0
+    closed = [
+        f for f in fills
+        if _s(f.get("outcome")).upper() in ("WIN", "LOSS")
+    ]
+    closed.sort(key=lambda f: int(f.get("id") or 0), reverse=True)
+    streak = 0
+    for f in closed:
+        if _s(f.get("source")).lower() == "paper":
+            continue
+        if _s(f.get("outcome")).upper() == "LOSS":
+            streak += 1
+            continue
+        break
+    return streak
 
 
 @dataclass
@@ -110,8 +137,13 @@ def evaluate_native(
     row: dict[str, Any],
     *,
     radar: Optional[dict[str, Any]] = None,
+    fills: Optional[list[dict[str, Any]]] = None,
 ) -> NativeChecklist:
-    """Checklist using persisted QMIE fields + optional radar snapshot."""
+    """Checklist using persisted QMIE fields + optional radar/journal.
+
+    KovaView overlays live here (too_late, btc_regime, cooldown) — not in
+    ``compute_signal``. Missing radar/fills never hard-SKIP.
+    """
     flat = flatten_signal(row)
     symbol = _s(flat.get("symbol")).upper() or "?"
     side = _s(flat.get("side")).upper()
@@ -212,6 +244,83 @@ def evaluate_native(
         ))
     else:
         items.append(CheckItem("radar_color", False, False, f"Radar {color}"))
+
+    # KovaView SPY analog: BTC 1D radar. RED blocks new BUY risk.
+    # GREY is advisory. SELL is not gated. Missing BTC row = WATCH, not SKIP.
+    btc_color = radar_color_for("BTCUSDT", radar)
+    if side != "BUY":
+        items.append(CheckItem(
+            "btc_regime",
+            True,
+            False,
+            f"BTC {btc_color or 'n/a'} — SELL not gated by buys_allowed",
+        ))
+    elif btc_color is None:
+        items.append(CheckItem(
+            "btc_regime",
+            False,
+            False,
+            "BTC radar missing — cannot confirm buys_allowed",
+        ))
+    elif btc_color == "RED":
+        items.append(CheckItem(
+            "btc_regime",
+            False,
+            True,
+            "BTC RED — buys_allowed false (SPY SMA200 analog)",
+        ))
+    elif btc_color == "GREY":
+        items.append(CheckItem(
+            "btc_regime",
+            False,
+            False,
+            "BTC GREY — wait (advisory, not a hard veto)",
+        ))
+    else:
+        items.append(CheckItem(
+            "btc_regime",
+            True,
+            False,
+            f"BTC {btc_color} — buys_allowed",
+        ))
+
+    # too_late: chase-risk on an extended same-side radar state.
+    rrow = radar_row_for(symbol, radar)
+    if rrow is None:
+        items.append(CheckItem("too_late", False, False, "No radar row for too_late"))
+    elif rrow.get("is_late_stage"):
+        chasing = (
+            (side == "BUY" and color == "GREEN")
+            or (side == "SELL" and color == "RED")
+        )
+        items.append(CheckItem(
+            "too_late",
+            not chasing,
+            chasing,
+            (
+                f"late-stage {color} chase — skip"
+                if chasing
+                else f"late-stage {color} — not a same-side chase"
+            ),
+        ))
+    else:
+        items.append(CheckItem("too_late", True, False, "not late-stage"))
+
+    streak = consecutive_manual_losses(fills)
+    if streak >= 2:
+        items.append(CheckItem(
+            "cooldown",
+            False,
+            True,
+            f"{streak} consecutive manual losses — skip next setup",
+        ))
+    else:
+        items.append(CheckItem(
+            "cooldown",
+            True,
+            False,
+            f"cooldown clear (manual loss streak {streak}; paper ignored)",
+        ))
 
     fr = _f(flat.get("funding_rate"))
     if fr is None:

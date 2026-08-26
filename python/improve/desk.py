@@ -85,9 +85,10 @@ def risk_node(
     signals: list[dict[str, Any]],
     radar: Optional[dict[str, Any]],
     allocation: Optional[dict[str, Any]],
+    fills: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     book = book_agent(allocation)
-    chk = checklist_agent(signals, radar, limit=12)
+    chk = checklist_agent(signals, radar, limit=12, fills=fills)
     slots = list(book.get("slots") or [])
     by_sym: dict[str, dict[str, Any]] = {}
     for s in slots:
@@ -215,6 +216,7 @@ def run_desk(
     signals: list[dict[str, Any]],
     radar: Optional[dict[str, Any]],
     allocation: Optional[dict[str, Any]],
+    fills: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Sequential DAG. A failing node is recorded; later nodes still run."""
     t0 = time.perf_counter()
@@ -236,7 +238,7 @@ def run_desk(
         nodes["strategy"] = _node("strategy", {"error": str(e)}, ok=False)
 
     try:
-        nodes["risk"] = risk_node(signals, radar, allocation)
+        nodes["risk"] = risk_node(signals, radar, allocation, fills=fills)
     except Exception as e:
         nodes["risk"] = _node("risk", {"error": str(e), "cards": [], "limits": {}}, ok=False)
 

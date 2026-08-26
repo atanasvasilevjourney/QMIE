@@ -123,16 +123,16 @@ def trading_guide() -> dict[str, Any]:
                 "title": "KovaView overlays (not a new engine)",
                 "body": (
                     "KovaView is an EOD equity swing stack (GREEN/GREY/RED, SPY regime, "
-                    "ATR×2.5, SMA20 trail). Do not port it into TEMA 9/90/199. Steal "
-                    "regime + too_late + sizing math as overlays after SCAN_TIMEFRAMES=4h "
-                    "is live. KAMA-DF and TQQQ notebooks must not retune W_* or EMA lengths. "
+                    "ATR×2.5, SMA20 trail). Do not port it into TEMA 9/90/199. The desk "
+                    "now applies three overlays on the native checklist: too_late, BTC "
+                    "buys_allowed, and a two-manual-loss cooldown. They do not retune W_*. "
+                    "SCAN_TIMEFRAMES=4h is still the outstanding live knob. "
                     "Map: docs/kovaview-equity-map.md."
                 ),
                 "rules": [
+                    "too_late / BTC buys_allowed / 2-loss cooldown are checklist gates",
                     "Do not add KAMA / EWMAC / z_52 as score votes",
                     "Printed stop stays 1.5×ATR; 1.25% equity is operator sizing",
-                    "50–60% WR is fine if E[R] ≥ 0.15R — 4h A/A+ already sits there",
-                    "Universe RS / rotation outranks more entry polish",
                     "One outstanding knob: 4h-only, then ADX≥20 — not both",
                 ],
             },

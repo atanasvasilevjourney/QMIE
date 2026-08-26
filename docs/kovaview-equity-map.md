@@ -195,6 +195,18 @@ because a notebook is interesting.
 
 ## Landed
 
-Advisory only. Live engine, Pine, `W_*`, and `.env` knobs unchanged.
+Native checklist overlays (not `compute_signal`, not `.env`):
+
+- **`too_late`** — radar `is_late_stage` same-side chase → SKIP
+- **`btc_regime`** — BTC 1D RED blocks new BUY (`buys_allowed` false). GREY is WATCH. SELL is not gated. Missing BTC row is WATCH, not SKIP
+- **`cooldown`** — two consecutive *manual* journal losses → SKIP next setup. Paper fills ignored
+
 GUIDE section `kovaview` points here. `places_orders` stays false.
 Quantity on the desk DAG stays 0.
+
+**Still not landed (on purpose)**
+
+- KAMA / EWMAC / z_52 as score votes
+- `SCAN_TIMEFRAMES=4h` and `sig_min_adx=20` (one outstanding knob, then catalog)
+- Realized-vol percentile, SMA20 trail, ATR×2.5 paper stop, share sizing
+- Switching live `ALLOC_MODE` to rotation
