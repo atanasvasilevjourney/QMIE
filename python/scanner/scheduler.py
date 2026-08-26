@@ -24,6 +24,8 @@ import logging
 import time
 from typing import Any, Optional
 
+from models import Side
+
 from .allocator import AllocConfig, AllocationPlan, allocate
 from .dispatcher import SignalDispatcher, trend_start_to_tvsignal
 from .exchange_clients import ExchangeClient
@@ -35,7 +37,7 @@ from .radar import (
     classify_symbol,
     empty_radar_snapshot,
     format_radar_digest,
-    iter_long_trend_starts,
+    iter_trend_starts,
 )
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
@@ -499,7 +501,7 @@ class ScannerScheduler:
             )
 
             if self.radar_dispatch_trend_start:
-                await self._dispatch_trend_start_longs(snap)
+                await self._dispatch_trend_starts(snap)
 
             coverage = (
                 100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
@@ -528,20 +530,29 @@ class ScannerScheduler:
                 )
             return True
 
-    async def _dispatch_trend_start_longs(self, snap: RadarSnapshot) -> int:
-        """Fan out closed-1D long trend-start / coil-UP as inbound signals."""
-        items = iter_long_trend_starts(snap.rows)
+    async def _dispatch_trend_starts(self, snap: RadarSnapshot) -> int:
+        """Fan out closed-1D GREY→GREEN/RED and coil UP/DOWN as inbound signals."""
+        items = iter_trend_starts(snap.rows)
         n = 0
+        n_long = 0
+        n_short = 0
         for item in items:
             try:
                 sig = trend_start_to_tvsignal(item)
                 ok = await self.dispatcher.dispatch_inbound(sig)
                 if ok:
                     n += 1
+                    if sig.side is Side.SELL:
+                        n_short += 1
+                    else:
+                        n_long += 1
             except Exception:
                 logger.exception("daily breakout dispatch failed for %s", item.get("symbol"))
         if n:
-            logger.info("Trend Radar dispatched %d daily breakout long(s)", n)
+            logger.info(
+                "Trend Radar dispatched %d daily breakout setup(s) (long=%d short=%d)",
+                n, n_long, n_short,
+            )
         paper = getattr(self.dispatcher, "paper", None)
         if paper is not None and getattr(paper, "enabled", False):
             try:

@@ -38,36 +38,47 @@ def _to_grade(s: str) -> Grade:
 
 
 def trend_start_to_tvsignal(item: dict) -> TVSignal:
-    """Map a radar long-trend-start row to the inbound TVSignal shape."""
+    """Map a radar trend-start row (long or short) to the inbound TVSignal shape."""
     bar_time = item.get("bar_time")
     bar_ms = None
     if bar_time is not None:
         ts = pd.Timestamp(bar_time)
         if not pd.isna(ts):
             bar_ms = int(ts.value // 1_000_000)
-    sl = item.get("coil_low") if item.get("breakout") == "UP" else None
+    side_s = str(item.get("side") or "").upper()
+    if side_s == "SELL" or item.get("breakout") == "DOWN":
+        side = Side.SELL
+    else:
+        side = Side.BUY
+    if side is Side.BUY and item.get("breakout") == "UP":
+        sl = item.get("coil_low")
+    elif side is Side.SELL and item.get("breakout") == "DOWN":
+        sl = item.get("coil_high")
+    else:
+        sl = None
     if sl is not None:
         try:
             sl = float(sl)
         except (TypeError, ValueError):
             sl = None
+    short = side is Side.SELL
     return TVSignal(
         strategy="QMIE-DailyBreakout",
         event=EventType.ENTRY,
         symbol=str(item.get("symbol") or ""),
         asset_class=AssetClass.CRYPTO,
         timeframe="1d",
-        side=Side.BUY,
+        side=side,
         signal_price=item.get("price"),
         stop_loss=sl,
         adx=item.get("adx"),
         timestamp=str(bar_time) if bar_time else None,
         bar_time=bar_ms,
-        reason=item.get("reason") or "trend_start_long",
-        trend="bullish",
-        daily_trend="bullish",
+        reason=item.get("reason") or ("trend_start_short" if short else "trend_start_long"),
+        trend="bearish" if short else "bullish",
+        daily_trend="bearish" if short else "bullish",
         setup_type="breakout",
-        action="buy",
+        action="sell" if short else "buy",
     )
 
 

@@ -308,3 +308,65 @@ class TestLongTrendStarts:
         out = iter_long_trend_starts(rows)
         assert len(out) == 1
         assert "coil_breakout_up" in out[0]["reason"]
+
+
+class TestShortTrendStarts:
+    def test_red_flip_today_is_short(self):
+        from scanner.radar import iter_short_trend_starts, iter_trend_starts
+        rows = [{
+            "symbol": "ETHUSDT",
+            "color": "RED",
+            "days_in_state": 1,
+            "state_censored": False,
+            "breakout": None,
+            "price": 3000.0,
+            "adx": 28.0,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+        }]
+        out = iter_short_trend_starts(rows)
+        assert len(out) == 1
+        assert out[0]["side"] == "SELL"
+        assert out[0]["reason"] == "trend_start_short"
+        assert out[0]["setup_type"] == "breakout"
+        both = iter_trend_starts(rows)
+        assert len(both) == 1
+        assert both[0]["side"] == "SELL"
+
+    def test_stale_red_ignored(self):
+        from scanner.radar import iter_short_trend_starts
+        rows = [{
+            "symbol": "ETHUSDT",
+            "color": "RED",
+            "days_in_state": 8,
+            "state_censored": False,
+            "breakout": None,
+            "price": 3000.0,
+        }]
+        assert iter_short_trend_starts(rows) == []
+
+    def test_coil_breakout_down_is_short(self):
+        from scanner.radar import iter_short_trend_starts
+        rows = [{
+            "symbol": "SOLUSDT",
+            "color": "RED",
+            "days_in_state": 4,
+            "state_censored": False,
+            "breakout": "DOWN",
+            "coil_high": 160.0,
+            "price": 145.0,
+        }]
+        out = iter_short_trend_starts(rows)
+        assert len(out) == 1
+        assert "coil_breakout_down" in out[0]["reason"]
+        assert out[0]["side"] == "SELL"
+
+    def test_green_flip_is_not_a_short(self):
+        from scanner.radar import iter_short_trend_starts
+        rows = [{
+            "symbol": "BTCUSDT",
+            "color": "GREEN",
+            "days_in_state": 1,
+            "state_censored": False,
+            "breakout": "UP",
+        }]
+        assert iter_short_trend_starts(rows) == []

@@ -5,7 +5,7 @@ Deep View-style master list: OR of result sets, then unique(symbol).
 
 Sources (already on the desk):
   * TEMA A/A+ alerts (prefer 4h over 1h)
-  * Daily breakout (GREY→GREEN / coil-UP)
+  * Daily breakout (GREY→GREEN / coil-UP longs, GREY→RED / coil-DOWN shorts)
   * Radar tight coils
   * Ranked book slots
 
@@ -262,16 +262,17 @@ def build_screens(
         upsert(sym, sources=["coils"], tf="1d", extra=extra)
 
     for br in (radar or {}).get("breakouts") or []:
-        if _s(br.get("breakout")).upper() != "UP":
+        direction = _s(br.get("breakout")).upper()
+        if direction not in ("UP", "DOWN"):
             continue
         sym = _s(br.get("symbol")).upper()
         if not sym:
             continue
         extra = {
-            "side": "BUY",
+            "side": "BUY" if direction == "UP" else "SELL",
             "signal_price": _f(br.get("price")),
             "adx": _f(br.get("adx")),
-            "breakout": "UP",
+            "breakout": direction,
         }
         upsert(sym, sources=["breakouts"], tf="1d", extra=extra)
 

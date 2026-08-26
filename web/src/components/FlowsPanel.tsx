@@ -56,7 +56,7 @@ export function FlowsPanel() {
         ))}
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <Tip title="Daily breakout" body="1D GREY→GREEN (or coil-UP) = long trend start. Confirm on Daily visualizer, then click the trade yourself." />
+        <Tip title="Daily breakout" body="1D GREY→GREEN (coil-UP) = long; GREY→RED (coil-DOWN) = short. Confirm on Daily visualizer, then click the trade yourself." />
         <Tip title="4H edge" body="OOS A/A+ was strongest on 4H — prefer that TF for graded size." />
         <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Otherwise outcome stays OPEN." />
       </div>

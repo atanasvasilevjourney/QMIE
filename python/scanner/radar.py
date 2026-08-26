@@ -547,3 +547,35 @@ def iter_long_trend_starts(rows: list) -> list[dict[str, Any]]:
         d["side"] = "BUY"
         out.append(d)
     return out
+
+
+def iter_short_trend_starts(rows: list) -> list[dict[str, Any]]:
+    """Closed daily shorts: GREY→RED today (trend start) and/or coil breakout DOWN.
+
+    Manual-entry candidates only — not a QMIE A/A+ grade.
+    """
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = r.as_dict() if hasattr(r, "as_dict") else dict(r)
+        reasons: list[str] = []
+        days = int(d.get("days_in_state") or 0)
+        if (
+            d.get("color") == "RED"
+            and days == 1
+            and not d.get("state_censored")
+        ):
+            reasons.append("trend_start_short")
+        if d.get("breakout") == "DOWN":
+            reasons.append("coil_breakout_down")
+        if not reasons:
+            continue
+        d["reason"] = "+".join(reasons)
+        d["setup_type"] = "breakout"
+        d["side"] = "SELL"
+        out.append(d)
+    return out
+
+
+def iter_trend_starts(rows: list) -> list[dict[str, Any]]:
+    """Long and short daily trend-starts (unranked, signal-only)."""
+    return iter_long_trend_starts(rows) + iter_short_trend_starts(rows)

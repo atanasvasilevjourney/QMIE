@@ -65,12 +65,12 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="Daily breakout"
-        subtitle="1D GREY→GREEN / coil-UP · unranked · not an A/A+ grade"
+        subtitle="1D GREY→GREEN/RED · coil-UP/DOWN · unranked · not an A/A+ grade"
         rows={breakout}
         selectedId={selectedId}
         onSelect={onSelect}
         onChart={onChart}
-        empty="No daily trend-start longs yet"
+        empty="No daily trend-start longs or shorts yet"
         accent="amber"
       />
       <StrategyTable
@@ -181,7 +181,9 @@ function SignalCard({
               {exit
                 ? `EXIT · PnL ${pnl ?? '—'}`
                 : breakout
-                  ? 'LONG TREND START'
+                  ? buy
+                    ? 'LONG TREND START'
+                    : 'SHORT TREND START'
                   : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
             {breakout && (
