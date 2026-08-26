@@ -113,6 +113,28 @@ def test_rank_score_fills_best_when_slots_are_3():
     assert taken_scores == [93.0, 88.0, 84.0]
 
 
+def test_equity_margin_takes_full_stop_no_slot_liq():
+    t = _trades().iloc[[1]].copy()
+    t["risk_pct"] = 0.06
+    t["realized_r"] = -1.0
+    sim = simulate(
+        t, start_cash=1000.0, stake=100.0, leverage=25.0, isolated=False
+    )
+    expect = -(100.0 * 25.0 * 0.06)  # -$150, not capped at -$100
+    assert sim["liquidations"] == 0
+    assert abs(sim["pnl"] - expect) < 1e-9
+    assert sim["blown"] is False
+
+
+def test_default_isolated_still_caps():
+    t = _trades().iloc[[1]].copy()
+    t["risk_pct"] = 0.06
+    t["realized_r"] = -1.0
+    sim = simulate(t, start_cash=1000.0, stake=100.0, leverage=25.0, isolated=True)
+    assert sim["liquidations"] == 1
+    assert abs(sim["pnl"] + 100.0) < 1e-9
+
+
 def test_cannot_open_fourth_until_one_closes():
     ts = pd.Timestamp("2025-06-01", tz="UTC")
     t = pd.DataFrame(
@@ -136,6 +158,5 @@ def test_cannot_open_fourth_until_one_closes():
         t, start_cash=1000.0, stake=100.0, max_slots=3, rank_by_score=True
     )
     assert sim["max_open"] <= 3
-    # 4th fires while 3 still open (exit at +12h, 4th open at +4h)
     assert sim["taken"] == 3
     assert sim["skipped"] == 1

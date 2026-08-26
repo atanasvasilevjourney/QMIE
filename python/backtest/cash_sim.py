@@ -69,11 +69,18 @@ def first_per_symbol_day(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _isolated_pnl(stake: float, leverage: float, realized_r: float, risk_pct: float) -> tuple[float, bool]:
-    """Return (pnl, liquidated). Isolated margin cannot lose more than stake."""
+def _fill_pnl(
+    stake: float,
+    leverage: float,
+    realized_r: float,
+    risk_pct: float,
+    *,
+    isolated: bool,
+) -> tuple[float, bool]:
+    """Return (pnl, slot_liquidated). Isolated caps loss at stake; equity/cross does not."""
     notional = stake * leverage
     raw = notional * float(realized_r) * float(risk_pct)
-    if raw < -stake:
+    if isolated and raw < -stake:
         return -stake, True
     return raw, False
 
@@ -87,12 +94,16 @@ def simulate(
     max_slots: Optional[int] = None,
     leverage: float = 1.0,
     rank_by_score: bool = False,
+    isolated: bool = True,
 ) -> dict[str, Any]:
     """Open if cash >= stake and a slot is free. Close frees margin.
 
     At a timestamp, closes run first. Remaining slots fill from that bar's
     alerts (highest score first when rank_by_score). Alerts that fire while
-    full are skipped — no queue. Isolated: loss capped at stake.
+    full are skipped — no queue.
+    Isolated: loss capped at stake (slot liquidation).
+    Equity/cross: full SL/TP PnL hits the $1000; no per-slot liq. Account
+    stops if cash goes to 0.
     Not an order.
     """
     empty = {
@@ -111,6 +122,8 @@ def simulate(
         "open_left": 0,
         "leverage": leverage,
         "notional": stake * leverage,
+        "isolated": isolated,
+        "blown": False,
     }
     if trades is None or trades.empty:
         return empty
@@ -119,7 +132,10 @@ def simulate(
     pnls: list[float] = []
     liq_flags: list[bool] = []
     for _, r in t.iterrows():
-        pnl, liq = _isolated_pnl(stake, leverage, float(r["realized_r"]), float(r["risk_pct"]))
+        pnl, liq = _fill_pnl(
+            stake, leverage, float(r["realized_r"]), float(r["risk_pct"]),
+            isolated=isolated,
+        )
         pnls.append(pnl)
         liq_flags.append(liq)
     t["pnl_usd"] = pnls
@@ -137,6 +153,7 @@ def simulate(
     taken_idx: list[int] = []
     skipped = 0
     liquidations = 0
+    blown = False
     peak = cash
     max_dd = 0.0
     max_open = 0
@@ -154,7 +171,7 @@ def simulate(
 
     def try_open(i: int) -> bool:
         nonlocal skipped, max_open, cash
-        if cash + 1e-9 < stake:
+        if blown or cash + 1e-9 < stake:
             skipped += 1
             return False
         if max_slots is not None and len(open_ids) >= max_slots:
@@ -188,6 +205,9 @@ def simulate(
             if bool(t.at[i, "liquidated"]):
                 liquidations += 1
             del open_ids[i]
+            if cash < -1e-9:
+                blown = True
+                cash = 0.0
         candidates = list(opens_at.get(ts, []))
         if rank_by_score:
             candidates.sort(key=rank_key, reverse=True)
@@ -214,17 +234,21 @@ def simulate(
         "open_left": len(open_ids),
         "leverage": leverage,
         "notional": stake * leverage,
+        "isolated": isolated,
+        "blown": blown,
     }
 
 
 def _fmt(sim: dict[str, Any]) -> str:
     win_pct = (100.0 * sim["wins"] / sim["taken"]) if sim["taken"] else 0.0
     liq = sim.get("liquidations", 0)
+    blown = "  BLOWN" if sim.get("blown") else ""
+    mode = "isolated" if sim.get("isolated", True) else "equity"
     return (
-        f"  taken={sim['taken']:4d}  skip={sim['skipped']:4d}  "
+        f"  {mode:<9} {sim.get('leverage', 1):.0f}x  taken={sim['taken']:4d}  skip={sim['skipped']:4d}  "
         f"win={win_pct:5.1f}%  liq={liq:3d}  final=${sim['final']:.2f}  "
         f"PnL=${sim['pnl']:+.2f}  peak=${sim['peak']:.2f}  "
-        f"maxDD=${sim['max_dd']:.2f}  max_open={sim['max_open']}"
+        f"maxDD=${sim['max_dd']:.2f}  max_open={sim['max_open']}{blown}"
     )
 
 
@@ -235,7 +259,10 @@ def _monthly(taken: pd.DataFrame, stake: float, *, leverage: float = 1.0) -> pd.
     d["month"] = d["exit_ts"].dt.tz_convert("UTC").dt.strftime("%Y-%m")
     if "pnl_usd" not in d.columns:
         d["pnl_usd"] = [
-            _isolated_pnl(stake, leverage, float(r["realized_r"]), float(r["risk_pct"]))[0]
+            _fill_pnl(
+                stake, leverage, float(r["realized_r"]), float(r["risk_pct"]),
+                isolated=True,
+            )[0]
             for _, r in d.iterrows()
         ]
     g = d.groupby("month").agg(n=("pnl_usd", "size"), pnl=("pnl_usd", "sum"))
@@ -250,9 +277,20 @@ def main(argv=None) -> int:
     p.add_argument("--end", default=None)
     p.add_argument("--cash", type=float, default=1000.0)
     p.add_argument("--stake", type=float, default=100.0)
-    p.add_argument("--leverage", type=float, default=1.0, help="Isolated notional = stake * leverage")
+    p.add_argument("--leverage", type=float, default=1.0, help="Notional = stake * leverage")
+    p.add_argument(
+        "--margin",
+        choices=("isolated", "equity"),
+        default="isolated",
+        help="isolated caps loss at stake; equity/cross uses the full $1000",
+    )
     p.add_argument("--max-slots", type=int, default=0, help="Max concurrent (0 = cash/stake)")
     p.add_argument("--rank-score", action="store_true", help="Fill free slots with highest score at that bar")
+    p.add_argument(
+        "--sweep",
+        action="store_true",
+        help="Print isolated vs equity at 5x/10x/25x (one-per-symbol, max slots)",
+    )
     p.add_argument("--min-adx", type=float, default=20.0)
     p.add_argument("--min-atr-pct", type=float, default=0.4)
     p.add_argument("--max-atr-pct", type=float, default=4.0)
@@ -274,15 +312,34 @@ def main(argv=None) -> int:
     )
     stats = summarize(book.to_dict(orient="records"), kept_only=False)
     slots = args.max_slots if args.max_slots > 0 else int(args.cash // args.stake)
+    isolated = args.margin == "isolated"
     notional = args.stake * args.leverage
     print(
         f"Paper cash sim  {args.tf} A/A+  {args.start} -> {book['timestamp'].max()}\n"
         f"Book n={stats['n']} win={stats['win_pct']}% E[R]={stats['expectancy_r']} PF={stats['pf']}\n"
-        f"Start ${args.cash:.0f}  margin ${args.stake:.0f}  {args.leverage:.0f}x  "
-        f"notional ${notional:.0f}/fill  max_open={slots}  "
+        f"Start ${args.cash:.0f}  assigned ${args.stake:.0f}  {args.leverage:.0f}x  "
+        f"notional ${notional:.0f}/fill  max_open={slots}  margin={args.margin}  "
         f"rank_score={args.rank_score}\n"
-        "Isolated: a fill cannot lose more than its $ margin. Not an order.\n"
+        "Not an order. QMIE does not send leverage to a venue.\n"
     )
+
+    if args.sweep:
+        print("One per symbol, best score, max 3 — isolated vs equity, leverage sweep")
+        for lev in (5, 10, 15, 25):
+            for iso in (True, False):
+                sim = simulate(
+                    book,
+                    start_cash=args.cash,
+                    stake=args.stake,
+                    max_slots=slots if args.max_slots > 0 else 3,
+                    leverage=float(lev),
+                    rank_by_score=True,
+                    one_per_symbol=True,
+                    isolated=iso,
+                )
+                print(_fmt(sim))
+        print("places_orders=false")
+        return 0
 
     kw = dict(
         start_cash=args.cash,
@@ -290,20 +347,21 @@ def main(argv=None) -> int:
         max_slots=slots,
         leverage=args.leverage,
         rank_by_score=args.rank_score,
+        isolated=isolated,
     )
     fifo = simulate(book, one_per_symbol=False, **kw)
     one = simulate(book, one_per_symbol=True, **kw)
     daily = first_per_symbol_day(book)
     day_one = simulate(daily, one_per_symbol=True, **kw)
 
-    print("FIFO (time order, skip when 3 slots full):")
+    print("FIFO (time order, skip when slots full):")
     print(_fmt(fifo))
     print("One open per symbol + fill best score into free slots:")
     print(_fmt(one))
     print("First / symbol / UTC day, then one-per-symbol:")
     print(_fmt(day_one))
 
-    print(f"\nMonthly PnL — max {slots} open, one per symbol, {args.leverage:.0f}x isolated")
+    print(f"\nMonthly PnL — max {slots} open, one per symbol, {args.leverage:.0f}x {args.margin}")
     months = _monthly(one["taken_rows"], args.stake, leverage=args.leverage)
     print(f"  {'month':<10} {'n':>4} {'pnl':>10}")
     for _, r in months.iterrows():
@@ -311,11 +369,11 @@ def main(argv=None) -> int:
 
     mean_risk = float(book["risk_pct"].mean()) if len(book) else 0.0
     raw_1r = notional * mean_risk
+    cap = f"isolated cap ${args.stake:.0f}" if isolated else "full SL hits equity"
     print(
         f"\nMean SL {100 * mean_risk:.2f}% of entry. "
-        f"{args.leverage:.0f}x on ${args.stake:.0f} margin → 1R ≈ ${raw_1r:.2f} "
-        f"(isolated cap ${args.stake:.0f}).\n"
-        "places_orders=false  QMIE does not send this leverage to a venue."
+        f"{args.leverage:.0f}x on ${args.stake:.0f} → 1R ≈ ${raw_1r:.2f} ({cap}).\n"
+        "places_orders=false"
     )
     return 0
 

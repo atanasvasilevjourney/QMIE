@@ -59,5 +59,35 @@ isolated liquidations.
 
 Calendar on one-per-symbol: **2025 +$3,267** (241 fills), **2026 through 29 Jul +$1,424** (132 fills).
 
-QMIE still does not send 25x to a venue. Fees and funding are omitted.
-This is not a frozen OOS and not a reason to retune `W_*`.
+## Equity/cross margin vs lower leverage
+
+Isolated 25x **looked** better because 87 fat-ATR losses were capped at −$100
+while wins still paid ~1.67R. Switch those same fills to **equity/cross**
+(full SL hits the $1000) and the book **dies**: 15 fills, **$36** (−$964),
+no slot liq, but no cash left to keep trading.
+
+At **≤15x**, 1R is under $100, so isolated and equity are the **same**
+(zero slot liquidations). Lower leverage is the way to drop liqs without
+taking uncapped 25x stops.
+
+Same rules: $1000 start, $100 assigned, max 3 open, best score, one name
+per slot, 4h A/A+ 2025-01-02 → 2026-07-29.
+
+```bash
+python -m backtest.cash_sim --start 2025-01-01 --cash 1000 --stake 100 \
+  --max-slots 3 --rank-score --sweep
+python -m backtest.cash_sim --start 2025-01-01 --cash 1000 --stake 100 \
+  --leverage 10 --max-slots 3 --rank-score --margin equity
+```
+
+| Leverage | Margin | Slot liq | Final | PnL | Max DD |
+|---:|---|---:|---:|---:|---:|
+| 5x | isolated = equity | 0 | **$1,537** | **+$537** | −$280 |
+| 10x | isolated = equity | 0 | **$2,073** | **+$1,073** | −$561 |
+| 15x | isolated = equity | 0 | **$2,610** | **+$1,610** | −$841 |
+| 25x | isolated | 87 | $5,691 | +$4,691 | −$1,190 |
+| 25x | equity/cross | 0 | **$36** | **−$964** | −$1,285 |
+
+**Use 5x–10x if the goal is no liquidations.** 10x still doubles the 1x
+one-per-symbol book (~+$298) without the 25x wipe path. 25x cross is not
+a fix. QMIE does not send leverage to a venue.
