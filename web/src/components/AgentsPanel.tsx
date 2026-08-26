@@ -57,7 +57,7 @@ export function AgentsPanel({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-1">
         <AgentCard name="SCANNER" body={agents?.scanner} />
-        <AgentCard name="RADAR" body={agents?.radar} extra={radar ? `BTC ${radar.btc_color ?? '—'} · buys ${radar.buys_allowed === false ? 'blocked' : radar.buys_allowed ? 'ok' : '—'}` : undefined} />
+        <AgentCard name="RADAR" body={agents?.radar} extra={radar ? `BTC ${radar.btc_color ?? '—'} (display)` : undefined} />
         <AgentCard name="BOOK" body={agents?.book} />
         <AgentCard name="REVIEW" body={agents?.review} extra={reviewExtra(agents?.review)} />
         <AgentCard

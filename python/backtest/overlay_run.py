@@ -1,7 +1,7 @@
 """
 python -m backtest.overlay_run
 ==============================
-Small closed-bar check of KovaView overlays on frozen 4h A/A+ outcomes.
+Identity check: production overlay skip list is empty (gates cut winners).
 Does not retune W_*. Does not write .env.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ _HTF_MAP = {"1h": "4h", "4h": "1D", "1d": "1W"}
 
 
 def _parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Validate KovaView overlays on a few 4h A/A+ trades")
+    p = argparse.ArgumentParser(description="Confirm overlay skip list is empty on 4h A/A+")
     p.add_argument("--symbols", nargs="+", default=["BTCUSDT", "ETHUSDT", "SOLUSDT"])
     p.add_argument("--tf", default="4h")
     p.add_argument("--start", default="2024-04-01")
@@ -64,7 +64,7 @@ def main(argv=None) -> int:
     print(
         f"Overlay check {symbols} {args.tf} {start}→{end} "
         f"OOS≥{args.split} A/A+ ADX≥{args.min_adx} ATR {args.min_atr_pct}-{args.max_atr_pct}\n"
-        "Post-filter only. Not an order. Not a W_* retune.\n"
+        "Overlay skip list is empty (too_late / BTC-RED cut winners). Not an order.\n"
     )
 
     all_results = []

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from backtest.overlay import (
+    OVERLAY_GATES,
     annotate_closed,
     overlay_decision,
     radar_snapshot_at,
@@ -32,6 +33,10 @@ def _daily_ramp(n: int = 120, start: float = 100.0, end: float = 220.0) -> pd.Da
     )
 
 
+def test_overlay_gates_empty():
+    assert OVERLAY_GATES == ()
+
+
 def test_radar_table_matches_classify_symbol_last_bar():
     df = _daily_ramp()
     cfg = RadarConfig(min_bars=50)
@@ -44,7 +49,7 @@ def test_radar_table_matches_classify_symbol_last_bar():
     assert bool(last["is_late_stage"]) == row.is_late_stage
 
 
-def test_btc_red_skips_buy_not_sell():
+def test_btc_red_does_not_skip_buy():
     idx = pd.date_range("2025-01-01", periods=5, freq="1D", tz="UTC")
     btc = pd.DataFrame(
         {
@@ -89,8 +94,8 @@ def test_btc_red_skips_buy_not_sell():
     sell["daily_trend"] = "bearish"
     d_buy = overlay_decision(buy, radar=radar)
     d_sell = overlay_decision(sell, radar=radar)
-    assert d_buy.skip is True and d_buy.btc_regime is True
-    assert d_sell.btc_regime is False
+    assert d_buy.skip is False and d_buy.btc_regime is False
+    assert d_sell.skip is False and d_sell.btc_regime is False
 
 
 def test_two_losses_do_not_lock_next_setup():
@@ -135,7 +140,7 @@ def test_two_losses_do_not_lock_next_setup():
     assert kept["wins"] == 1
 
 
-def test_too_late_green_chase_skips_buy():
+def test_too_late_green_chase_does_not_skip_buy():
     idx = pd.date_range("2025-03-01", periods=8, freq="1D", tz="UTC")
     btc = pd.DataFrame(
         {
@@ -164,5 +169,5 @@ def test_too_late_green_chase_skips_buy():
         signal_id=1,
     )
     dec = overlay_decision(row, radar=radar)
-    assert dec.skip is True
-    assert dec.too_late is True
+    assert dec.skip is False
+    assert dec.too_late is False

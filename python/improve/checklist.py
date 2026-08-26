@@ -120,8 +120,8 @@ def evaluate_native(
 ) -> NativeChecklist:
     """Checklist using persisted QMIE fields + optional radar snapshot.
 
-    KovaView overlays here are too_late and btc_regime — not compute_signal.
-    Two-loss cooldown is not coded: a 4h alert stream is not one EOD setup.
+    KovaView skip gates (too_late, btc_regime, cooldown) are not coded.
+    A 4h A/A+ slice showed too_late and BTC-RED skips cut winners.
     """
     flat = flatten_signal(row)
     symbol = _s(flat.get("symbol")).upper() or "?"
@@ -223,67 +223,6 @@ def evaluate_native(
         ))
     else:
         items.append(CheckItem("radar_color", False, False, f"Radar {color}"))
-
-    # KovaView SPY analog: BTC 1D radar. RED blocks new BUY risk.
-    # GREY is advisory. SELL is not gated. Missing BTC row = WATCH, not SKIP.
-    btc_color = radar_color_for("BTCUSDT", radar)
-    if side != "BUY":
-        items.append(CheckItem(
-            "btc_regime",
-            True,
-            False,
-            f"BTC {btc_color or 'n/a'} — SELL not gated by buys_allowed",
-        ))
-    elif btc_color is None:
-        items.append(CheckItem(
-            "btc_regime",
-            False,
-            False,
-            "BTC radar missing — cannot confirm buys_allowed",
-        ))
-    elif btc_color == "RED":
-        items.append(CheckItem(
-            "btc_regime",
-            False,
-            True,
-            "BTC RED — buys_allowed false (SPY SMA200 analog)",
-        ))
-    elif btc_color == "GREY":
-        items.append(CheckItem(
-            "btc_regime",
-            False,
-            False,
-            "BTC GREY — wait (advisory, not a hard veto)",
-        ))
-    else:
-        items.append(CheckItem(
-            "btc_regime",
-            True,
-            False,
-            f"BTC {btc_color} — buys_allowed",
-        ))
-
-    # too_late: chase-risk on an extended same-side radar state.
-    rrow = radar_row_for(symbol, radar)
-    if rrow is None:
-        items.append(CheckItem("too_late", False, False, "No radar row for too_late"))
-    elif rrow.get("is_late_stage"):
-        chasing = (
-            (side == "BUY" and color == "GREEN")
-            or (side == "SELL" and color == "RED")
-        )
-        items.append(CheckItem(
-            "too_late",
-            not chasing,
-            chasing,
-            (
-                f"late-stage {color} chase — skip"
-                if chasing
-                else f"late-stage {color} — not a same-side chase"
-            ),
-        ))
-    else:
-        items.append(CheckItem("too_late", True, False, "not late-stage"))
 
     fr = _f(flat.get("funding_rate"))
     if fr is None:

@@ -2,8 +2,8 @@
 KovaView checklist overlays on frozen backtest signals
 ======================================================
 Post-filters only. Does not call compute_signal. Does not retune W_*.
-Uses production ``evaluate_native`` items too_late / btc_regime.
-Two-loss cooldown is not applied (it locked a 4h alert stream).
+Production skip gates are empty: too_late / btc_regime cut winners on
+the 4h BTC/ETH/SOL A/A+ slice. Cooldown is not applied either.
 """
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ from improve.checklist import evaluate_native
 from scanner.indicators import adx
 from scanner.radar import RadarConfig, classify_rgg_series
 
-OVERLAY_GATES = ("too_late", "btc_regime")
+# Empty on purpose. too_late + btc_regime skipped winners on the 4h slice.
+OVERLAY_GATES: tuple[str, ...] = ()
 
 
 def radar_state_table(
@@ -168,12 +169,12 @@ def overlay_decision(
     *,
     radar: Optional[dict[str, Any]],
 ) -> OverlayDecision:
-    """SKIP only when a *new* overlay required-gate fails (not HTF/1h/ADX)."""
+    """SKIP only when an overlay required-gate fails. OVERLAY_GATES is empty."""
     chk = evaluate_native(signal_row, radar=radar)
     reasons: list[str] = []
     flags = {"too_late": False, "btc_regime": False}
     for item in chk.items:
-        if item.id in flags and item.required and not item.passed:
+        if item.id in OVERLAY_GATES and item.required and not item.passed:
             flags[item.id] = True
             reasons.append(item.id)
     return OverlayDecision(
@@ -189,7 +190,7 @@ def annotate_closed(
     rows: list[dict[str, Any]],
     tables: dict[str, pd.DataFrame],
 ) -> list[dict[str, Any]]:
-    """Apply too_late + btc_regime to closed trades. No loss-streak lockout."""
+    """Annotate closed trades. Overlay skip list is empty (no lockout)."""
     ordered = sorted(rows, key=lambda r: (pd.Timestamp(r["timestamp"]), str(r.get("symbol") or "")))
     out: list[dict[str, Any]] = []
     for i, r in enumerate(ordered, start=1):

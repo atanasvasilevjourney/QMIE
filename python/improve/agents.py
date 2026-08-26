@@ -196,8 +196,8 @@ def checklist_agent(
         "mix": mix,
         "cards": cards,
         "note": (
-            "Native overlay (no MCP). too_late / BTC buys_allowed are checklist "
-            "gates, not W_*. No loss-streak cooldown. MCP /qmie-setup remains optional."
+            "Native overlay (no MCP). No too_late / BTC-RED / cooldown skips "
+            "(they cut winners on the 4h slice). MCP /qmie-setup remains optional."
         ),
     })
 

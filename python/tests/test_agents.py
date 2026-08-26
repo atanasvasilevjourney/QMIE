@@ -111,28 +111,30 @@ def test_radar_agent_bias_long():
     assert out["breadth_pct"]["green"] > 50
 
 
-def test_radar_agent_btc_red_blocks_buys():
+def test_radar_agent_btc_red_is_display_not_a_skip():
     out = radar_agent({"green": 2, "grey": 0, "red": 8, "rows": [
         {"symbol": "BTCUSDT", "color": "RED"},
     ]})
     assert out["buys_allowed"] is False
 
 
-def test_eth_buy_skipped_when_btc_red():
+def test_eth_buy_not_skipped_when_btc_red():
+    """BTC-RED buys_allowed was measured and taken off — it cut winners."""
     radar = {"rows": [
         {"symbol": "ETHUSDT", "color": "GREEN"},
         {"symbol": "BTCUSDT", "color": "RED"},
     ]}
     v = evaluate_native(_row(symbol="ETHUSDT"), radar=radar)
-    assert v.verdict == "SKIP"
-    assert any(i.id == "btc_regime" and i.required and not i.passed for i in v.items)
+    assert v.verdict == "GO"
+    assert all(i.id not in ("btc_regime", "too_late") for i in v.items)
 
 
-def test_btc_grey_is_watch_not_skip_on_buy():
+def test_btc_grey_is_watch_from_radar_color_not_regime():
     radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREY"}]}
     v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "WATCH"
-    assert any(i.id == "btc_regime" and (not i.required) and not i.passed for i in v.items)
+    assert any(i.id == "radar_color" and (not i.required) and not i.passed for i in v.items)
+    assert all(i.id != "btc_regime" for i in v.items)
 
 
 def test_sell_not_gated_by_btc_red():
@@ -145,33 +147,25 @@ def test_sell_not_gated_by_btc_red():
         radar=radar,
     )
     assert v.verdict == "GO"
-    assert any(i.id == "btc_regime" and i.passed for i in v.items)
+    assert all(i.id != "btc_regime" for i in v.items)
 
 
-def test_too_late_green_chase_is_skip():
+def test_too_late_green_chase_is_not_skip():
     radar = {"rows": [
         {"symbol": "BTCUSDT", "color": "GREEN", "is_late_stage": True, "days_in_state": 40},
     ]}
     v = evaluate_native(_row(), radar=radar)
-    assert v.verdict == "SKIP"
-    assert any(i.id == "too_late" and i.required and not i.passed for i in v.items)
-
-
-def test_too_late_false_stays_go():
-    radar = {"rows": [
-        {"symbol": "BTCUSDT", "color": "GREEN", "is_late_stage": False},
-    ]}
-    v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "GO"
-    assert all(i.id != "cooldown" for i in v.items)
+    assert all(i.id != "too_late" for i in v.items)
 
 
-def test_two_manual_losses_do_not_lock_book():
-    """Cooldown was removed — a 4h stream is not one EOD setup."""
+def test_kovaview_skip_ids_absent():
+    """too_late / btc_regime / cooldown stay off the live checklist."""
     radar = {"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]}
     v = evaluate_native(_row(), radar=radar)
     assert v.verdict == "GO"
-    assert all(i.id != "cooldown" for i in v.items)
+    ids = {i.id for i in v.items}
+    assert not {"too_late", "btc_regime", "cooldown"} & ids
 
 
 def test_book_agent_clusters():

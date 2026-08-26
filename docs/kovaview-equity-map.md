@@ -84,7 +84,7 @@ out of scope in the KovaView brief. Do not add it here either.
 | `quality_rank` 0–100 GREEN/GREY/RED | TEMA 7-component score + A+/A/B/C; 1D radar is ADX/DMI RGG only (`scanner/radar.py`) | No — radar is not a 7-factor equity quality_rank |
 | Convergence / 7 votes | Seven weights summing to 100 (TMA, EMA199, RSI, ADX, HTF, S/R, vol) | No new votes. Ribbon / BOS / sweep stay cut |
 | ADX≥20, DI+>DI− for GREEN | Radar enter_adx=25 / exit_adx=20; live `sig_min_adx` still **0.0**; measurement protocol ADX≥20 | **Next knob after 4h is live** (`strategy/reviews/2026-08-25.md`) |
-| `too_late` hard block | Radar `is_late_stage` (GREEN ≥30d and ≥50% since flip) — chase-risk, not a hard A/A+ block | Overlay: checklist SKIP. Not an 8th score |
+| `too_late` hard block | Radar `is_late_stage` (GREEN ≥30d and ≥50% since flip) — chase-risk | **Not coded.** 4h slice cut winners. Operator habit only |
 | Coil / ATR compression | Radar tight GREY coils + coil-UP (`QMIE-DailyBreakout`, unranked) | Already a screen, not A/A+ |
 | SPY SMA200 + RV≤75 | `daily_trend` (close vs EMA199); `ALLOC_MODE=rotation` BTC-weak → CASH/PAXG. Live default is **ranked** | Crypto analog is **BTC 1D vs EMA200 + vol%**, not SPY |
 | Universe RS | Ranked allocator by QMIE score, `cluster_max=1`; ARS `norm_score` is lookback ROC | Measure rotation vs ranked **after** 4h. Do not add z_mom / z_52 / EWMAC |
@@ -178,10 +178,8 @@ because a notebook is interesting.
 | After 4h is live and measured | Why |
 |---|---|
 | `sig_min_adx` 0→20 | Aligns with GREEN ADX≥20; already in the frozen protocol |
-| `too_late` → checklist SKIP | Radar late-stage already exists; make it hard on GO |
-| BTC 1D trend + optional vol% as `buys_allowed` | SPY analog. Overlay, not an 8th vote |
 | Measure `ALLOC_MODE=rotation` vs ranked | Universe RS / regime leverage |
-| 2-loss cooldown (operator only — do not code) | 4h stream is not one EOD setup |
+| `too_late` / BTC-RED / cooldown | **Measured, taken off.** They skipped winners on 4h A/A+ |
 
 **Never from this brief / notebooks**
 
@@ -195,14 +193,13 @@ because a notebook is interesting.
 
 ## Landed
 
-Native checklist overlays (not `compute_signal`, not `.env`):
-
-- **`too_late`** — radar `is_late_stage` same-side chase → SKIP
-- **`btc_regime`** — BTC 1D RED blocks new BUY (`buys_allowed` false). GREY is WATCH. SELL is not gated. Missing BTC row is WATCH, not SKIP
-- **Cooldown is not coded.** Book-wide two-loss skip locked 4h A/A+ (606→2). Leave skip-next as an operator habit, not a checklist gate.
+No KovaView skip gates on the native checklist. `radar_color` (same-symbol
+GREEN/RED vs side) is the pre-existing optional overlay, not a KovaView
+import. Radar BTC color on the briefing card is **display only**.
 
 GUIDE section `kovaview` points here. Measurement:
-`docs/kovaview-overlay-backtest.md` (BTC/ETH/SOL 4h A/A+ OOS).
+`docs/kovaview-overlay-backtest.md` (BTC/ETH/SOL 4h A/A+ OOS — trial
+gates cut winners, then taken off).
 `places_orders` stays false. Quantity on the desk DAG stays 0.
 
 **Still not landed (on purpose)**
@@ -211,4 +208,4 @@ GUIDE section `kovaview` points here. Measurement:
 - `SCAN_TIMEFRAMES=4h` and `sig_min_adx=20` (one outstanding knob, then catalog)
 - Realized-vol percentile, SMA20 trail, ATR×2.5 paper stop, share sizing
 - Switching live `ALLOC_MODE` to rotation
-- Two-loss / 24h cooldown as a checklist SKIP
+- `too_late`, BTC-RED `buys_allowed`, two-loss / 24h cooldown as checklist SKIP

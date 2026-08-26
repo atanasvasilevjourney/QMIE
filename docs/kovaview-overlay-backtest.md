@@ -13,11 +13,15 @@ python -m backtest.overlay_run \
   --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0
 ```
 
-Vision cache, not live `fapi`. Production gates: `too_late`, `btc_regime`.
+Vision cache, not live `fapi`. Production overlay skip list is **empty**.
 
-**Cooldown is removed.** A book-wide two-loss skip treated every 4h A/A+ as
+**Cooldown is not coded.** A book-wide two-loss skip treated every 4h A/A+ as
 the next setup and locked the book (606 → 2). That does not match KovaView
-“skip the next setup.” It is not on the checklist. Operator habit only.
+“skip the next setup.”
+
+**`too_late` and BTC-RED `buys_allowed` are not coded.** They skipped 5–9
+trades on this slice and cut winners (BTC-RED days plus one late-stage
+ETH short). Overlay book = raw book.
 
 ## Headline (OOS ≥ 2025-01-01, 4h A/A+, ADX≥20, ATR% 0.4–4.0)
 
@@ -26,16 +30,13 @@ Three names: BTC / ETH / SOL.
 | Book | N | Win | E[R] | PF | Notes |
 |---|---:|---:|---:|---:|---|
 | Raw closed alerts | 606 | 44.7% | +0.193 | 1.35 | Clustered 4h A/A+ |
-| + too_late + BTC regime | 597 | 44.6% | +0.188 | 1.34 | Skip 9: BTC 5, too_late 4 |
+| + too_late + BTC regime (trial) | 597 | 44.6% | +0.188 | 1.34 | Skip 9: BTC 5, too_late 4 — **taken off** |
 | First alert / symbol / UTC day | 277 | 43.3% | +0.155 | 1.27 | Swing-style de-dupe |
-| + too_late + BTC regime | 272 | 43.0% | +0.147 | 1.26 | Skip 5: BTC 3, too_late 2 |
+| + too_late + BTC regime (trial) | 272 | 43.0% | +0.147 | 1.26 | Skip 5: BTC 3, too_late 2 — **taken off** |
 
-These two gates are rare here and slightly **hurt** this slice (they cut
-winners on BTC-RED days and one late-stage ETH short). They stay as
-chase/regime vetoes, not an expectancy engine. Do not treat this as a
-new frozen OOS.
+Live overlay skip list is empty, so overlay n = raw n.
 
-## Sample skips
+## Sample skips (trial only — not live)
 
 | When (UTC) | Symbol | Out | R | Why |
 |---|---|---|---:|---|
@@ -47,6 +48,7 @@ new frozen OOS.
 
 ## Verdict
 
-Keep `too_late` and BTC `buys_allowed` as discretionary overlays. Do **not**
-code a loss-streak cooldown into the 4h scanner. Re-run after
-`SCAN_TIMEFRAMES=4h` is live before calling any overlay a frozen baseline.
+Do **not** put `too_late`, BTC-RED `buys_allowed`, or a loss-streak
+cooldown on the 4h checklist. They take winners off the book. Re-run
+after `SCAN_TIMEFRAMES=4h` is live before calling any overlay a frozen
+baseline.
