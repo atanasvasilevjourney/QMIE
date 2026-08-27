@@ -147,8 +147,12 @@ html[data-theme="light"] .theme-blob {
 }
 
 .universe-frame {
-  box-shadow: inset 0 0 0 1px rgba(62, 200, 216, 0.18);
-  background: #05070c;
+  box-shadow:
+    inset 0 0 0 1px rgba(94, 233, 242, 0.22),
+    inset 0 0 80px rgba(8, 20, 32, 0.45);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(94, 233, 242, 0.08), transparent 42%),
+    #02040a;
 }
 
 html[data-theme="light"] .universe-frame {
