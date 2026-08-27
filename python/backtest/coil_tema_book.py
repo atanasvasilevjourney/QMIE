@@ -146,6 +146,8 @@ def collect_tema_buys(
         return []
     df_htf = resample_ohlcv(df_4h, "1D")
     out: list[TemaBuy] = []
+    n_buy = 0
+    n_sell = 0
     n = len(df_4h)
     start_i = TEMA_WARMUP
     if after is not None:
@@ -162,10 +164,16 @@ def collect_tema_buys(
             htf_df=slice_htf if len(slice_htf) >= 10 else None,
             daily_df=slice_daily if len(slice_daily) >= 199 else None,
         )
-        if sig is None or sig.side != "BUY" or sig.grade not in ("A", "A+"):
+        if sig is None or sig.grade not in ("A", "A+"):
+            continue
+        if sig.side == "SELL":
+            n_sell += 1
+            continue
+        if sig.side != "BUY":
             continue
         if not (min_atr_pct <= sig.atr_pct <= max_atr_pct):
             continue
+        n_buy += 1
         out.append(TemaBuy(
             symbol=symbol.upper(),
             bar_time=pd.Timestamp(sig.timestamp),
@@ -177,6 +185,7 @@ def collect_tema_buys(
             atr_pct=float(sig.atr_pct),
             adx=float(sig.adx_value),
         ))
+    logger.info("%s 4h A/A+ BUY=%d SELL=%d (add uses BUY only)", symbol, n_buy, n_sell)
     return out
 
 
