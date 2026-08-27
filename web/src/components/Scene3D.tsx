@@ -172,15 +172,15 @@ function LogoCoin({ id }: { id: CryptoLogoId }) {
   return (
     <Billboard follow>
       <mesh>
-        <circleGeometry args={[0.38, 64]} />
+        <circleGeometry args={[0.145, 48]} />
         <meshBasicMaterial color="#080c12" />
       </mesh>
       <mesh position={[0, 0, 0.004]}>
-        <circleGeometry args={[0.34, 64]} />
+        <circleGeometry args={[0.125, 48]} />
         <meshBasicMaterial map={tex} toneMapped={false} transparent />
       </mesh>
-      <mesh position={[0, 0, -0.012]} scale={1.08}>
-        <ringGeometry args={[0.335, 0.4, 64]} />
+      <mesh position={[0, 0, -0.01]}>
+        <ringGeometry args={[0.128, 0.155, 48]} />
         <meshBasicMaterial
           color={halo}
           transparent
@@ -202,6 +202,7 @@ function TokenOrbit({
   y,
   tilt,
   reduce,
+  phase0 = 0,
 }: {
   logos: CryptoLogoId[]
   rx: number
@@ -210,6 +211,7 @@ function TokenOrbit({
   y: number
   tilt: number
   reduce: boolean
+  phase0?: number
 }) {
   const holders = useRef<(THREE.Group | null)[]>([])
   const n = logos.length
@@ -217,10 +219,9 @@ function TokenOrbit({
     () =>
       logos.map((id, i) => ({
         id,
-        phase: n ? (i / n) * Math.PI * 2 : 0,
-        scale: 0.92 + (i % 4) * 0.08,
+        phase: phase0 + (n ? (i / n) * Math.PI * 2 : 0),
       })),
-    [logos, n],
+    [logos, n, phase0],
   )
 
   useFrame((state) => {
@@ -230,7 +231,7 @@ function TokenOrbit({
       const g = holders.current[i]
       if (!g) continue
       const a = t * s + tokens[i].phase
-      g.position.set(Math.cos(a) * rx, Math.sin(a * 2) * 0.07, Math.sin(a) * rz)
+      g.position.set(Math.cos(a) * rx, Math.sin(a * 2) * 0.04, Math.sin(a) * rz)
     }
   })
 
@@ -243,7 +244,6 @@ function TokenOrbit({
             holders.current[i] = el
           }}
           position={[Math.cos(tok.phase) * rx, 0, Math.sin(tok.phase) * rz]}
-          scale={tok.scale}
         >
           <Suspense fallback={null}>
             <LogoCoin id={tok.id} />
@@ -264,7 +264,7 @@ function SymbolNebula({ radar, reduce }: { radar: RadarSnapshot | null; reduce: 
     const sz = new Float32Array(n)
     for (let i = 0; i < n; i++) {
       const row = rows[i]
-      const shell = 3.35 + (i % 11) * 0.18 + (i % 5) * 0.04
+      const shell = 5.55 + (i % 11) * 0.22 + (i % 5) * 0.05
       const a = (i / n) * Math.PI * 2 + (i % 7) * 0.09
       const y = Math.sin(i * 0.31) * 1.15 + ((i % 13) - 6) * 0.06
       pos[i * 3] = Math.cos(a) * shell
@@ -326,15 +326,15 @@ function ObsidianFloor() {
         />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-        <ringGeometry args={[2.05, 2.12, 96]} />
+        <ringGeometry args={[3.5, 3.57, 96]} />
         <meshBasicMaterial color={CYAN} transparent opacity={0.35} side={THREE.DoubleSide} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.014, 0]}>
-        <ringGeometry args={[3.15, 3.22, 96]} />
+        <ringGeometry args={[4.5, 4.57, 96]} />
         <meshBasicMaterial color={MAGENTA} transparent opacity={0.22} side={THREE.DoubleSide} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.016, 0]}>
-        <ringGeometry args={[4.35, 4.42, 96]} />
+        <ringGeometry args={[5.65, 5.72, 96]} />
         <meshBasicMaterial color={AMBER} transparent opacity={0.16} side={THREE.DoubleSide} />
       </mesh>
     </group>
@@ -375,7 +375,6 @@ function UniverseFX() {
 
 export function Scene3D({
   radar,
-  signalCount = 0,
   allowZoom = false,
 }: {
   radar: RadarSnapshot | null
@@ -387,14 +386,16 @@ export function Scene3D({
   const red = radar?.red ?? 0
   const [ready, setReady] = useState(false)
   const reduce = usePrefersReducedMotion()
-  const innerCount = Math.max(10, Math.min(14, green + red + 8 + Math.min(3, signalCount)))
-  const outerCount = Math.max(8, innerCount - 3)
+  const innerCount = 6
+  const midCount = 7
+  const outerCount = 7
   const logos = useMemo(() => {
     const symbols = radar?.rows?.map((r) => r.symbol) ?? []
-    return orbitLogoIds(symbols, innerCount + outerCount)
-  }, [radar, innerCount, outerCount])
+    return orbitLogoIds(symbols, innerCount + midCount + outerCount)
+  }, [radar])
   const innerLogos = logos.slice(0, innerCount)
-  const outerLogos = logos.slice(innerCount, innerCount + outerCount)
+  const midLogos = logos.slice(innerCount, innerCount + midCount)
+  const outerLogos = logos.slice(innerCount + midCount, innerCount + midCount + outerCount)
 
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[28px] neon-border glass scanlines universe-frame">
@@ -407,7 +408,7 @@ export function Scene3D({
         </div>
       )}
       <Canvas
-        camera={{ position: [0, 1.85, 7.6], fov: 38, near: 0.1, far: 200 }}
+        camera={{ position: [0, 2.15, 10.2], fov: 34, near: 0.1, far: 200 }}
         dpr={[1, 1.6]}
         gl={{ antialias: true, powerPreference: 'high-performance', alpha: false }}
         onCreated={({ gl }) => {
@@ -418,7 +419,7 @@ export function Scene3D({
         }}
       >
         <color attach="background" args={[VOID]} />
-        <fog attach="fog" args={[VOID, 9, 26]} />
+        <fog attach="fog" args={[VOID, 12, 34]} />
         <ambientLight intensity={0.18} />
         <pointLight position={[4, 5, 3]} intensity={28} color={CYAN} distance={22} />
         <pointLight position={[-5, 1, -3]} intensity={18} color={MAGENTA} distance={20} />
@@ -431,21 +432,48 @@ export function Scene3D({
 
         <Rig reduce={reduce}>
           <GlassCore green={green} grey={grey} red={red} reduce={reduce} />
-          <OrbitRail rx={2.55} rz={2.15} color={CYAN} tilt={0.28} y={0.12} />
-          <OrbitRail rx={3.35} rz={2.75} color={MAGENTA} tilt={-0.32} y={-0.28} />
-          <OrbitRail rx={4.05} rz={3.35} color={AMBER} tilt={0.08} y={0.02} />
-          <TokenOrbit logos={innerLogos} rx={2.55} rz={2.15} speed={0.32} y={0.12} tilt={0.28} reduce={reduce} />
-          <TokenOrbit logos={outerLogos} rx={3.35} rz={2.75} speed={-0.18} y={-0.28} tilt={-0.32} reduce={reduce} />
+          <OrbitRail rx={3.55} rz={2.95} color={CYAN} tilt={0.16} y={0.48} />
+          <OrbitRail rx={4.55} rz={3.75} color={MAGENTA} tilt={-0.44} y={-0.48} />
+          <OrbitRail rx={5.7} rz={4.65} color={AMBER} tilt={0.07} y={0.16} />
+          <TokenOrbit
+            logos={innerLogos}
+            rx={3.55}
+            rz={2.95}
+            speed={0.22}
+            y={0.48}
+            tilt={0.16}
+            reduce={reduce}
+          />
+          <TokenOrbit
+            logos={midLogos}
+            rx={4.55}
+            rz={3.75}
+            speed={-0.16}
+            y={-0.48}
+            tilt={-0.44}
+            reduce={reduce}
+            phase0={Math.PI / 7}
+          />
+          <TokenOrbit
+            logos={outerLogos}
+            rx={5.7}
+            rz={4.65}
+            speed={0.11}
+            y={0.16}
+            tilt={0.07}
+            reduce={reduce}
+            phase0={Math.PI / 7}
+          />
           <SymbolNebula radar={radar} reduce={reduce} />
         </Rig>
         <ObsidianFloor />
-        <ContactShadows position={[0, -2.26, 0]} opacity={0.55} scale={14} blur={2.4} far={6} color="#000000" />
+        <ContactShadows position={[0, -2.26, 0]} opacity={0.5} scale={16} blur={2.4} far={7} color="#000000" />
 
         <OrbitControls
           enablePan={false}
           enableZoom={allowZoom}
-          minDistance={5.2}
-          maxDistance={13}
+          minDistance={7}
+          maxDistance={18}
           minPolarAngle={Math.PI / 3.4}
           maxPolarAngle={Math.PI / 1.82}
           autoRotate={!reduce}
