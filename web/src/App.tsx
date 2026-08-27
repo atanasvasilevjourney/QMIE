@@ -130,7 +130,7 @@ export default function App() {
                     Orbis <span className="text-cyan">Universe</span>
                   </h2>
                   <p className="lede">
-                    RGG nebula and orbit tokens. Radar and strategy tables live on Ops.
+                    Glass core and satellite orbits. Radar and strategy tables live on Ops.
                     Signal-only — never orders.
                   </p>
                 </div>

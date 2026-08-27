@@ -1,22 +1,24 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import {
-  Float,
-  Grid,
-  MeshDistortMaterial,
+  Billboard,
+  ContactShadows,
+  Environment,
+  Lightformer,
+  MeshTransmissionMaterial,
   OrbitControls,
   Sparkles,
   Stars,
 } from '@react-three/drei'
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { RadarSnapshot } from '../types'
 
-const CYAN = '#00f0ff'
-const MAGENTA = '#ff2bd6'
-const LIME = '#b8ff3c'
-const AMBER = '#ffb020'
-const VOID = '#03040a'
+const CYAN = '#5ee9f2'
+const MAGENTA = '#ff4d9a'
+const AMBER = '#ffc45c'
+const VOID = '#02040a'
+const VOID_COLOR = new THREE.Color(VOID)
 
 function mixRadarColor(green: number, grey: number, red: number) {
   const total = Math.max(1, green + grey + red)
@@ -24,270 +26,302 @@ function mixRadarColor(green: number, grey: number, red: number) {
   const r = red / total
   const gy = grey / total
   return new THREE.Color().setRGB(
-    0.12 + r * 0.88 + gy * 0.25,
-    0.25 + g * 0.7 + gy * 0.2,
-    0.85 - r * 0.45 + g * 0.1,
+    0.18 + r * 0.72 + gy * 0.22,
+    0.42 + g * 0.48 + gy * 0.12,
+    0.78 - r * 0.4 + g * 0.12,
   )
 }
 
-function HoloCore({ green, grey, red }: { green: number; grey: number; red: number }) {
-  const mesh = useRef<THREE.Mesh>(null)
+function usePrefersReducedMotion() {
+  const [reduce, setReduce] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const sync = () => setReduce(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  return reduce
+}
+
+function GlassCore({
+  green,
+  grey,
+  red,
+  reduce,
+}: {
+  green: number
+  grey: number
+  red: number
+  reduce: boolean
+}) {
+  const spin = useRef<THREE.Group>(null)
   const inner = useRef<THREE.Mesh>(null)
   const color = useMemo(() => mixRadarColor(green, grey, red), [green, grey, red])
+  const hex = `#${color.getHexString()}`
 
   useFrame((state, dt) => {
-    if (mesh.current) {
-      mesh.current.rotation.y += dt * 0.32
-      mesh.current.rotation.x += dt * 0.1
-      const pulse = 1.28 + Math.sin(state.clock.elapsedTime * 1.6) * 0.04
-      mesh.current.scale.setScalar(pulse)
-    }
+    if (reduce) return
+    if (spin.current) spin.current.rotation.y += dt * 0.18
     if (inner.current) {
-      inner.current.rotation.y -= dt * 0.55
-      inner.current.rotation.z += dt * 0.2
+      inner.current.rotation.y -= dt * 0.42
+      inner.current.rotation.z += dt * 0.16
+      const pulse = 1 + Math.sin(state.clock.elapsedTime * 1.4) * 0.06
+      inner.current.scale.setScalar(pulse)
     }
   })
 
   return (
-    <group>
-      <mesh ref={mesh}>
-        <icosahedronGeometry args={[1, 3]} />
-        <MeshDistortMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.85}
-          roughness={0.12}
-          metalness={0.95}
-          distort={0.32}
-          speed={2.4}
-          transparent
-          opacity={0.88}
-        />
-      </mesh>
-      <mesh ref={inner} scale={0.55}>
-        <octahedronGeometry args={[1, 0]} />
+    <group ref={spin}>
+      <pointLight color={hex} intensity={18} distance={8} decay={2} />
+      <mesh ref={inner}>
+        <sphereGeometry args={[0.36, 32, 32]} />
         <meshStandardMaterial
-          color={AMBER}
-          emissive={AMBER}
-          emissiveIntensity={1.4}
-          metalness={1}
-          roughness={0.15}
-          wireframe
+          color={hex}
+          emissive={hex}
+          emissiveIntensity={3.2}
+          metalness={0.05}
+          roughness={0.18}
+        />
+      </mesh>
+      <mesh scale={0.62}>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial color={hex} wireframe transparent opacity={0.35} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[1.08, 64, 64]} />
+        <MeshTransmissionMaterial
+          backside
+          samples={6}
+          resolution={256}
+          transmission={1}
+          roughness={0.08}
+          thickness={0.55}
+          ior={1.42}
+          chromaticAberration={0.28}
+          anisotropy={0.35}
+          distortion={reduce ? 0 : 0.18}
+          distortionScale={0.22}
+          temporalDistortion={reduce ? 0 : 0.08}
+          color="#c8f7ff"
+          attenuationColor={hex}
+          attenuationDistance={2.4}
+          background={VOID_COLOR}
+        />
+      </mesh>
+      <mesh scale={1.22}>
+        <sphereGeometry args={[1, 48, 48]} />
+        <meshBasicMaterial
+          color={hex}
+          transparent
+          opacity={0.09}
+          side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
     </group>
   )
 }
 
-function WireShell() {
-  const ref = useRef<THREE.Mesh>(null)
-  useFrame((_, dt) => {
-    if (ref.current) ref.current.rotation.y -= dt * 0.14
-  })
-  return (
-    <mesh ref={ref} scale={1.78}>
-      <icosahedronGeometry args={[1, 1]} />
-      <meshBasicMaterial color={CYAN} wireframe transparent opacity={0.28} />
-    </mesh>
-  )
-}
-
-function NeonRings() {
-  const a = useRef<THREE.Mesh>(null)
-  const b = useRef<THREE.Mesh>(null)
-  const c = useRef<THREE.Mesh>(null)
-  useFrame((state, dt) => {
-    const t = state.clock.elapsedTime
-    if (a.current) {
-      a.current.rotation.x += dt * 0.35
-      a.current.rotation.z = Math.sin(t * 0.4) * 0.2
-    }
-    if (b.current) {
-      b.current.rotation.y -= dt * 0.28
-      b.current.rotation.x = 0.5 + Math.cos(t * 0.3) * 0.15
-    }
-    if (c.current) {
-      c.current.rotation.z += dt * 0.22
-      c.current.rotation.y = Math.sin(t * 0.25) * 0.35
-    }
-  })
-  return (
-    <group>
-      <mesh ref={a}>
-        <torusGeometry args={[2.05, 0.018, 16, 128]} />
-        <meshBasicMaterial color={MAGENTA} transparent opacity={0.85} />
-      </mesh>
-      <mesh ref={b}>
-        <torusGeometry args={[2.4, 0.012, 16, 160]} />
-        <meshBasicMaterial color={CYAN} transparent opacity={0.65} />
-      </mesh>
-      <mesh ref={c}>
-        <torusGeometry args={[2.75, 0.008, 12, 180]} />
-        <meshBasicMaterial color={LIME} transparent opacity={0.35} />
-      </mesh>
-    </group>
-  )
-}
-
-const COIN_LABELS = ['PEPE', 'DOGE', 'WIF', 'BONK', 'BTC', 'ETH', 'SOL', 'ORDI', 'MEME', 'QMIE']
-
-function MemeCoin({
+function OrbitRail({
+  rx,
+  rz,
   color,
-  label,
-  scale = 1,
+  tilt,
+  y,
 }: {
+  rx: number
+  rz: number
   color: string
-  label: string
-  scale?: number
+  tilt: number
+  y: number
 }) {
-  const emboss = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 256
-    canvas.height = 256
-    const ctx = canvas.getContext('2d')!
-    const grd = ctx.createRadialGradient(128, 128, 20, 128, 128, 120)
-    grd.addColorStop(0, '#ffffff')
-    grd.addColorStop(0.45, color)
-    grd.addColorStop(1, '#1a1020')
-    ctx.fillStyle = grd
-    ctx.beginPath()
-    ctx.arc(128, 128, 118, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-    ctx.lineWidth = 8
-    ctx.stroke()
-    ctx.fillStyle = '#05060a'
-    ctx.font = 'bold 54px Syne, IBM Plex Sans, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(label.slice(0, 4), 128, 128)
-    const tex = new THREE.CanvasTexture(canvas)
-    tex.colorSpace = THREE.SRGBColorSpace
-    return tex
-  }, [color, label])
+  const geom = useMemo(() => {
+    const curve = new THREE.EllipseCurve(0, 0, rx, rz, 0, Math.PI * 2, false, 0)
+    const pts = curve.getPoints(160).map((p) => new THREE.Vector3(p.x, 0, p.y))
+    const path = new THREE.CatmullRomCurve3(pts, true)
+    return new THREE.TubeGeometry(path, 160, 0.011, 8, true)
+  }, [rx, rz])
+
+  useEffect(() => () => geom.dispose(), [geom])
 
   return (
-    <mesh scale={scale} rotation={[Math.PI / 2, 0, 0]}>
-      <cylinderGeometry args={[0.22, 0.22, 0.045, 32]} />
+    <mesh geometry={geom} position={[0, y, 0]} rotation={[tilt, 0.12, 0]}>
       <meshStandardMaterial
-        map={emboss}
+        color={color}
         emissive={color}
-        emissiveIntensity={0.45}
-        metalness={0.95}
+        emissiveIntensity={0.7}
+        metalness={1}
         roughness={0.22}
+        transparent
+        opacity={0.85}
       />
     </mesh>
   )
 }
 
+const COIN_LABELS = ['PEPE', 'DOGE', 'WIF', 'BONK', 'BTC', 'ETH', 'SOL', 'ORDI', 'MEME', 'QMIE']
+
+function MemeCoin({ color, label }: { color: string; label: string }) {
+  const emboss = useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 256
+    const ctx = canvas.getContext('2d')!
+    const grd = ctx.createRadialGradient(128, 96, 12, 128, 128, 118)
+    grd.addColorStop(0, '#ffffff')
+    grd.addColorStop(0.35, color)
+    grd.addColorStop(1, '#0a0d14')
+    ctx.fillStyle = grd
+    ctx.beginPath()
+    ctx.arc(128, 128, 118, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+    ctx.lineWidth = 10
+    ctx.stroke()
+    ctx.fillStyle = '#071018'
+    ctx.font = '700 52px IBM Plex Sans, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label.slice(0, 4), 128, 132)
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.anisotropy = 8
+    return tex
+  }, [color, label])
+
+  useEffect(() => () => emboss.dispose(), [emboss])
+
+  return (
+    <Billboard follow>
+      <mesh>
+        <circleGeometry args={[0.28, 48]} />
+        <meshPhysicalMaterial
+          map={emboss}
+          color="#ffffff"
+          emissive={color}
+          emissiveIntensity={0.22}
+          metalness={0.85}
+          roughness={0.2}
+          clearcoat={0.65}
+          clearcoatRoughness={0.18}
+          iridescence={0.4}
+          iridescenceIOR={1.3}
+          transparent
+          opacity={0.98}
+        />
+      </mesh>
+      <mesh position={[0, 0, -0.012]} scale={1.12}>
+        <ringGeometry args={[0.26, 0.3, 48]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.55}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </Billboard>
+  )
+}
+
 function TokenOrbit({
   count,
-  radius,
+  rx,
+  rz,
   speed,
   y,
   tilt,
+  reduce,
 }: {
   count: number
-  radius: number
+  rx: number
+  rz: number
   speed: number
   y: number
   tilt: number
+  reduce: boolean
 }) {
-  const group = useRef<THREE.Group>(null)
-  const n = Math.min(18, Math.max(8, count))
+  const holders = useRef<(THREE.Group | null)[]>([])
+  const n = Math.min(16, Math.max(8, count))
   const tokens = useMemo(
     () =>
-      Array.from({ length: n }, (_, i) => {
-        const a = (i / n) * Math.PI * 2
-        return {
-          x: Math.cos(a) * radius,
-          z: Math.sin(a) * radius,
-          label: COIN_LABELS[i % COIN_LABELS.length],
-          color: i % 3 === 0 ? AMBER : i % 3 === 1 ? CYAN : MAGENTA,
-        }
-      }),
-    [n, radius],
+      Array.from({ length: n }, (_, i) => ({
+        phase: (i / n) * Math.PI * 2,
+        label: COIN_LABELS[i % COIN_LABELS.length],
+        color: i % 3 === 0 ? AMBER : i % 3 === 1 ? CYAN : MAGENTA,
+        scale: 0.92 + (i % 4) * 0.07,
+      })),
+    [n],
   )
 
-  useFrame((_, dt) => {
-    if (group.current) group.current.rotation.y += dt * speed
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const s = reduce ? 0 : speed
+    for (let i = 0; i < tokens.length; i++) {
+      const g = holders.current[i]
+      if (!g) continue
+      const a = t * s + tokens[i].phase
+      g.position.set(Math.cos(a) * rx, Math.sin(a * 2) * 0.07, Math.sin(a) * rz)
+    }
   })
 
   return (
-    <group ref={group} position={[0, y, 0]} rotation={[tilt, 0, 0.15]}>
-      {tokens.map((t, i) => (
-        <Float key={i} speed={1.2 + (i % 4) * 0.25} floatIntensity={0.45} rotationIntensity={0.55}>
-          <group position={[t.x, 0, t.z]}>
-            <MemeCoin color={t.color} label={t.label} scale={0.95 + (i % 3) * 0.08} />
-          </group>
-        </Float>
+    <group position={[0, y, 0]} rotation={[tilt, 0.12, 0]}>
+      {tokens.map((tok, i) => (
+        <group
+          key={`${tok.label}-${i}`}
+          ref={(el) => {
+            holders.current[i] = el
+          }}
+          position={[Math.cos(tok.phase) * rx, 0, Math.sin(tok.phase) * rz]}
+          scale={tok.scale}
+        >
+          <MemeCoin color={tok.color} label={tok.label} />
+        </group>
       ))}
     </group>
   )
 }
 
-function EnergyBeams() {
-  const group = useRef<THREE.Group>(null)
-  useFrame((state) => {
-    if (group.current) group.current.rotation.y = state.clock.elapsedTime * 0.15
-  })
-  return (
-    <group ref={group}>
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const a = (i / 6) * Math.PI * 2
-        return (
-          <mesh key={i} position={[Math.cos(a) * 3.4, 0, Math.sin(a) * 3.4]} rotation={[0, -a, 0]}>
-            <boxGeometry args={[0.02, 3.2, 0.02]} />
-            <meshBasicMaterial color={i % 2 ? CYAN : MAGENTA} transparent opacity={0.35} />
-          </mesh>
-        )
-      })}
-    </group>
-  )
-}
-
-function SymbolNebula({ radar }: { radar: RadarSnapshot | null }) {
+function SymbolNebula({ radar, reduce }: { radar: RadarSnapshot | null; reduce: boolean }) {
   const points = useRef<THREE.Points>(null)
   const { positions, colors, sizes } = useMemo(() => {
     const rows = radar?.rows?.slice(0, 220) ?? []
-    // Keep a vivid cloud even when radar is empty (geo-block) — tinted chrome, not fake G/R counts.
-    const n = Math.max(rows.length, 140)
+    const n = Math.max(rows.length, 160)
     const pos = new Float32Array(n * 3)
     const col = new Float32Array(n * 3)
     const sz = new Float32Array(n)
     for (let i = 0; i < n; i++) {
       const row = rows[i]
-      const shell = 3.1 + (i % 9) * 0.22 + (i % 5) * 0.05
-      const a = (i / n) * Math.PI * 2 + (i % 7) * 0.07
-      const y = Math.sin(i * 0.37) * 1.35 + ((i % 13) - 6) * 0.08
+      const shell = 3.35 + (i % 11) * 0.18 + (i % 5) * 0.04
+      const a = (i / n) * Math.PI * 2 + (i % 7) * 0.09
+      const y = Math.sin(i * 0.31) * 1.15 + ((i % 13) - 6) * 0.06
       pos[i * 3] = Math.cos(a) * shell
       pos[i * 3 + 1] = y
       pos[i * 3 + 2] = Math.sin(a) * shell
       const c =
         row?.color === 'GREEN'
-          ? [0.15, 1, 0.42]
+          ? [0.35, 1, 0.55]
           : row?.color === 'RED'
-            ? [1, 0.18, 0.48]
+            ? [1, 0.28, 0.55]
             : row?.color === 'GREY'
-              ? [0.55, 0.62, 0.82]
-              : [
-                  0.35 + (i % 5) * 0.08,
-                  0.55 + (i % 3) * 0.1,
-                  0.85 + (i % 4) * 0.04,
-                ]
+              ? [0.62, 0.7, 0.88]
+              : [0.4 + (i % 5) * 0.07, 0.7 + (i % 3) * 0.08, 0.92]
       col[i * 3] = c[0]
       col[i * 3 + 1] = c[1]
       col[i * 3 + 2] = c[2]
-      sz[i] = 0.06 + (i % 5) * 0.02
+      sz[i] = 0.05 + (i % 5) * 0.018
     }
     return { positions: pos, colors: col, sizes: sz }
   }, [radar])
 
   useFrame((_, dt) => {
-    if (points.current) {
-      points.current.rotation.y += dt * 0.06
-      points.current.rotation.x = Math.sin(performance.now() * 0.00015) * 0.08
-    }
+    if (!points.current || reduce) return
+    points.current.rotation.y += dt * 0.045
+    points.current.rotation.x = Math.sin(performance.now() * 0.00012) * 0.06
   })
 
   return (
@@ -298,10 +332,10 @@ function SymbolNebula({ radar }: { radar: RadarSnapshot | null }) {
         <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
       </bufferGeometry>
       <pointsMaterial
-        size={0.09}
+        size={0.08}
         vertexColors
         transparent
-        opacity={0.92}
+        opacity={0.88}
         sizeAttenuation
         depthWrite={false}
         blending={THREE.AdditiveBlending}
@@ -310,55 +344,63 @@ function SymbolNebula({ radar }: { radar: RadarSnapshot | null }) {
   )
 }
 
-function DataFloor() {
+function ObsidianFloor() {
   return (
-    <group position={[0, -2.35, 0]}>
-      <Grid
-        args={[16, 16]}
-        cellSize={0.45}
-        cellThickness={0.6}
-        cellColor="#00f0ff"
-        sectionSize={2.25}
-        sectionThickness={1.2}
-        sectionColor="#ff2bd6"
-        fadeDistance={18}
-        fadeStrength={1.2}
-        infiniteGrid
-      />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <circleGeometry args={[4.8, 64]} />
-        <meshBasicMaterial color={CYAN} transparent opacity={0.04} />
+    <group position={[0, -2.28, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[5.4, 80]} />
+        <meshPhysicalMaterial
+          color="#070b12"
+          metalness={0.92}
+          roughness={0.18}
+          clearcoat={0.55}
+          envMapIntensity={0.7}
+        />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[4.2, 4.35, 96]} />
-        <meshBasicMaterial color={MAGENTA} transparent opacity={0.35} side={THREE.DoubleSide} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+        <ringGeometry args={[2.05, 2.12, 96]} />
+        <meshBasicMaterial color={CYAN} transparent opacity={0.35} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.014, 0]}>
+        <ringGeometry args={[3.15, 3.22, 96]} />
+        <meshBasicMaterial color={MAGENTA} transparent opacity={0.22} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.016, 0]}>
+        <ringGeometry args={[4.35, 4.42, 96]} />
+        <meshBasicMaterial color={AMBER} transparent opacity={0.16} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )
 }
 
-function Rig({ children }: { children: ReactNode }) {
+function Rig({ children, reduce }: { children: ReactNode; reduce: boolean }) {
   const group = useRef<THREE.Group>(null)
   useFrame((state) => {
-    if (!group.current) return
+    if (!group.current || reduce) return
     const t = state.clock.elapsedTime
-    group.current.rotation.y = Math.sin(t * 0.12) * 0.15
-    group.current.position.y = Math.sin(t * 0.55) * 0.08
+    group.current.rotation.y = Math.sin(t * 0.1) * 0.12
+    group.current.position.y = Math.sin(t * 0.42) * 0.06
   })
   return <group ref={group}>{children}</group>
+}
+
+function StudioLights() {
+  return (
+    <Environment frames={1} resolution={256} environmentIntensity={0.7}>
+      <Lightformer form="rect" intensity={3.2} color="#9af4ff" position={[5, 3.5, 2]} scale={[8, 1.2, 1]} />
+      <Lightformer form="rect" intensity={1.8} color="#ff7ec8" position={[-5, 1.2, -3]} scale={[5, 2.2, 1]} />
+      <Lightformer form="ring" intensity={1.5} color="#ffe08a" position={[0, 5.5, -1]} scale={5} />
+      <Lightformer form="rect" intensity={0.9} color="#e8f4ff" position={[0, -3, 4]} scale={[10, 3, 1]} />
+    </Environment>
+  )
 }
 
 function UniverseFX() {
   return (
     <EffectComposer multisampling={0}>
-      <Bloom
-        intensity={1.35}
-        luminanceThreshold={0.18}
-        luminanceSmoothing={0.35}
-        mipmapBlur
-      />
-      <Noise opacity={0.035} />
-      <Vignette eskil={false} offset={0.18} darkness={0.85} />
+      <Bloom intensity={0.95} luminanceThreshold={0.22} luminanceSmoothing={0.4} mipmapBlur />
+      <Noise opacity={0.018} />
+      <Vignette eskil={false} offset={0.22} darkness={0.72} />
     </EffectComposer>
   )
 }
@@ -376,7 +418,9 @@ export function Scene3D({
   const grey = radar?.grey ?? 0
   const red = radar?.red ?? 0
   const [ready, setReady] = useState(false)
-  const orbitCount = Math.max(10, Math.min(16, green + red + 8 + Math.min(4, signalCount)))
+  const reduce = usePrefersReducedMotion()
+  const innerCount = Math.max(10, Math.min(14, green + red + 8 + Math.min(3, signalCount)))
+  const outerCount = Math.max(8, innerCount - 3)
 
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[28px] neon-border glass scanlines universe-frame">
@@ -384,59 +428,54 @@ export function Scene3D({
         <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center universe-boot">
           <div className="text-center">
             <p className="hud-kicker">Booting Orbis…</p>
-            <p className="hud-meta">WebGL · bloom · orbit tokens</p>
+            <p className="hud-meta">Glass core · satellite orbits</p>
           </div>
         </div>
       )}
       <Canvas
-        camera={{ position: [0, 2.1, 8.2], fov: 40, near: 0.1, far: 200 }}
-        dpr={[1, 1.75]}
+        camera={{ position: [0, 1.85, 7.6], fov: 38, near: 0.1, far: 200 }}
+        dpr={[1, 1.6]}
         gl={{ antialias: true, powerPreference: 'high-performance', alpha: false }}
         onCreated={({ gl }) => {
           gl.setClearColor(VOID, 1)
           gl.toneMapping = THREE.ACESFilmicToneMapping
-          gl.toneMappingExposure = 1.15
+          gl.toneMappingExposure = 1.05
           setReady(true)
         }}
       >
         <color attach="background" args={[VOID]} />
-        <fog attach="fog" args={[VOID, 10, 28]} />
-        <ambientLight intensity={0.28} />
-        <pointLight position={[5, 6, 3]} intensity={55} color={CYAN} distance={30} />
-        <pointLight position={[-6, -1, -4]} intensity={42} color={MAGENTA} distance={28} />
-        <pointLight position={[0, 4, -2]} intensity={28} color={AMBER} distance={20} />
-        <spotLight
-          position={[0, 8, 4]}
-          angle={0.45}
-          penumbra={0.6}
-          intensity={1.4}
-          color="#e8f0ff"
-        />
+        <fog attach="fog" args={[VOID, 9, 26]} />
+        <ambientLight intensity={0.18} />
+        <pointLight position={[4, 5, 3]} intensity={28} color={CYAN} distance={22} />
+        <pointLight position={[-5, 1, -3]} intensity={18} color={MAGENTA} distance={20} />
+        <spotLight position={[0, 7, 4]} angle={0.42} penumbra={0.7} intensity={1.1} color="#f4fbff" />
+        <StudioLights />
 
-        <Stars radius={80} depth={50} count={2800} factor={3.2} saturation={0.7} fade speed={0.55} />
-        <Sparkles count={80} scale={12} size={2.5} speed={0.35} opacity={0.55} color={CYAN} />
-        <Sparkles count={50} scale={10} size={3} speed={0.25} opacity={0.4} color={MAGENTA} />
+        <Stars radius={70} depth={42} count={2200} factor={2.6} saturation={0.45} fade speed={reduce ? 0 : 0.28} />
+        <Sparkles count={48} scale={11} size={2.2} speed={reduce ? 0 : 0.22} opacity={0.42} color={CYAN} />
+        <Sparkles count={28} scale={9} size={2.8} speed={reduce ? 0 : 0.16} opacity={0.28} color={MAGENTA} />
 
-        <Rig>
-          <HoloCore green={green} grey={grey} red={red} />
-          <WireShell />
-          <NeonRings />
-          <EnergyBeams />
-          <TokenOrbit count={orbitCount} radius={2.7} speed={0.28} y={0.15} tilt={0.22} />
-          <TokenOrbit count={Math.max(8, orbitCount - 4)} radius={3.55} speed={-0.16} y={-0.35} tilt={-0.35} />
-          <SymbolNebula radar={radar} />
+        <Rig reduce={reduce}>
+          <GlassCore green={green} grey={grey} red={red} reduce={reduce} />
+          <OrbitRail rx={2.55} rz={2.15} color={CYAN} tilt={0.28} y={0.12} />
+          <OrbitRail rx={3.35} rz={2.75} color={MAGENTA} tilt={-0.32} y={-0.28} />
+          <OrbitRail rx={4.05} rz={3.35} color={AMBER} tilt={0.08} y={0.02} />
+          <TokenOrbit count={innerCount} rx={2.55} rz={2.15} speed={0.32} y={0.12} tilt={0.28} reduce={reduce} />
+          <TokenOrbit count={outerCount} rx={3.35} rz={2.75} speed={-0.18} y={-0.28} tilt={-0.32} reduce={reduce} />
+          <SymbolNebula radar={radar} reduce={reduce} />
         </Rig>
-        <DataFloor />
+        <ObsidianFloor />
+        <ContactShadows position={[0, -2.26, 0]} opacity={0.55} scale={14} blur={2.4} far={6} color="#000000" />
 
         <OrbitControls
           enablePan={false}
           enableZoom={allowZoom}
-          minDistance={5.5}
-          maxDistance={14}
-          minPolarAngle={Math.PI / 3.2}
-          maxPolarAngle={Math.PI / 1.85}
-          autoRotate
-          autoRotateSpeed={0.35}
+          minDistance={5.2}
+          maxDistance={13}
+          minPolarAngle={Math.PI / 3.4}
+          maxPolarAngle={Math.PI / 1.82}
+          autoRotate={!reduce}
+          autoRotateSpeed={0.28}
           dampingFactor={0.08}
           enableDamping
         />
@@ -446,10 +485,10 @@ export function Scene3D({
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
           <p className="hud-kicker">Orbis Universe</p>
-          <p className="hud-meta">RGG nebula · orbit tokens</p>
+          <p className="hud-meta">Glass core · satellite tokens</p>
         </div>
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
-          <p className="hud-meta">Bloom · ACES · fog</p>
+          <p className="hud-meta">Transmission · ACES · fog</p>
         </div>
       </div>
 
@@ -463,7 +502,10 @@ export function Scene3D({
                 : 'Awaiting daily snapshot · decorative nebula'}
             </p>
           </div>
-          <div className="hud flex gap-4 font-mono text-sm tabular" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
+          <div
+            className="hud flex gap-4 font-mono text-sm tabular"
+            style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}
+          >
             <span className="text-lime">G {green}</span>
             <span className="text-[#c5d0dc]">Gy {grey}</span>
             <span className="text-magenta">R {red}</span>
