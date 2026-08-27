@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useLoader } from '@react-three/fiber'
 import {
   Billboard,
   ContactShadows,
@@ -10,10 +10,10 @@ import {
   Stars,
 } from '@react-three/drei'
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { RadarSnapshot } from '../types'
-import { loadCryptoLogo, LOGO_HALO, orbitLogoIds, type CryptoLogoId } from '../cryptoLogos'
+import { LOGO_HALO, orbitLogoIds, type CryptoLogoId } from '../cryptoLogos'
 
 const CYAN = '#5ee9f2'
 const MAGENTA = '#ff4d9a'
@@ -163,90 +163,28 @@ function OrbitRail({
 }
 
 function LogoCoin({ id }: { id: CryptoLogoId }) {
-  const [tex, setTex] = useState<THREE.Texture | null>(null)
+  const tex = useLoader(THREE.TextureLoader, `/crypto/${id}.png`)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  tex.needsUpdate = true
   const halo = LOGO_HALO[id] ?? CYAN
-
-  useEffect(() => {
-    let dead = false
-    let created: THREE.CanvasTexture | null = null
-    loadCryptoLogo(id)
-      .then((img) => {
-        if (dead) return
-        const canvas = document.createElement('canvas')
-        canvas.width = 256
-        canvas.height = 256
-        const ctx = canvas.getContext('2d')!
-        ctx.clearRect(0, 0, 256, 256)
-        ctx.fillStyle = '#070b12'
-        ctx.beginPath()
-        ctx.arc(128, 128, 124, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.save()
-        ctx.beginPath()
-        ctx.arc(128, 128, 104, 0, Math.PI * 2)
-        ctx.clip()
-        ctx.imageSmoothingEnabled = true
-        ctx.imageSmoothingQuality = 'high'
-        ctx.drawImage(img, 24, 24, 208, 208)
-        ctx.restore()
-        ctx.strokeStyle = 'rgba(255,255,255,0.42)'
-        ctx.lineWidth = 8
-        ctx.beginPath()
-        ctx.arc(128, 128, 118, 0, Math.PI * 2)
-        ctx.stroke()
-        created = new THREE.CanvasTexture(canvas)
-        created.colorSpace = THREE.SRGBColorSpace
-        created.anisotropy = 8
-        created.needsUpdate = true
-        setTex(created)
-      })
-      .catch(() => {
-        if (dead) return
-        const canvas = document.createElement('canvas')
-        canvas.width = 256
-        canvas.height = 256
-        const ctx = canvas.getContext('2d')!
-        ctx.fillStyle = '#0a1018'
-        ctx.beginPath()
-        ctx.arc(128, 128, 124, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.fillStyle = '#f2f5f8'
-        ctx.font = '700 48px IBM Plex Sans, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(id.slice(0, 4).toUpperCase(), 128, 132)
-        created = new THREE.CanvasTexture(canvas)
-        created.colorSpace = THREE.SRGBColorSpace
-        setTex(created)
-      })
-    return () => {
-      dead = true
-      created?.dispose()
-    }
-  }, [id])
 
   return (
     <Billboard follow>
       <mesh>
-        <circleGeometry args={[0.34, 48]} />
-        <meshPhysicalMaterial
-          map={tex}
-          color="#ffffff"
-          emissive={halo}
-          emissiveIntensity={tex ? 0.16 : 0.4}
-          metalness={0.55}
-          roughness={0.28}
-          clearcoat={0.45}
-          transparent
-          opacity={tex ? 1 : 0.35}
-        />
+        <circleGeometry args={[0.38, 64]} />
+        <meshBasicMaterial color="#080c12" />
       </mesh>
-      <mesh position={[0, 0, -0.012]} scale={1.1}>
-        <ringGeometry args={[0.32, 0.37, 48]} />
+      <mesh position={[0, 0, 0.004]}>
+        <circleGeometry args={[0.34, 64]} />
+        <meshBasicMaterial map={tex} toneMapped={false} transparent />
+      </mesh>
+      <mesh position={[0, 0, -0.012]} scale={1.08}>
+        <ringGeometry args={[0.335, 0.4, 64]} />
         <meshBasicMaterial
           color={halo}
           transparent
-          opacity={0.7}
+          opacity={0.75}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           side={THREE.DoubleSide}
@@ -307,7 +245,9 @@ function TokenOrbit({
           position={[Math.cos(tok.phase) * rx, 0, Math.sin(tok.phase) * rz]}
           scale={tok.scale}
         >
-          <LogoCoin id={tok.id} />
+          <Suspense fallback={null}>
+            <LogoCoin id={tok.id} />
+          </Suspense>
         </group>
       ))}
     </group>
