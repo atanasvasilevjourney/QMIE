@@ -1,0 +1,8 @@
+{
+  "name": "qmie",
+  "private": true,
+  "description": "Vercel builds web/ (desk UI). Scanner is Docker/Render, not serverless.",
+  "scripts": {
+    "build": "npm --prefix web run build"
+  }
+}

@@ -16,6 +16,7 @@ def test_dockerfile_uses_start_script():
     text = (ROOT / "docker" / "Dockerfile").read_text()
     assert "CMD [\"/app/start.sh\"]" in text
     assert "COPY docker/start.sh" in text
+    assert "COPY --from=desk /src/dist /app/desk" in text
 
 
 def test_render_blueprint_is_docker_web_not_static():

@@ -6,7 +6,7 @@ and dispatches A/A+ signals to Discord and/or Telegram. It does NOT
 execute trades.
 
 Endpoints:
-  GET  /                      version
+  GET  /                      desk HTML (if built) or JSON version
   GET  /health                operational status (DB, scanner, notifiers)
   GET  /signals               last N dispatched alerts
   GET  /universe              the symbol set the next pass will scan
@@ -43,8 +43,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
+
+from desk_static import desk_file, find_desk_dist, wants_html
 
 from config import Settings, get_settings
 from db import Database
@@ -296,8 +298,21 @@ async def ip_allowlist(request: Request, call_next):
 
 # ─── Endpoints ───────────────────────────────────────────────────────────
 @app.get("/")
-async def root() -> dict[str, Any]:
+async def root(request: Request) -> Any:
+    dist = find_desk_dist()
+    if dist is not None and wants_html(request):
+        return FileResponse(dist / "index.html", media_type="text/html")
     return {"name": "QMIE Scanner", "version": "2.0.0", "ok": True}
+
+
+@app.get("/favicon.svg")
+async def desk_favicon() -> FileResponse:
+    return desk_file("favicon.svg")
+
+
+@app.get("/assets/{path:path}")
+async def desk_assets(path: str) -> FileResponse:
+    return desk_file(f"assets/{path}")
 
 
 @app.get("/health")

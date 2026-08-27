@@ -1,4 +1,15 @@
 # ─── QMIE Dockerfile ────────────────────────────────────────────────────
+# Desk UI (Vite) is built first, then copied into the scanner image so
+# https://qmie.onrender.com/ can serve ORBIT as well as /health.
+FROM node:22-alpine AS desk
+WORKDIR /src
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+# Same-origin API when FastAPI serves this dist. Do not point at Vercel.
+ENV VITE_QMIE_API=
+RUN npm run build
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -23,6 +34,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy app
 COPY python/ /app/
 COPY docker/start.sh /app/start.sh
+COPY --from=desk /src/dist /app/desk
 
 # Persistent data dir (mount a volume here)
 RUN chmod +x /app/start.sh \

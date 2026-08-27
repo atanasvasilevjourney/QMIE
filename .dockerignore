@@ -1,0 +1,15 @@
+.git
+.venv
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.coverage
+python/data
+python/backtest/data
+python/backtest/results
+docker/data
+**/.env
+**/.env.local
+web/dist
+*.pyc
