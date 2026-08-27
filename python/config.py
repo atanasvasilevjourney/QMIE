@@ -48,12 +48,13 @@ class Settings(BaseSettings):
     telegram_enabled:       bool = False
 
     # ─── Scanner ─────────────────────────────────────────────────────────
-    # Comma-separated. Defaults to Binance USDT perps top set. Overridable.
+    # Comma-separated USDT perps. OKX uses POL/RENDER; Binance still has
+    # MATIC/RNDR on some books. 1000PEPE and FET are omitted (no OKX SWAP).
     scan_symbols: str = (
         "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,"
-        "LINKUSDT,MATICUSDT,DOTUSDT,LTCUSDT,TRXUSDT,ATOMUSDT,NEARUSDT,APTUSDT,"
-        "ARBUSDT,OPUSDT,SUIUSDT,INJUSDT,FILUSDT,RNDRUSDT,TIAUSDT,SEIUSDT,"
-        "ORDIUSDT,WLDUSDT,FETUSDT,PEPEUSDT,1000PEPEUSDT,BONKUSDT"
+        "LINKUSDT,POLUSDT,DOTUSDT,LTCUSDT,TRXUSDT,ATOMUSDT,NEARUSDT,APTUSDT,"
+        "ARBUSDT,OPUSDT,SUIUSDT,INJUSDT,FILUSDT,RENDERUSDT,TIAUSDT,SEIUSDT,"
+        "ORDIUSDT,WLDUSDT,PEPEUSDT,BONKUSDT"
     )
     # Auto-discover top-N by 24h quote volume in addition to the static list
     scan_auto_universe_top_n:  int = 0     # 0 = static list only
