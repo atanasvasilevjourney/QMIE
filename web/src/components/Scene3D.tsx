@@ -1,5 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import {
+  Billboard,
   ContactShadows,
   Environment,
   Lightformer,
@@ -193,26 +194,36 @@ function MemeCoin({ color, label }: { color: string; label: string }) {
   useEffect(() => () => emboss.dispose(), [emboss])
 
   return (
-    <group rotation={[Math.PI / 2, 0, 0]}>
+    <Billboard follow>
       <mesh>
-        <cylinderGeometry args={[0.23, 0.23, 0.048, 48]} />
+        <circleGeometry args={[0.28, 48]} />
         <meshPhysicalMaterial
-          color={color}
+          map={emboss}
+          color="#ffffff"
           emissive={color}
-          emissiveIntensity={0.28}
-          metalness={1}
-          roughness={0.16}
-          clearcoat={0.7}
-          clearcoatRoughness={0.2}
-          iridescence={0.55}
+          emissiveIntensity={0.22}
+          metalness={0.85}
+          roughness={0.2}
+          clearcoat={0.65}
+          clearcoatRoughness={0.18}
+          iridescence={0.4}
           iridescenceIOR={1.3}
+          transparent
+          opacity={0.98}
         />
       </mesh>
-      <mesh position={[0, 0.026, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.195, 48]} />
-        <meshStandardMaterial map={emboss} metalness={0.6} roughness={0.28} />
+      <mesh position={[0, 0, -0.012]} scale={1.12}>
+        <ringGeometry args={[0.26, 0.3, 48]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.55}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
       </mesh>
-    </group>
+    </Billboard>
   )
 }
 
@@ -254,7 +265,6 @@ function TokenOrbit({
       if (!g) continue
       const a = t * s + tokens[i].phase
       g.position.set(Math.cos(a) * rx, Math.sin(a * 2) * 0.07, Math.sin(a) * rz)
-      g.rotation.set(0.18, -a + Math.PI / 2, 0.12)
     }
   })
 
