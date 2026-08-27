@@ -131,7 +131,11 @@ def evaluate_native(
     strategy = _s(flat.get("strategy"))
     items: list[CheckItem] = []
 
-    is_breakout = "DailyBreakout" in strategy or _s(flat.get("setup_type")) == "breakout"
+    is_breakout = (
+        "DailyBreakout" in strategy
+        or "DailyExpansion" in strategy
+        or _s(flat.get("setup_type")) in ("breakout", "expansion")
+    )
     grade_ok = grade in ("A", "A+")
     side_ok = side in ("BUY", "SELL")
     if is_breakout:

@@ -381,7 +381,44 @@ class TestDailyBreakoutInbound:
         assert sig.setup_type == "breakout"
         assert sig.reason == "trend_start_long"
 
+    def test_coil_up_maps_to_daily_expansion(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "SOLUSDT",
+            "price": 107.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-18T00:00:00+00:00",
+            "reason": "coil_breakout_up",
+            "breakout": "UP",
+            "coil_low": 98.0,
+        })
+        assert sig.strategy == "QMIE-DailyExpansion"
+        assert sig.side.value == "BUY"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "expansion"
+        assert sig.stop_loss == 98.0
+        assert sig.reason == "coil_breakout_up"
+
     def test_trend_start_maps_to_sell_1d(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "ETHUSDT",
+            "price": 3000.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+            "reason": "trend_start_short",
+            "breakout": None,
+            "side": "SELL",
+        })
+        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.side.value == "SELL"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "breakout"
+        assert sig.action == "sell"
+        assert sig.trend == "bearish"
+        assert sig.daily_trend == "bearish"
+        assert sig.stop_loss is None
+        assert sig.reason == "trend_start_short"
+
+    def test_coil_down_maps_to_daily_expansion(self):
         sig = trend_start_to_tvsignal({
             "symbol": "ETHUSDT",
             "price": 3000.0,
@@ -392,10 +429,10 @@ class TestDailyBreakoutInbound:
             "coil_high": 3120.0,
             "side": "SELL",
         })
-        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.strategy == "QMIE-DailyExpansion"
         assert sig.side.value == "SELL"
         assert sig.timeframe == "1d"
-        assert sig.setup_type == "breakout"
+        assert sig.setup_type == "expansion"
         assert sig.action == "sell"
         assert sig.trend == "bearish"
         assert sig.daily_trend == "bearish"

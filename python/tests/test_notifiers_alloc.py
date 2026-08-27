@@ -53,6 +53,44 @@ def test_discord_breakout_title():
     assert "Setup" in names
 
 
+def test_discord_expansion_title():
+    n = DiscordNotifier(webhook_url="https://example.invalid/webhook")
+    sig = TVSignal(
+        strategy="QMIE-DailyExpansion",
+        event=EventType.ENTRY,
+        symbol="SOLUSDT",
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.BUY,
+        signal_price=107.0,
+        stop_loss=98.0,
+        reason="coil_breakout_up",
+        setup_type="expansion",
+    )
+    embed = n._build_embed(sig, None)
+    assert "EXPANSION LONG — COIL-UP" in embed["title"]
+    assert "BREAKOUT LONG" not in embed["title"]
+
+
+def test_discord_expansion_short_title():
+    n = DiscordNotifier(webhook_url="https://example.invalid/webhook")
+    sig = TVSignal(
+        strategy="QMIE-DailyExpansion",
+        event=EventType.ENTRY,
+        symbol="ETHUSDT",
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.SELL,
+        signal_price=3000.0,
+        stop_loss=3120.0,
+        reason="coil_breakout_down",
+        setup_type="expansion",
+    )
+    embed = n._build_embed(sig, None)
+    assert "EXPANSION SHORT — COIL-DOWN" in embed["title"]
+    assert "BREAKOUT SHORT" not in embed["title"]
+
+
 def test_discord_breakout_short_title():
     n = DiscordNotifier(webhook_url="https://example.invalid/webhook")
     sig = TVSignal(

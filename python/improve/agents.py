@@ -171,7 +171,7 @@ def checklist_agent(
         g = str(flat.get("grade") or "")
         strat = str(flat.get("strategy") or "")
         is_aa = g in ("A", "A+")
-        is_bo = "DailyBreakout" in strat
+        is_bo = "DailyBreakout" in strat or "DailyExpansion" in strat
         if not (is_aa or is_bo):
             continue
         card = evaluate_native(row, radar=radar)

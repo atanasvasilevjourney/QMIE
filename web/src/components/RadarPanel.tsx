@@ -49,7 +49,16 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
       <div className="mt-4 grid gap-5 lg:grid-cols-2">
         <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
-        <Bucket title="Donchian coil break (watch)" rows={radar.breakouts} render={(r) => `${r.breakout} ADX${r.adx}`} />
+        <Bucket
+          title="Expansions (1D coil-UP)"
+          rows={radar.expansions ?? (radar.breakouts || []).filter((r) => r.breakout === 'UP')}
+          render={(r) => `UP ADX${r.adx} SL ${r.coil_low ?? '—'}`}
+        />
+        <Bucket
+          title="Expansion shorts (coil-DOWN)"
+          rows={radar.expansion_shorts ?? (radar.breakouts || []).filter((r) => r.breakout === 'DOWN')}
+          render={(r) => `DOWN ADX${r.adx} SL ${r.coil_high ?? '—'}`}
+        />
         <Bucket
           title="Early long (coil pressing highs)"
           rows={radar.early_longs ?? []}
@@ -65,10 +74,10 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
       </div>
       <p className="lede mt-4">
-        Radar coil-break is a watchlist. OPS Daily breakout dispatches day-1 GREY→GREEN/RED
-        {' '}or coil-UP/DOWN as separate unranked setups — not an A/A+ grade.
-        Early long is a GREY coil pressing the box high (the SOL-style base); it is not an entry
-        {' '}until a close-confirmed coil-UP. Confirm on the 1D visualizer before clicking. Manual only.
+        Radar Expansions is the new 1D coil-UP strategy (prior-box stop, no TEMA TP).
+        {' '}OPS TEMA BUY is the graded 4h add. Color-flip stays a separate unranked table.
+        Early long is a GREY coil pressing the box high; it is not clip 1 until coil-UP.
+        Confirm on the visualizer. Manual only.
       </p>
     </PanelShell>
   )

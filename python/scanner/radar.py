@@ -142,6 +142,8 @@ class RadarSnapshot:
     late_stage_red: list[dict[str, Any]] = field(default_factory=list)
     early_longs: list[dict[str, Any]] = field(default_factory=list)
     early_shorts: list[dict[str, Any]] = field(default_factory=list)
+    expansions: list[dict[str, Any]] = field(default_factory=list)  # 1D coil-UP
+    expansion_shorts: list[dict[str, Any]] = field(default_factory=list)  # 1D coil-DOWN
     rows: list[dict[str, Any]] = field(default_factory=list)
     failed_symbols: list[str] = field(default_factory=list)
     note: Optional[str] = None
@@ -566,6 +568,20 @@ def build_snapshot(
         r.as_dict()
         for r in sorted([r for r in rows if r.breakout], key=lambda x: x.symbol)
     ]
+    expansions = [
+        r.as_dict()
+        for r in sorted(
+            [r for r in rows if r.breakout == "UP"],
+            key=lambda x: x.symbol,
+        )
+    ]
+    expansion_shorts = [
+        r.as_dict()
+        for r in sorted(
+            [r for r in rows if r.breakout == "DOWN"],
+            key=lambda x: x.symbol,
+        )
+    ]
     late_g = _sort_fresh([r for r in green if r.is_late_stage])
     late_r = _sort_fresh([r for r in red if r.is_late_stage])
     early_l = [
@@ -584,7 +600,8 @@ def build_snapshot(
     ]
 
     has_actionable = bool(
-        fresh_g or fresh_r or coils or brks or late_g or late_r or early_l or early_s
+        fresh_g or fresh_r or coils or brks or late_g or late_r
+        or early_l or early_s or expansions or expansion_shorts
     )
 
     if succeeded == 0:
@@ -623,6 +640,8 @@ def build_snapshot(
         late_stage_red=late_r,
         early_longs=early_l,
         early_shorts=early_s,
+        expansions=expansions,
+        expansion_shorts=expansion_shorts,
         rows=[r.as_dict() for r in sorted(rows, key=lambda x: x.symbol)],
         failed_symbols=sorted(failed_symbols),
         note=note,
@@ -655,6 +674,8 @@ def empty_radar_snapshot(*, enabled: bool = True, note: str = "no_radar_yet") ->
         coverage_pct=None,
         early_longs=[],
         early_shorts=[],
+        expansions=[],
+        expansion_shorts=[],
     )
 
 
@@ -691,19 +712,18 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
     if snap.fresh_red:
         items = [_fmt_flip(r) for r in snap.fresh_red[:max_items]]
         _cap("Fresh RED flips (watch)", items, len(snap.fresh_red))
-    if snap.breakouts:
-        items = []
-        for r in snap.breakouts[:max_items]:
-            lvl = r.get("breakout_level")
-            xs = r.get("breakout_excess_pct")
-            adxv = r.get("adx")
-            lvl_s = f"{lvl:.4g}" if isinstance(lvl, (int, float)) else "?"
-            xs_s = f"{xs:.2f}" if isinstance(xs, (int, float)) else "?"
-            items.append(
-                f"`{r['symbol']}` {r['breakout']}@{lvl_s} +{xs_s}% "
-                f"ADX{adxv} {r.get('color')}"
-            )
-        _cap("Breakouts (close-confirmed watch)", items, len(snap.breakouts))
+    if snap.expansions:
+        items = [
+            f"`{r['symbol']}` UP@{r.get('breakout_level', '?')} {r.get('color')}"
+            for r in snap.expansions[:max_items]
+        ]
+        _cap("Expansions (1D coil-UP — new strategy, not A/A+)", items, len(snap.expansions))
+    if snap.expansion_shorts:
+        items = [
+            f"`{r['symbol']}` DOWN@{r.get('breakout_level', '?')} {r.get('color')}"
+            for r in snap.expansion_shorts[:max_items]
+        ]
+        _cap("Expansion shorts (1D coil-DOWN)", items, len(snap.expansion_shorts))
     if snap.early_longs:
         items = [
             f"`{r['symbol']}` {r.get('coil_width_pct', '?')}% @{r.get('price', '?')}"
@@ -734,6 +754,7 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
 
 
 DAILY_BREAKOUT_STRATEGY = "QMIE-DailyBreakout"
+DAILY_EXPANSION_STRATEGY = "QMIE-DailyExpansion"
 
 
 def iter_long_trend_starts(rows: list) -> list[dict[str, Any]]:
@@ -757,7 +778,9 @@ def iter_long_trend_starts(rows: list) -> list[dict[str, Any]]:
         if not reasons:
             continue
         d["reason"] = "+".join(reasons)
-        d["setup_type"] = "breakout"
+        d["setup_type"] = (
+            "expansion" if any(x.startswith("coil_breakout") for x in reasons) else "breakout"
+        )
         d["side"] = "BUY"
         out.append(d)
     return out
@@ -784,7 +807,9 @@ def iter_short_trend_starts(rows: list) -> list[dict[str, Any]]:
         if not reasons:
             continue
         d["reason"] = "+".join(reasons)
-        d["setup_type"] = "breakout"
+        d["setup_type"] = (
+            "expansion" if any(x.startswith("coil_breakout") for x in reasons) else "breakout"
+        )
         d["side"] = "SELL"
         out.append(d)
     return out

@@ -8,6 +8,7 @@ import { Empty, PanelShell } from './RadarPanel'
 const VIEWS: { id: ScreenView | 'focus'; label: string }[] = [
   { id: 'all', label: 'Combo' },
   { id: 'leaders', label: '4h A/A+' },
+  { id: 'expansions', label: 'Expansions' },
   { id: 'coils', label: 'Coils' },
   { id: 'breakouts', label: 'Breakouts' },
   { id: 'book', label: 'Book' },
@@ -36,7 +37,8 @@ const SORTS: { id: SortKey; label: string }[] = [
 ]
 
 function screenChartTf(r: { timeframe?: string | null; sources?: string[] }, view: string): string {
-  if (view === 'breakouts' || view === 'coils') return '1d'
+  if (view === 'breakouts' || view === 'coils' || view === 'expansions') return '1d'
+  if (r.sources?.includes('expansions') && !r.sources?.includes('leaders')) return '1d'
   if (r.sources?.includes('breakouts') && !r.sources?.includes('leaders')) return '1d'
   return r.timeframe || '1h'
 }
@@ -213,6 +215,11 @@ export function ScreensPanel({
                         {s}
                       </span>
                     ))}
+                    {r.is_expansion && (
+                      <span className="rounded-md border border-amber/40 bg-amber/10 px-1.5 py-0.5 font-mono text-sm text-amber">
+                        expansion
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm tabular text-muted">
                     <span className={modalHit ? 'text-cyan' : ''}>{r.cluster || '—'}</span>

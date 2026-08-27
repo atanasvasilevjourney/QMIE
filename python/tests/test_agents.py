@@ -177,7 +177,14 @@ def test_book_agent_clusters():
     assert "not an order" in out["note"]
 
 
-def test_checklist_agent_limits_and_mix():
+def test_daily_expansion_does_not_need_aa_grade():
+    v = evaluate_native(
+        _row(strategy="QMIE-DailyExpansion", grade="", side="BUY", timeframe="1d"),
+        radar={"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]},
+    )
+    alert = next(i for i in v.items if i.id == "qmie_alert")
+    assert alert.passed is True
+    assert "DailyExpansion" in alert.detail
     rows = [_row(id=i, symbol=f"S{i}USDT") for i in range(10)]
     out = checklist_agent(rows, {"rows": []}, limit=3)
     assert out["count"] == 3

@@ -5,7 +5,8 @@ Deep View-style master list: OR of result sets, then unique(symbol).
 
 Sources (already on the desk):
   * TEMA A/A+ alerts (prefer 4h over 1h)
-  * Daily breakout (GREY→GREEN / coil-UP longs, GREY→RED / coil-DOWN shorts)
+  * Daily expansion (1D coil-UP / coil-DOWN)
+  * Daily color-flip (GREY→GREEN / GREY→RED)
   * Radar tight coils
   * Ranked book slots
 
@@ -20,7 +21,7 @@ from typing import Any, Optional
 from improve.checklist import atr_pct_of, flatten_signal, radar_color_for
 from scanner.allocator import cluster_of
 
-VIEWS = ("all", "leaders", "coils", "breakouts", "book")
+VIEWS = ("all", "leaders", "expansions", "coils", "breakouts", "book")
 _TF_RANK = {"4h": 3, "1h": 2, "1d": 1}
 
 
@@ -56,8 +57,21 @@ def _is_exit(flat: dict[str, Any]) -> bool:
     )
 
 
-def _is_breakout(flat: dict[str, Any]) -> bool:
+def _is_expansion(flat: dict[str, Any]) -> bool:
     if _is_exit(flat):
+        return False
+    strat = _s(flat.get("strategy"))
+    reason = _s(flat.get("reason"))
+    setup = _s(flat.get("setup_type")).lower()
+    return (
+        "DailyExpansion" in strat
+        or setup == "expansion"
+        or "coil_breakout" in reason
+    )
+
+
+def _is_breakout(flat: dict[str, Any]) -> bool:
+    if _is_exit(flat) or _is_expansion(flat):
         return False
     strat = _s(flat.get("strategy"))
     reason = _s(flat.get("reason"))
@@ -69,7 +83,7 @@ def _is_breakout(flat: dict[str, Any]) -> bool:
 
 
 def _is_tema_aa(flat: dict[str, Any]) -> bool:
-    if _is_exit(flat) or _is_breakout(flat):
+    if _is_exit(flat) or _is_breakout(flat) or _is_expansion(flat):
         return False
     grade = _s(flat.get("grade"))
     if grade not in ("A", "A+"):
@@ -94,6 +108,8 @@ def _display_rank(sources: set[str], tf: str) -> tuple[int, int]:
     src = 0
     if "leaders" in sources:
         src += 40
+    if "expansions" in sources:
+        src += 25
     if "breakouts" in sources:
         src += 20
     if "book" in sources:
@@ -126,6 +142,7 @@ def _blank_row(symbol: str) -> dict[str, Any]:
         "is_early_long": False,
         "is_early_short": False,
         "breakout": None,
+        "is_expansion": False,
         "weight_pct": None,
         "book_rank": None,
         "quantity": 0,
@@ -163,7 +180,7 @@ def build_screens(
     allocation: Optional[dict[str, Any]] = None,
     view: str = "all",
 ) -> dict[str, Any]:
-    """OR of TEMA A/A+ ∪ daily breakout ∪ coils ∪ book, then unique(symbol)."""
+    """OR of TEMA A/A+ ∪ daily expansion ∪ color-flip ∪ coils ∪ book, then unique(symbol)."""
     v = (view or "all").strip().lower()
     if v not in VIEWS:
         raise ValueError(f"view must be one of {VIEWS}")
@@ -219,6 +236,8 @@ def build_screens(
         src: list[str] = []
         if _is_tema_aa(flat):
             src.append("leaders")
+        if _is_expansion(flat):
+            src.append("expansions")
         if _is_breakout(flat):
             src.append("breakouts")
         if not src:
@@ -281,14 +300,46 @@ def build_screens(
             "signal_price": _f(br.get("price")),
             "adx": _f(br.get("adx")),
             "breakout": direction,
+            "is_expansion": True,
+            "stop_loss": _f(br.get("coil_low") if direction == "UP" else br.get("coil_high")),
         }
-        upsert(sym, sources=["breakouts"], tf="1d", extra=extra)
+        upsert(sym, sources=["expansions"], tf="1d", extra=extra)
+
+    for ex in (radar or {}).get("expansions") or []:
+        sym = _s(ex.get("symbol")).upper()
+        if not sym:
+            continue
+        extra = {
+            "side": "BUY",
+            "signal_price": _f(ex.get("price")),
+            "adx": _f(ex.get("adx")),
+            "breakout": "UP",
+            "is_expansion": True,
+            "stop_loss": _f(ex.get("coil_low")),
+        }
+        upsert(sym, sources=["expansions"], tf="1d", extra=extra)
+
+    for ex in (radar or {}).get("expansion_shorts") or []:
+        sym = _s(ex.get("symbol")).upper()
+        if not sym:
+            continue
+        extra = {
+            "side": "SELL",
+            "signal_price": _f(ex.get("price")),
+            "adx": _f(ex.get("adx")),
+            "breakout": "DOWN",
+            "is_expansion": True,
+            "stop_loss": _f(ex.get("coil_high")),
+        }
+        upsert(sym, sources=["expansions"], tf="1d", extra=extra)
 
     rows = list(by_sym.values())
     for row in rows:
         row["sources"] = sorted(row["sources"])
         row["quantity"] = 0
         row["places_orders"] = False
+        if "expansions" in row["sources"]:
+            row["is_expansion"] = True
         if "coils" in row["sources"]:
             row["is_tight_coil"] = True
         if not row.get("cluster"):
@@ -329,8 +380,8 @@ def build_screens(
         "modal_cluster": modal,
         "source_counts": dict(counts_src),
         "note": (
-            "OR of TEMA A/A+ ∪ daily breakout ∪ coils ∪ book, unique(symbol). "
-            "Leaders view is 4h A/A+ only. Not a new score. Never orders."
+            "OR of TEMA A/A+ ∪ daily expansion ∪ color-flip ∪ coils ∪ book, unique(symbol). "
+            "Leaders view is 4h A/A+ only. Expansions view is 1D coil-UP/DOWN. Not a new score. Never orders."
         ),
         "rows": visible,
     }

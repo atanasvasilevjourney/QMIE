@@ -12,7 +12,7 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.3",
+        "version": "1.4",
         "headline": "Signal-only desk. Paper fills every alert. You click live size yourself.",
         "sections": [
             {
@@ -40,32 +40,64 @@ def trading_guide() -> dict[str, Any]:
                     "Prefer 4h when sizing live",
                     "Use the printed SL / TP; do not invent levels",
                     "If price already ran far from signal_price, skip the chase",
+                    "OPS TEMA BUY module is A/A+ BUY only — the measured swing add",
+                ],
+            },
+            {
+                "id": "expansion",
+                "title": "Daily expansion (coil-UP)",
+                "body": (
+                    "New unranked 1D strategy: a close outside an armed GREY Donchian "
+                    "coil (coil-UP long / coil-DOWN short). Strategy id "
+                    "QMIE-DailyExpansion. Stop is the prior box, not today's wick. "
+                    "Not an A/A+ grade and not the frozen 4h OOS. Clip 1 of the "
+                    "manual two-step book — wait for a 4h TEMA BUY to add."
+                ),
+                "rules": [
+                    "Radar bucket Expansions = today's coil-UP",
+                    "OPS Daily expansion table = dispatched QMIE-DailyExpansion",
+                    "Long SL = prior coil_low; short SL = prior coil_high",
+                    "No TEMA TP on this ticket",
+                    "Follow-through days of the same expansion do not re-fire",
+                ],
+            },
+            {
+                "id": "tema_buy",
+                "title": "TEMA BUY module (graded add)",
+                "body": (
+                    "Separate OPS table for A/A+ BUY only. Prefer 4h — that is the "
+                    "frozen swing edge (1.5×ATR stop / 2.5×ATR take). A badge "
+                    "'after expansion' means the same symbol already has a 1D "
+                    "coil-UP. That is clip 2. SELL A/A+ stays on the TEMA scanner table."
+                ),
+                "rules": [
+                    "A or A+ BUY on a closed bar",
+                    "Prefer 4h printed SL / TP",
+                    "Do not hold for daily GREEN→GREY if TP already printed",
+                    "Not a broker; quantity stays 0",
                 ],
             },
             {
                 "id": "breakout",
-                "title": "Daily breakout (unranked)",
+                "title": "Daily color-flip (unranked)",
                 "body": (
-                    "Two unranked 1D events share the OPS Daily breakout table: a day-1 "
-                    "GREY→GREEN/RED color flip, and a Donchian coil close-break. They are "
-                    "not the same setup and not an A/A+ grade. Coil SL is the prior-window "
-                    "box (not today's wick). Color-flips have no stop — no R until you "
-                    "journal a stop. Confirm on the Daily visualizer."
+                    "Day-1 GREY→GREEN/RED stays QMIE-DailyBreakout. It is not a coil "
+                    "expansion and not an A/A+ grade. Color-flips have no stop — no R "
+                    "until you journal a stop. Confirm on the Daily visualizer."
                 ),
                 "rules": [
                     "Not the 4h A/A+ OOS path",
-                    "Badge: color flip vs coil vs both",
-                    "Coil long SL = prior coil_low; coil short SL = prior coil_high",
-                    "Color-flip rows show R — until a stop exists",
+                    "Color-flip only — coil-UP is Daily expansion",
+                    "Color-flip rows show no R until a stop exists",
                     "Late-stage GREEN or RED is not a fresh start",
                 ],
             },
             {
                 "id": "screens",
-                "title": "Daily screens (four views)",
+                "title": "Daily screens (combo views)",
                 "body": (
                     "SCREENS tab is the combo list: unique symbols from 4h A/A+, "
-                    "daily breakout, radar coils, and the ranked book. Space next, "
+                    "daily expansion (coil-UP), color-flip, radar coils, and the ranked book. Space next, "
                     "Shift+Space flags a focus list (not a fill). Do not add "
                     "earnings/IPO filters."
                 ),
@@ -73,7 +105,7 @@ def trading_guide() -> dict[str, Any]:
                     "Leaders: 4h TEMA A/A+ (frozen OOS edge)",
                     "Themes: 1D radar G/Y/R, fresh flips, tight coils",
                     "Liquid book: ranked slots (quantity still 0)",
-                    "Specialist: daily GREY→GREEN/RED and coil-UP/DOWN — not an A/A+ grade",
+                    "Specialist: 1D coil-UP expansion + GREY→GREEN/RED color-flip",
                     "SCREENS tab: combo unique(symbol) list",
                     "Space next · Shift+Space flag · Enter opens CHARTS",
                 ],

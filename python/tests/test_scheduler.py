@@ -286,7 +286,7 @@ class TestRadarPass:
             if c.args[0].side.value == "SELL"
         ]
         assert shorts[0].stop_loss == 160.0
-        assert shorts[0].strategy == "QMIE-DailyBreakout"
+        assert shorts[0].strategy == "QMIE-DailyExpansion"
 
     async def test_radar_pass_replays_missed_coil_up(self, fake_components):
         """Latest bar is post-expansion; dispatch must still fire the coil-UP close."""
@@ -320,6 +320,8 @@ class TestRadarPass:
         assert ups[0].signal_price == pytest.approx(107.0)
         assert ups[0].stop_loss == pytest.approx(98.0)
         assert ups[0].timeframe == "1d"
+        assert ups[0].strategy == "QMIE-DailyExpansion"
+        assert ups[0].setup_type == "expansion"
         brk_ms = int(df.index[coil_n].value // 1_000_000)
         assert ups[0].bar_time == brk_ms
 

@@ -62,8 +62,10 @@ def trend_start_to_tvsignal(item: dict) -> TVSignal:
         except (TypeError, ValueError):
             sl = None
     short = side is Side.SELL
+    reason = str(item.get("reason") or ("trend_start_short" if short else "trend_start_long"))
+    is_expansion = "coil_breakout" in reason or item.get("breakout") in ("UP", "DOWN")
     return TVSignal(
-        strategy="QMIE-DailyBreakout",
+        strategy="QMIE-DailyExpansion" if is_expansion else "QMIE-DailyBreakout",
         event=EventType.ENTRY,
         symbol=str(item.get("symbol") or ""),
         asset_class=AssetClass.CRYPTO,
@@ -74,10 +76,10 @@ def trend_start_to_tvsignal(item: dict) -> TVSignal:
         adx=item.get("adx"),
         timestamp=str(bar_time) if bar_time else None,
         bar_time=bar_ms,
-        reason=item.get("reason") or ("trend_start_short" if short else "trend_start_long"),
+        reason=reason,
         trend="bearish" if short else "bullish",
         daily_trend="bearish" if short else "bullish",
-        setup_type="breakout",
+        setup_type="expansion" if is_expansion else "breakout",
         action="sell" if short else "buy",
     )
 
