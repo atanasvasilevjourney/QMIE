@@ -312,6 +312,7 @@ class TestRadarPass:
         assert scheduler.last_radar is not None
         # Latest snapshot is not a live breakout (one-shot already passed)
         assert all(not r.get("breakout") for r in scheduler.last_radar.rows)
+        assert [r.get("symbol") for r in scheduler.last_radar.expansions] == ["BTCUSDT"]
         calls = dispatcher.dispatch_inbound.await_args_list
         assert calls, "replay must dispatch the missed coil-UP"
         sigs = [c.args[0] for c in calls]

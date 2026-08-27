@@ -509,6 +509,21 @@ class TestEarlyLongAndReplay:
         assert nxt.breakout is None
         assert nxt.price == pytest.approx(112.0)
 
+    def test_overlay_keeps_replayed_coil_up_on_radar(self):
+        from scanner.radar import classify_with_recent_setups, overlay_recent_expansions
+
+        df, coil_n = _coil_then_expansion()
+        cfg = RadarConfig(min_bars=60, setup_lookback_bars=7)
+        latest, setups = classify_with_recent_setups(df, "SOLUSDT", cfg=cfg)
+        assert latest is not None
+        assert latest.breakout is None
+        snap = build_snapshot([latest], requested=1)
+        assert snap.expansions == []
+        overlay_recent_expansions(snap, setups)
+        assert [r["symbol"] for r in snap.expansions] == ["SOLUSDT"]
+        assert snap.has_actionable is True
+        assert "coil_breakout_up" in (snap.expansions[0].get("reason") or "")
+
     def test_unique_trend_starts_dedupes_same_bar(self):
         from scanner.radar import unique_trend_starts
 

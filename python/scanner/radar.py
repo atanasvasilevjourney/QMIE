@@ -519,6 +519,36 @@ def unique_trend_starts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def overlay_recent_expansions(
+    snap: RadarSnapshot,
+    setups: list[dict[str, Any]],
+) -> RadarSnapshot:
+    """Keep replayed 1D coil-UP/DOWN in radar buckets after follow-through days."""
+    have_up = {str(r.get("symbol") or "").upper() for r in snap.expansions}
+    have_dn = {str(r.get("symbol") or "").upper() for r in snap.expansion_shorts}
+    extra_up: list[dict[str, Any]] = []
+    extra_dn: list[dict[str, Any]] = []
+    for raw in unique_trend_starts(setups):
+        d = dict(raw)
+        sym = str(d.get("symbol") or "").upper()
+        if not sym:
+            continue
+        reason = str(d.get("reason") or "")
+        if d.get("breakout") == "UP" and "coil_breakout" in reason and sym not in have_up:
+            extra_up.append(d)
+            have_up.add(sym)
+        elif d.get("breakout") == "DOWN" and "coil_breakout" in reason and sym not in have_dn:
+            extra_dn.append(d)
+            have_dn.add(sym)
+    if extra_up:
+        snap.expansions = list(snap.expansions) + extra_up
+    if extra_dn:
+        snap.expansion_shorts = list(snap.expansion_shorts) + extra_dn
+    if extra_up or extra_dn:
+        snap.has_actionable = True
+    return snap
+
+
 def build_snapshot(
     rows: list[RadarRow],
     *,
