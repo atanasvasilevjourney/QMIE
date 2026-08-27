@@ -11,6 +11,8 @@ export type RadarRow = {
   plus_di: number
   minus_di: number
   coil_width_pct?: number | null
+  coil_high?: number | null
+  coil_low?: number | null
   breakout?: 'UP' | 'DOWN' | null
   breakout_level?: number | null
   breakout_excess_pct?: number | null
@@ -41,6 +43,9 @@ export type RadarSnapshot = {
   note?: string | null
   enabled?: boolean
   has_actionable?: boolean
+  bias?: 'LONG' | 'SHORT' | 'MIXED' | 'UNKNOWN' | string
+  btc_color?: string | null
+  coverage_pct?: number | null
 }
 
 export type SignalRow = {
@@ -135,6 +140,11 @@ export type JournalStats = {
   win_pct: number
   avg_realized_r?: number | null
   sum_pnl?: number | null
+  by_source?: { paper?: number; manual?: number }
+  by_timeframe?: Record<string, number>
+  manual_4h_closed?: number
+  pooled?: boolean
+  oos_edge?: string
 }
 
 export type DeskTab =

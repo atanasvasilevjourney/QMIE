@@ -381,9 +381,13 @@ export function Scene3D({
   signalCount?: number
   allowZoom?: boolean
 }) {
-  const green = radar?.green ?? 0
-  const grey = radar?.grey ?? 0
-  const red = radar?.red ?? 0
+  const rawGreen = radar?.green ?? 0
+  const rawGrey = radar?.grey ?? 0
+  const rawRed = radar?.red ?? 0
+  const trusted = radar?.status === 'ready'
+  const green = trusted ? rawGreen : 0
+  const grey = trusted ? rawGrey : Math.max(1, rawGreen + rawGrey + rawRed)
+  const red = trusted ? rawRed : 0
   const [ready, setReady] = useState(false)
   const reduce = usePrefersReducedMotion()
   const innerCount = 5
@@ -497,10 +501,12 @@ export function Scene3D({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="flex items-end justify-between gap-3">
           <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
-            <p className="hud-kicker">Live radar core</p>
+            <p className="hud-kicker">
+              {radar?.status === 'incomplete' ? 'Incomplete 1D map' : 'Closed 1D breadth'}
+            </p>
             <p className="hud-meta">
               {radar?.as_of
-                ? `1D closed through ${radar.as_of.slice(0, 10)}`
+                ? `unranked · through ${radar.as_of.slice(0, 10)}`
                 : 'Awaiting daily snapshot · decorative nebula'}
             </p>
           </div>
@@ -508,9 +514,9 @@ export function Scene3D({
             className="hud flex gap-4 font-mono text-sm tabular"
             style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}
           >
-            <span className="text-lime">G {green}</span>
-            <span className="text-[#c5d0dc]">Gy {grey}</span>
-            <span className="text-magenta">R {red}</span>
+            <span className="text-lime">G {rawGreen}</span>
+            <span className="text-[#c5d0dc]">Gy {rawGrey}</span>
+            <span className="text-magenta">R {rawRed}</span>
           </div>
         </div>
       </div>

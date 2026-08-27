@@ -3,6 +3,25 @@ import { api } from '../api/client'
 import type { JournalFill, JournalStats, SignalRow } from '../types'
 import { Empty, PanelShell } from './RadarPanel'
 
+function journalStatsLine(stats: JournalStats): string {
+  const paper = stats.by_source?.paper
+  const manual = stats.by_source?.manual
+  const hasSplit = stats.by_source != null
+  const h1 = stats.by_timeframe?.['1h'] ?? stats.by_timeframe?.['1H'] ?? 0
+  const h4 = stats.by_timeframe?.['4h'] ?? stats.by_timeframe?.['4H'] ?? 0
+  const m4 = stats.manual_4h_closed ?? 0
+  const pooled =
+    `win ${stats.win_pct}% is pooled journal — not frozen OOS · avg R ${stats.avg_realized_r ?? '—'}`
+  if (!hasSplit) {
+    return `A/A+ closed ${stats.closed} · ${pooled}`
+  }
+  return (
+    `A/A+ closed ${stats.closed} · paper ${paper ?? 0} / manual ${manual ?? 0} · 1h ${h1} / 4h ${h4} · ` +
+    `${pooled} · manual 4h ${m4}/30 · ` +
+    (stats.oos_edge || '4h A/A+ OOS 49.1% / E[R] +0.309')
+  )
+}
+
 export function JournalFlow({
   selected,
   fills,
@@ -87,13 +106,13 @@ export function JournalFlow({
       >
         <ol className="mb-4 space-y-2 text-sm leading-relaxed text-muted">
           <li>1. Pick an alert from OPS strategy tables</li>
-          <li>2. Enter your real fill price & size</li>
-          <li>3. Optional exit → realized R (needs stop_loss on signal)</li>
-          <li>4. Sync — compare vs OOS baseline later</li>
+          <li>2. Enter your real fill price. Size is coin qty for cash math — not an order</li>
+          <li>3. Optional exit → realized R (needs stop_loss on the signal)</li>
+          <li>4. Pooled win% is not frozen OOS. Need 30 manual 4h A/A+ fills</li>
         </ol>
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Fill price" value={fillPrice} onChange={setFillPrice} placeholder={String(selected?.signal_price ?? '')} />
-          <Field label="Size" value={size} onChange={setSize} />
+          <Field label="Size (base coins, cash math only)" value={size} onChange={setSize} />
           <Field label="Exit price" value={exitPrice} onChange={setExitPrice} placeholder="optional…" />
           <Field label="Notes" value={notes} onChange={setNotes} />
         </div>
@@ -114,7 +133,7 @@ export function JournalFlow({
         title="Fills & Stats"
         subtitle={
           stats
-            ? `A/A+ win ${stats.win_pct}% · closed ${stats.closed} · avg R ${stats.avg_realized_r ?? '—'}`
+            ? journalStatsLine(stats)
             : '—'
         }
       >

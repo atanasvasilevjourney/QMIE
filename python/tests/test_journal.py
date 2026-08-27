@@ -169,3 +169,23 @@ class TestDatabaseJournal:
         assert all_stats["closed"] == 2
         assert all_stats["wins"] == 1
         assert all_stats["win_pct"] == 50.0
+
+    async def test_journal_stats_splits_source_and_tf(self, db: Database):
+        h1 = await db.insert_signal(_sig(bar_time=11, timeframe="1h", symbol="BTCUSDT"))
+        h4 = await db.insert_signal(_sig(bar_time=12, timeframe="4h", symbol="ETHUSDT"))
+        await db.insert_fill(
+            signal_id=h1, fill_price=100.0, size=1.0, exit_price=110.0,
+            notes="paper auto-fill", realized_r=2.0, outcome="WIN", pnl=10.0,
+            source="paper",
+        )
+        await create_fill(db, JournalCreate(
+            signal_id=h4, fill_price=100.0, size=1.0, exit_price=90.0,
+        ))
+        stats = await db.journal_stats(grades=("A+", "A"))
+        assert stats["closed"] == 2
+        assert stats["by_source"]["paper"] == 1
+        assert stats["by_source"]["manual"] == 1
+        assert stats["by_timeframe"].get("1h") == 1
+        assert stats["by_timeframe"].get("4h") == 1
+        assert stats["manual_4h_closed"] == 1
+        assert stats["pooled"] is True

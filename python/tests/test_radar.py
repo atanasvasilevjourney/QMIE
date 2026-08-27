@@ -150,6 +150,33 @@ class TestCoilAndBreakout:
         assert brk == "DOWN"
         assert level == 98.0
 
+    def test_breakout_row_coil_box_excludes_today(self):
+        """SL box is the prior Donchian, not today's wick."""
+        n = 80
+        close = np.full(n, 100.0)
+        df = _ohlcv_from_close(close)
+        df.iloc[:-1, df.columns.get_loc("high")] = 102.0
+        df.iloc[:-1, df.columns.get_loc("low")] = 98.0
+        df.iloc[:-1, df.columns.get_loc("close")] = 100.0
+        df.iloc[-1, df.columns.get_loc("high")] = 120.0
+        df.iloc[-1, df.columns.get_loc("low")] = 101.0
+        df.iloc[-1, df.columns.get_loc("close")] = 115.0
+        row = classify_symbol(df, "SOLUSDT", cfg=RadarConfig(min_bars=60, coil_lookback=20))
+        assert row is not None
+        assert row.breakout == "UP"
+        assert row.coil_high == pytest.approx(102.0)
+        assert row.coil_low == pytest.approx(98.0)
+        assert row.breakout_level == pytest.approx(102.0)
+
+
+class TestBreadthBias:
+    def test_long_short_mixed(self):
+        from scanner.radar import breadth_bias
+        assert breadth_bias(20, 4, grey=5) == "LONG"
+        assert breadth_bias(4, 20, grey=5) == "SHORT"
+        assert breadth_bias(10, 10, grey=80) == "MIXED"
+        assert breadth_bias(0, 0, grey=0) == "UNKNOWN"
+
 
 # ════════════════════════════════════════════════════════════════════════
 class TestClassifySymbol:
@@ -222,7 +249,9 @@ class TestSnapshotAndDigest:
         assert snap.green + snap.grey + snap.red == snap.count
         assert snap.status == "ready"
         assert snap.enabled is True
+        assert snap.bias in ("LONG", "SHORT", "MIXED", "UNKNOWN")
         assert "as_of" in snap.as_dict()
+        assert "bias" in snap.as_dict()
         digest = format_radar_digest(snap)
         assert "UNRANKED" in digest
         assert "MANUAL ONLY" in digest
@@ -233,7 +262,8 @@ class TestSnapshotAndDigest:
         d = snap.as_dict()
         for k in ("as_of", "status", "enabled", "note", "requested",
                   "succeeded", "failed", "fresh_green", "breakouts",
-                  "late_stage_red", "has_actionable"):
+                  "late_stage_red", "has_actionable", "bias", "btc_color",
+                  "coverage_pct"):
             assert k in d
 
     def test_incomplete_coverage(self, bull_trend_df):
@@ -244,6 +274,7 @@ class TestSnapshotAndDigest:
         snap = build_snapshot([row], requested=3, failed_symbols=["ETHUSDT", "SOLUSDT"])
         assert snap.status == "incomplete"
         assert snap.failed == 2
+        assert snap.coverage_pct == pytest.approx(33.3, abs=0.1)
         digest = format_radar_digest(snap)
         assert "INCOMPLETE" in digest
 
