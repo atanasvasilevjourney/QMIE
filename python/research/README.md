@@ -54,3 +54,24 @@ Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 IS Sharpe **and** DF neighborhood (inner-IS val Sharpe std) **and** OOS
 holdout. Never promote from a reverse split. Never change Pine / `W_*`
 from this lab.
+
+## Quick-run board (BTC, Vision native 1d/4h from 2020-01, OOS 2023→2026-08)
+
+Not a license to retune the scanner. 1d archive starts 2020-01, not 2019-09.
+
+| Book | OOS Sharpe | OOS CAGR | OOS max DD |
+|---|---:|---:|---:|
+| Buy-and-hold BTC | 1.03 | 45% | −53% |
+| Spot baseline (EMA9/199 + Donchian + ADX) | 0.35 | 5% | −28% |
+| Spot Optuna (IS-fit) | 0.82 | 16% | −24% |
+| Spot + KAMA AND-gate | 0.22 | 2% | −29% |
+| Carver vol-target 20% | 1.24 | 18% | −11% |
+| 50/50 blend | 0.84 | 12% | −15% |
+| Frozen TEMA 9/90/199 10× isolated | 0.33 | 1.8%* | −3.2%* |
+| Frozen TEMA 1× | 0.33 | 0.2%* | −0.3%* |
+
+\*TEMA CAGR/DD are on a $10k account with $100 isolated stake — not full-port. Expectancy $2.93 / trade at 10× vs $0.29 at 1×; 0 liquidations on this OOS. Same trade list, scaled.
+
+Hypothesis board: H1 PARTIAL (tighter DD than BH, worse Sharpe). H2 HOLD. H3 INCONCLUSIVE (Optuna TEMA OOS Sharpe 0.34 vs frozen 0.33 — do not promote). H4 REJECT (AND-confluence hurt). H5 PARTIAL (Carver tighter DD; CAGR was *not* lower this bull OOS). H6 HOLD (chop gate). H7 HOLD (ranked top-3).
+
+DF neighborhood on inner-IS (2022 winter): Optuna neighbors did not clear a Sharpe≥0.5 pool with positive val Sharpe. That is the overfit warning even when 2023–26 OOS later looked fine.

@@ -19,7 +19,7 @@ def cagr(eq: pd.Series) -> float:
     if len(eq) < 2 or eq.iloc[-1] <= 0:
         return float("nan")
     yrs = (eq.index[-1] - eq.index[0]).days / 365.25
-    return float(eq.iloc[-1] ** (1 / yrs) - 1) if yrs > 0 else float("nan")
+    return float((eq.iloc[-1] / eq.iloc[0]) ** (1 / yrs) - 1) if yrs > 0 and eq.iloc[0] > 0 else float("nan")
 
 
 def sharpe(net: pd.Series, *, ann: int = ANN_DAYS) -> float:

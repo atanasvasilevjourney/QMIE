@@ -64,8 +64,8 @@ def ranked_spot_book(
     """
     close_panel = close_panel.sort_index()
     held_panel = held_panel.reindex(close_panel.index).fillna(0.0)
-    roc = close_panel.pct_change(lookback)
-    vol = close_panel.pct_change().rolling(20).std()
+    roc = close_panel.pct_change(lookback, fill_method=None)
+    vol = close_panel.pct_change(fill_method=None).rolling(20).std()
     names = list(close_panel.columns)
     weights = pd.DataFrame(0.0, index=close_panel.index, columns=names)
 
@@ -97,7 +97,7 @@ def ranked_spot_book(
             weights.at[ts, c] = float(wi)
 
     held_w = weights.shift(exec_lag).fillna(0.0)
-    rets = close_panel.pct_change().fillna(0.0)
+    rets = close_panel.pct_change(fill_method=None).fillna(0.0)
     gross = (held_w * rets).sum(axis=1)
     turnover = held_w.diff().abs().fillna(held_w.abs()).sum(axis=1)
     net = gross - turnover * (cost_bps / 1e4)
@@ -123,7 +123,7 @@ def equal_weight_book(
     held = held_panel.reindex(close_panel.index).fillna(0.0)
     n = held.sum(axis=1).replace(0, np.nan)
     w = held.div(n, axis=0).fillna(0.0).shift(exec_lag).fillna(0.0)
-    rets = close_panel.pct_change().fillna(0.0)
+    rets = close_panel.pct_change(fill_method=None).fillna(0.0)
     gross = (w * rets).sum(axis=1)
     turnover = w.diff().abs().fillna(w.abs()).sum(axis=1)
     net = gross - turnover * (cost_bps / 1e4)
@@ -131,10 +131,8 @@ def equal_weight_book(
 
 
 def bh_equal(close_panel: pd.DataFrame) -> pd.DataFrame:
-    rets = close_panel.pct_change().fillna(0.0)
+    rets = close_panel.pct_change(fill_method=None).fillna(0.0)
     n = close_panel.notna().sum(axis=1).clip(lower=1)
-    net = rets.mean(axis=1)
-    # only average names that exist that bar
     net = rets.where(close_panel.notna(), np.nan).mean(axis=1).fillna(0.0)
     return pd.DataFrame({"net": net, "equity": (1.0 + net).cumprod(), "n_names": n})
 

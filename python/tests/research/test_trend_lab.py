@@ -168,3 +168,12 @@ def test_kpis_empty_safe():
     k = kpis(empty, empty)
     assert k["bars"] == 0 or np.isnan(k["sharpe"])
     assert np.isnan(max_dd(empty))
+
+
+def test_cagr_uses_start_end_ratio_not_terminal_level():
+    from research.trend_lab.metrics import cagr
+    idx = pd.date_range("2020-01-01", periods=366, freq="D", tz="UTC")
+    eq = pd.Series(10_000.0, index=idx)
+    eq.iloc[-1] = 10_600.0
+    g = cagr(eq)
+    assert 0.05 < g < 0.07  # ~6%, not 10600**(1/1)-1
