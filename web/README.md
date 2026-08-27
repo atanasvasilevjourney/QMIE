@@ -14,6 +14,10 @@ npm run dev
 
 Open `http://localhost:5173`. API calls go to `/qmie/*` and are proxied to `http://127.0.0.1:8080`.
 
+Production desk (Vercel static hosting) is **not** the scanner. Set
+`VITE_QMIE_API` to the public FastAPI origin (see `docs/deployment.md`).
+Copy `web/.env.example` → `web/.env` only for local production-build previews.
+
 Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light mode is a white desk chrome; the Orbis WebGL canvas stays dark.
 
 ## Scripts

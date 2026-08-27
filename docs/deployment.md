@@ -2,6 +2,55 @@
 
 Scanner edition. Alert-only. No broker keys.
 
+## Vercel (desk UI only — not the scanner)
+
+Connecting this GitHub repo to Vercel and deploying **master** as-is produces
+`404: NOT_FOUND` with status **Ready**. Vercel built nothing useful: the repo
+root is Python + Docker, not a Next.js app, and there was no `index.html` to
+serve.
+
+Vercel **cannot** run QMIE. The product is a long-lived FastAPI process
+(bar-close scheduler, SQLite, optional Redis, exchange REST). Serverless
+functions time out and have no persistent loop. Discord/Telegram alerts do
+**not** need Vercel.
+
+Two pieces, two hosts:
+
+| Piece | Where |
+|---|---|
+| Scanner API (`uvicorn` on `:8080`) | Docker Compose on a VPS, or a **container** host (Fly / Railway / Render). See §2. |
+| Desk UI (`web/`) | Optional: Vercel static hosting of the Vite build |
+
+### Make `qmie.vercel.app` show the desk (fix the 404)
+
+After this repo’s `vercel.json` is on the branch Vercel deploys:
+
+1. Vercel project → **Deployments** → **Redeploy** the latest commit (or push).
+2. Visit `https://qmie.vercel.app`. You should see **ORBIT**, not `NOT_FOUND`.
+3. **Sync will fail** until the scanner is on a public HTTPS origin.
+
+Without waiting for a git merge, you can also set this in the Vercel dashboard
+and redeploy:
+
+- **Settings → General → Root Directory** = `web`
+- Framework = Vite
+- Build = `npm run build`
+- Output = `dist`
+
+### Point the desk at a live scanner
+
+1. Deploy Docker (§2) behind HTTPS (Caddy/Traefik/Nginx → `qmie:8080`).
+2. Vercel → **Settings → Environment Variables** (Production):
+   - `VITE_QMIE_API` = `https://your-scanner.example.com` (no trailing slash)
+3. Redeploy the Vercel project so Vite inlines the env at **build** time.
+   Changing the variable without a rebuild does nothing.
+
+CORS on FastAPI is already `allow_origins=["*"]` for the public scanner
+routes. Do not put `WEBHOOK_SECRET` or Discord URLs in Vercel — those belong
+in `python/.env` on the scanner host.
+
+---
+
 ## 1. Configure
 
 ```bash
