@@ -78,8 +78,8 @@ export default function App() {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <div className="pointer-events-none fixed inset-0 grid-floor opacity-40" />
-      <div className="pointer-events-none fixed -left-24 top-10 h-80 w-80 rounded-full bg-magenta/20 blur-3xl theme-blob" />
-      <div className="pointer-events-none fixed right-0 top-32 h-96 w-96 rounded-full bg-cyan/15 blur-3xl theme-blob" />
+      <div className="pointer-events-none fixed -left-24 top-10 h-64 w-64 rounded-full bg-cyan/10 blur-3xl theme-blob" />
+      <div className="pointer-events-none fixed right-0 top-32 h-72 w-72 rounded-full bg-lime/10 blur-3xl theme-blob" />
 
       <TopBar
         tab={tab}
@@ -99,7 +99,7 @@ export default function App() {
       <main className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
         {(desk.error || radarMsg) && (
           <div
-            className={`mb-5 rounded-2xl border px-5 py-4 font-mono text-sm ${
+            className={`mb-5 rounded-xl border px-4 py-3 text-sm ${
               desk.error || radarFailed
                 ? 'border-magenta/40 bg-magenta/10 text-magenta'
                 : 'border-cyan/40 bg-cyan/10 text-cyan'
@@ -122,21 +122,17 @@ export default function App() {
             >
               <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Landing</p>
-                  <h2 className="font-display text-3xl tracking-wide text-ink md:text-4xl">
+                  <p className="kicker">Landing</p>
+                  <h2 className="page-title">
                     Orbis <span className="text-cyan">Universe</span>
                   </h2>
-                  <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
-                    RGG nebula + orbit tokens. Operations (radar + TEMA / daily-breakout tables) live on OPS.
+                  <p className="lede">
+                    RGG nebula and orbit tokens. Radar and strategy tables live on Ops.
                     Signal-only — never orders.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setTab('ops')}
-                  className="rounded-2xl border border-cyan/40 bg-cyan/10 px-6 py-4 font-display text-sm tracking-[0.22em] text-cyan"
-                >
-                  OPEN OPS
+                <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">
+                  Open Ops
                 </button>
               </div>
               <div className="h-[min(78vh,860px)] min-h-[520px]">
@@ -149,7 +145,7 @@ export default function App() {
                 <MiniStat
                   label="Synced"
                   value={desk.lastSync ? new Date(desk.lastSync).toLocaleTimeString() : '—'}
-                  tone="text-chrome/70"
+                  tone="text-muted"
                   mono={false}
                 />
               </div>
@@ -166,14 +162,14 @@ export default function App() {
               className="grid gap-5"
             >
               <div>
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Operations</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
+                <p className="kicker">Operations</p>
+                <h2 className="page-title">
                   Radar + <span className="text-cyan">strategy tables</span>
                 </h2>
               </div>
               <RadarPanel radar={desk.radar} />
               {desk.paper && (
-                <div className="card rounded-2xl px-5 py-4 font-mono text-sm text-chrome/80">
+                <div className="card rounded-xl px-4 py-3 text-sm text-muted">
                   Paper book · {desk.paper.open} open · {desk.paper.closed} closed · PnL{' '}
                   <span className={desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}>
                     {desk.paper.closed_pnl}
@@ -199,11 +195,11 @@ export default function App() {
               transition={{ duration: 0.22 }}
             >
               <div className="mb-5">
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Screens</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
+                <p className="kicker">Screens</p>
+                <h2 className="page-title">
                   Combo <span className="text-cyan">review list</span>
                 </h2>
-                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
+                <p className="lede">
                   Unique symbols from 4h A/A+, daily breakout, coils, and the ranked book. Not a new
                   score. Never orders.
                 </p>
@@ -221,11 +217,11 @@ export default function App() {
               transition={{ duration: 0.22 }}
             >
               <div className="mb-5">
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Charts</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
+                <p className="kicker">Charts</p>
+                <h2 className="page-title">
                   Equity + <span className="text-cyan">visualised trades</span>
                 </h2>
-                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
+                <p className="lede">
                   SVG from closed fills and closed klines. Not TradingView. Not an order ticket.
                 </p>
               </div>
@@ -305,8 +301,8 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 border-t border-line/10 px-4 py-4 text-center font-mono text-xs text-chrome/50">
-        QMIE Desk · Orbis landing · OPS strategy tables · never places orders
+      <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-xs text-muted">
+        QMIE Desk · Orbit landing · Ops strategy tables · never places orders
       </footer>
     </div>
   )
@@ -324,9 +320,9 @@ function MiniStat({
   mono?: boolean
 }) {
   return (
-    <div className="card rounded-2xl px-5 py-4">
-      <div className="font-display text-[10px] tracking-widest text-chrome/50 uppercase">{label}</div>
-      <div className={`mt-1 ${mono ? 'font-mono text-xl' : 'font-mono text-base'} ${tone}`}>{value}</div>
+    <div className="card rounded-xl px-4 py-3">
+      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className={`mt-1 ${mono ? 'font-mono text-xl tabular' : 'font-mono text-base tabular'} ${tone}`}>{value}</div>
     </div>
   )
 }

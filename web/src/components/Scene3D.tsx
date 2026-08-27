@@ -157,7 +157,7 @@ function MemeCoin({
     ctx.lineWidth = 8
     ctx.stroke()
     ctx.fillStyle = '#05060a'
-    ctx.font = 'bold 54px Orbitron, sans-serif'
+    ctx.font = 'bold 54px Syne, IBM Plex Sans, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(label.slice(0, 4), 128, 128)
@@ -383,10 +383,10 @@ export function Scene3D({
       {!ready && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-void/80">
           <div className="text-center">
-            <p className="font-display text-xs tracking-[0.4em] text-cyan animate-pulse">
+            <p className="font-display text-xs tracking-tight text-cyan animate-pulse">
               BOOTING ORBIS
             </p>
-            <p className="mt-2 font-mono text-[10px] text-chrome/50">WebGL · bloom · orbit tokens</p>
+            <p className="mt-2 font-mono text-xs text-muted">WebGL · bloom · orbit tokens</p>
           </div>
         </div>
       )}
@@ -447,10 +447,10 @@ export function Scene3D({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
         <div className="card rounded-xl px-3 py-1.5 backdrop-blur-md">
-          <p className="font-display text-xs tracking-[0.35em] text-cyan uppercase">Orbis Universe</p>
-          <p className="font-mono text-xs text-chrome/60">memecoin orbit · RGG nebula</p>
+          <p className="font-display text-xs tracking-tight text-cyan uppercase">Orbis Universe</p>
+          <p className="font-mono text-xs text-muted">memecoin orbit · RGG nebula</p>
         </div>
-        <div className="card rounded-xl px-3 py-1.5 font-mono text-[10px] text-magenta backdrop-blur-md">
+        <div className="card rounded-xl px-3 py-1.5 font-mono text-xs text-magenta backdrop-blur-md">
           BLOOM · ACES · FOG
         </div>
       </div>
@@ -458,18 +458,18 @@ export function Scene3D({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="font-display text-[11px] tracking-[0.35em] text-cyan uppercase">
+            <p className="font-display text-xs tracking-tight text-cyan uppercase">
               Live Radar Core
             </p>
-            <p className="mt-1 font-mono text-xs text-chrome/80">
+            <p className="mt-1 font-mono text-xs text-muted">
               {radar?.as_of
                 ? `1D closed through ${radar.as_of.slice(0, 10)}`
                 : 'awaiting daily snapshot · decorative nebula active'}
             </p>
           </div>
-          <div className="card flex gap-3 rounded-xl px-3 py-2 font-mono text-[11px] backdrop-blur-md">
+          <div className="card flex gap-3 rounded-xl px-3 py-2 font-mono text-xs backdrop-blur-md">
             <span className="text-lime">G {green}</span>
-            <span className="text-chrome/70">Gy {grey}</span>
+            <span className="text-muted">Gy {grey}</span>
             <span className="text-magenta">R {red}</span>
           </div>
         </div>

@@ -160,7 +160,7 @@ function SignalCard({
   const breakout = isBreakout(s)
   const exit = isExit(s)
   const pnl = s.pnl
-  const pnlTone = pnl == null ? 'text-chrome/70' : pnl > 0 ? 'text-lime' : 'text-magenta'
+  const pnlTone = pnl == null ? 'text-muted' : pnl > 0 ? 'text-lime' : 'text-magenta'
   return (
     <div
       className={`rounded-2xl border text-left transition ${
@@ -176,7 +176,7 @@ function SignalCard({
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-display text-base tracking-wider text-ink">{s.symbol}</span>
+            <span className="font-mono text-base font-medium tabular text-ink">{s.symbol}</span>
             <span className={`font-mono text-sm ${exit ? pnlTone : buy ? 'text-lime' : 'text-magenta'}`}>
               {exit
                 ? `EXIT · PnL ${pnl ?? '—'}`
@@ -187,13 +187,13 @@ function SignalCard({
                   : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
             {breakout && (
-              <span className="font-mono text-[11px] tracking-widest text-amber">BREAKOUT</span>
+              <span className="rounded-md border border-amber/30 bg-amber/10 px-1.5 py-0.5 font-mono text-xs text-amber">Breakout</span>
             )}
             {exit && (
-              <span className="font-mono text-[11px] tracking-widest text-lime">PAPER CLOSE</span>
+              <span className="rounded-md border border-lime/30 bg-lime/10 px-1.5 py-0.5 font-mono text-xs text-lime">Paper close</span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm text-chrome/70">
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular text-muted">
             <span>#{s.id}</span>
             <span>{(s.timeframe || '—').toUpperCase()}</span>
             {s.score != null && <span>score {s.score}</span>}
@@ -203,8 +203,8 @@ function SignalCard({
             <span>TP {s.take_profit ?? '—'}</span>
           </div>
         </div>
-        <span className="shrink-0 font-display text-[11px] tracking-[0.2em] text-cyan">
-          {open ? 'HIDE' : 'DETAILS'}
+        <span className="shrink-0 text-sm text-cyan">
+          {open ? 'Hide' : 'Details'}
         </span>
       </button>
       {open && (
@@ -218,26 +218,18 @@ function SignalCard({
             {exit && <Fact k="R" v={s.realized_r == null ? '—' : String(s.realized_r)} />}
             {exit && <Fact k="Fill id" v={s.fill_id == null ? '—' : String(s.fill_id)} />}
           </dl>
-          <p className="mt-3 font-mono text-xs text-chrome/50">
-            Signal-only. Confirm on quant_visualizer.pine. DETAILS does not place an order.
+          <p className="mt-3 text-sm text-muted">
+            Signal-only. Confirm on quant_visualizer.pine. Details does not place an order.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {!exit && (
-              <button
-                type="button"
-                onClick={onJournal}
-                className="rounded-2xl border border-cyan/40 bg-cyan/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-cyan"
-              >
-                LOG FILL IN JOURNAL
+              <button type="button" onClick={onJournal} className="btn btn-accent">
+                Log fill in journal
               </button>
             )}
             {onChart && s.symbol && (
-              <button
-                type="button"
-                onClick={onChart}
-                className="rounded-2xl border border-lime/40 bg-lime/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-lime"
-              >
-                VIEW CHART
+              <button type="button" onClick={onChart} className="btn btn-ok">
+                View chart
               </button>
             )}
           </div>
@@ -250,8 +242,8 @@ function SignalCard({
 function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="font-display text-[10px] tracking-[0.22em] text-chrome/45">{k}</dt>
-      <dd className="mt-1 break-all font-mono text-sm text-chrome/85">{v}</dd>
+      <dt className="fact-k">{k}</dt>
+      <dd className="fact-v">{v}</dd>
     </div>
   )
 }

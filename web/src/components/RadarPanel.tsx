@@ -24,7 +24,7 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
       </div>
-      <p className="mt-3 font-mono text-xs leading-relaxed text-chrome/50">
+      <p className="lede mt-4">
         Daily GREY→GREEN / coil-UP dispatch as BREAKOUT LONG; GREY→RED / coil-DOWN as
         BREAKOUT SHORT on the Daily breakout table (OPS). Manual only — not an A/A+ grade.
         Confirm on the 1D visualizer before clicking.
@@ -45,8 +45,8 @@ function Bucket({
   return (
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-display text-sm tracking-[0.25em] text-cyan/80 uppercase">{title}</h3>
-        <span className="font-mono text-sm text-chrome/40">{rows?.length ?? 0}</span>
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        <span className="font-mono text-sm tabular text-muted">{rows?.length ?? 0}</span>
       </div>
       <div className="max-h-72 space-y-2 overflow-auto pr-1">
         {(rows ?? []).slice(0, 12).map((r, i) => (
@@ -71,9 +71,9 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-4 px-4 py-3.5 text-left"
       >
-        <span className="min-w-0 flex-1 font-mono text-sm text-chrome/90">{summary}</span>
-        <span className="shrink-0 font-display text-[11px] tracking-[0.2em] text-cyan">
-          {open ? 'HIDE' : 'DETAILS'}
+        <span className="min-w-0 flex-1 font-mono text-sm tabular text-ink">{summary}</span>
+        <span className="shrink-0 text-sm text-cyan">
+          {open ? 'Hide' : 'Details'}
         </span>
       </button>
       {open && (
@@ -95,8 +95,8 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
 function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="font-display text-[10px] tracking-[0.22em] text-chrome/45">{k}</dt>
-      <dd className="mt-1 break-all font-mono text-sm text-chrome/85">{v}</dd>
+      <dt className="fact-k">{k}</dt>
+      <dd className="fact-v">{v}</dd>
     </div>
   )
 }
@@ -117,11 +117,11 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   const color =
-    tone === 'lime' ? 'text-lime border-lime/20' : tone === 'magenta' ? 'text-magenta border-magenta/20' : 'text-chrome/70 border-line/15'
+    tone === 'lime' ? 'text-lime border-lime/20' : tone === 'magenta' ? 'text-magenta border-magenta/20' : 'text-muted border-line/15'
   return (
-    <div className={`rounded-2xl border bg-surface/80 px-4 py-3 ${color}`}>
-      <div className="font-display text-[11px] tracking-widest opacity-70">{label}</div>
-      <div className="font-mono text-2xl">{value}</div>
+    <div className={`rounded-lg border bg-panel px-4 py-3 ${color}`}>
+      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className="font-mono text-2xl tabular">{value}</div>
     </div>
   )
 }
@@ -138,11 +138,11 @@ export function PanelShell({
   action?: ReactNode
 }) {
   return (
-    <section className="neon-border glass relative overflow-hidden rounded-[24px] p-6">
-      <div className="mb-5 flex items-start justify-between gap-3">
+    <section className="glass relative overflow-hidden rounded-xl p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg tracking-[0.22em] text-ink uppercase">{title}</h2>
-          {subtitle && <p className="mt-1 max-w-4xl font-mono text-sm text-chrome/50">{subtitle}</p>}
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
+          {subtitle && <p className="mt-1 max-w-4xl text-sm leading-relaxed text-muted">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -152,7 +152,7 @@ export function PanelShell({
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="font-mono text-[11px] text-chrome/40">{children}</p>
+  return <p className="text-sm text-muted">{children}</p>
 }
 
 function fmtPct(v?: number | null) {
