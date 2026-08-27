@@ -714,10 +714,10 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
     closed = (snap.as_of or "?")[:10]
     cov = f"{snap.succeeded}/{snap.requested}" if snap.requested else str(snap.count)
     lines = [
-        f"**QMIE Trend Radar — UNRANKED DAILY CONTEXT** (1D closed through {closed})",
+        f"**QMIE Trend Radar — SPOT UNRANKED 1D CONTEXT** (closed through {closed})",
         f"Coverage {cov}: 🟢{snap.green}  ⚪{snap.grey}  🔴{snap.red} · bias {snap.bias}",
-        "_NOT an entry · NOT a QMIE A/A+ grade · MANUAL ONLY · NO ORDER PATH_",
-        "_Wait for a separate ranked A/A+ alert before acting._",
+        "_SPOT book · NOT leverage · NOT a QMIE A/A+ grade · MANUAL ONLY · NO ORDER PATH_",
+        "_TEMA A/A+ is the leveraged add — wait for that alert before sizing perps._",
     ]
     if snap.status == "incomplete":
         lines.insert(1, f"⚠️ INCOMPLETE DATA ({cov} classified)")
@@ -747,13 +747,13 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
             f"`{r['symbol']}` UP@{r.get('breakout_level', '?')} {r.get('color')}"
             for r in snap.expansions[:max_items]
         ]
-        _cap("Expansions (1D coil-UP — new strategy, not A/A+)", items, len(snap.expansions))
+        _cap("Expansions (spot 1D coil-UP — not A/A+, not leverage)", items, len(snap.expansions))
     if snap.expansion_shorts:
         items = [
             f"`{r['symbol']}` DOWN@{r.get('breakout_level', '?')} {r.get('color')}"
             for r in snap.expansion_shorts[:max_items]
         ]
-        _cap("Expansion shorts (1D coil-DOWN)", items, len(snap.expansion_shorts))
+        _cap("Expansion shorts (spot 1D coil-DOWN)", items, len(snap.expansion_shorts))
     if snap.early_longs:
         items = [
             f"`{r['symbol']}` {r.get('coil_width_pct', '?')}% @{r.get('price', '?')}"

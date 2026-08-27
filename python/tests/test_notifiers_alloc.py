@@ -68,7 +68,7 @@ def test_discord_expansion_title():
         setup_type="expansion",
     )
     embed = n._build_embed(sig, None)
-    assert "EXPANSION LONG — COIL-UP" in embed["title"]
+    assert "EXPANSION LONG — SPOT COIL-UP" in embed["title"]
     assert "BREAKOUT LONG" not in embed["title"]
 
 
@@ -87,7 +87,7 @@ def test_discord_expansion_short_title():
         setup_type="expansion",
     )
     embed = n._build_embed(sig, None)
-    assert "EXPANSION SHORT — COIL-DOWN" in embed["title"]
+    assert "EXPANSION SHORT — SPOT COIL-DOWN" in embed["title"]
     assert "BREAKOUT SHORT" not in embed["title"]
 
 

@@ -101,7 +101,7 @@ export function JournalFlow({
         subtitle={
           selected
             ? `Selected signal #${selected.id} ${selected.symbol} ${selected.side}/${selected.grade}`
-            : 'Select a signal on OPS (Daily expansion, TEMA BUY, or color-flip DETAILS) to start'
+            : 'Select a signal on OPS (spot Daily expansion, leveraged TEMA BUY, or color-flip DETAILS) to start'
         }
       >
         <ol className="mb-4 space-y-2 text-sm leading-relaxed text-muted">

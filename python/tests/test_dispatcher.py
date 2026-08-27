@@ -84,7 +84,11 @@ class TestTVChartUrl:
         assert "BINANCE:BTCUSDT.P" in url
         assert "interval=240" in url
 
-    def test_1d_uses_D(self):
+    def test_spot_skips_perp_suffix(self):
+        url = tv_chart_url("BTCUSDT", "1d", "BINANCE", perp=False)
+        assert "BINANCE:BTCUSDT&" in url or url.endswith("BINANCE:BTCUSDT")
+        assert "BTCUSDT.P" not in url
+        assert "interval=D" in url
         url = tv_chart_url("BTCUSDT", "1d", "BINANCE")
         assert "interval=D" in url
 
@@ -469,5 +473,7 @@ class TestDailyBreakoutInbound:
         assert len(received) == 1
         assert received[0].chart_url
         assert "interval=D" in received[0].chart_url
+        assert "ETHUSDT.P" not in received[0].chart_url
+        assert "BINANCE:ETHUSDT" in received[0].chart_url
         # duplicate bar is dropped
         assert await dispatcher.dispatch_inbound(sig) is False

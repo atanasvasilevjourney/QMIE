@@ -113,7 +113,7 @@ export function SignalsPanel({
     <div className="grid gap-5">
       <StrategyTable
         title="Daily expansion"
-        subtitle="New 1D strategy · coil-UP long / coil-DOWN short · prior-box SL · not A/A+. Chart opens 1D."
+        subtitle="Spot book · 1D coil-UP long / coil-DOWN short · prior-box SL · no leverage · no TEMA TP. Chart opens spot 1D."
         rows={expansion}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -124,7 +124,7 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="TEMA BUY"
-        subtitle="Graded add · A/A+ BUY · prefer 4h printed 1.5/2.5 ATR · frozen swing edge. Badge if the same symbol already expanded."
+        subtitle="Leverage book · A/A+ BUY on USDT-perp · prefer 4h printed 1.5/2.5 ATR. Badge if the same symbol already expanded on spot."
         rows={temaBuy}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -134,7 +134,7 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="TEMA scanner"
-        subtitle="TMA 9/90/199 · remaining A/A+ (mostly SELL) and other grades · not a tick stream."
+        subtitle="Leverage book · TMA 9/90/199 · remaining A/A+ (mostly SELL) and other grades · not a tick stream."
         rows={tema}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -144,7 +144,7 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="Daily color-flip"
-        subtitle="Unranked 1D GREY→GREEN/RED · not a coil expansion · not an A/A+ grade. Chart opens 1D."
+        subtitle="Spot context · unranked 1D GREY→GREEN/RED · not a coil expansion · not leverage. Chart opens spot 1D."
         rows={breakout}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -283,8 +283,14 @@ function SignalCard({
             {expansion && (
               <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">expansion</span>
             )}
+            {(expansion || (breakout && !exit)) && (
+              <span className="rounded-md border border-line px-2 py-0.5 font-mono text-sm text-muted">spot</span>
+            )}
             {afterExpansion && (
               <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">after expansion</span>
+            )}
+            {!exit && !expansion && !isBreakout(s) && (isTemaBuy(s) || isTema(s)) && (
+              <span className="rounded-md border border-cyan/40 bg-cyan/10 px-2 py-0.5 font-mono text-sm text-cyan">leverage</span>
             )}
             {breakout && !expansion && kind === 'coil' && (
               <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">coil</span>
@@ -326,6 +332,10 @@ function SignalCard({
             <Fact k="Received" v={s.received_at ? s.received_at.replace('T', ' ').slice(0, 19) : '—'} />
             {breakout && !s.stop_loss && (
               <Fact k="R" v="— no stop on this color-flip; not a measured book" />
+            )}
+            {(expansion || isBreakout(s)) && <Fact k="Book" v="spot — no leverage" />}
+            {!exit && !expansion && !isBreakout(s) && (isTemaBuy(s) || isTema(s)) && (
+              <Fact k="Book" v="leverage — USDT-perp; you set size" />
             )}
             {exit && <Fact k="PnL" v={pnl == null ? '—' : String(pnl)} />}
             {exit && <Fact k="R" v={s.realized_r == null ? 'n/a — no stop on signal' : String(s.realized_r)} />}

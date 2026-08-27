@@ -7,15 +7,15 @@ const STEPS = [
   },
   {
     title: 'Land on Orbit',
-    body: 'Orbit is the 3D universe. Ops holds radar plus Daily expansion, TEMA BUY, TEMA scanner, color-flip, and exit tables.',
+    body: 'Orbit is the 3D universe. Ops holds spot radar (Daily expansion) plus leveraged TEMA BUY / scanner tables.',
   },
   {
     title: 'Read the guide',
-    body: 'Guide tab: Daily expansion vs TEMA BUY vs color-flip, paper fills, exit PnL. You still click live size.',
+    body: 'Guide tab: spot Daily expansion vs leveraged TEMA BUY vs color-flip. You still click live size.',
   },
   {
     title: 'Wait for a setup',
-    body: 'Ops tables split Daily expansion vs TEMA BUY vs TEMA scanner vs 1D color-flip vs exit. Open Details, then the visualizer.',
+    body: 'Ops tables split spot Daily expansion vs leveraged TEMA BUY vs TEMA scanner vs 1D color-flip vs exit.',
   },
   {
     title: 'Paper book',
@@ -48,7 +48,7 @@ export function FlowsPanel() {
         ))}
       </ol>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <Tip title="Daily expansion" body="1D coil-UP/DOWN is QMIE-DailyExpansion. Stop is the prior box. TEMA BUY is the graded 4h add. Color-flip is a separate unranked table. You still click size yourself." />
+        <Tip title="Spot vs leverage" body="Trend Radar + Daily expansion = spot (prior-box stop, no TEMA TP). TEMA BUY = leveraged USDT-perp add with printed 1.5/2.5 ATR. QMIE never sets leverage. You still click size yourself." />
         <Tip title="4h edge" body="Frozen OOS A/A+ was strongest on 4h (49.1% / E[R] +0.309). Pooled journal win% is not that table." />
         <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Size is coin qty for cash math, not an order." />
       </div>

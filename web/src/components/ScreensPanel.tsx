@@ -8,7 +8,7 @@ import { Empty, PanelShell } from './RadarPanel'
 const VIEWS: { id: ScreenView | 'focus'; label: string }[] = [
   { id: 'all', label: 'Combo' },
   { id: 'leaders', label: '4h A/A+' },
-  { id: 'expansions', label: 'Expansions' },
+  { id: 'expansions', label: 'Expansions (spot)' },
   { id: 'coils', label: 'Coils' },
   { id: 'breakouts', label: 'Breakouts' },
   { id: 'book', label: 'Book' },

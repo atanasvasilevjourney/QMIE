@@ -4,9 +4,9 @@ QMIE combo screens — union of existing views, unique by symbol
 Deep View-style master list: OR of result sets, then unique(symbol).
 
 Sources (already on the desk):
-  * TEMA A/A+ alerts (prefer 4h over 1h)
-  * Daily expansion (1D coil-UP / coil-DOWN)
-  * Daily color-flip (GREY→GREEN / GREY→RED)
+  * TEMA A/A+ alerts (leverage book, prefer 4h over 1h)
+  * Daily expansion (spot 1D coil-UP / coil-DOWN)
+  * Daily color-flip (spot GREY→GREEN / GREY→RED)
   * Radar tight coils
   * Ranked book slots
 
@@ -380,8 +380,8 @@ def build_screens(
         "modal_cluster": modal,
         "source_counts": dict(counts_src),
         "note": (
-            "OR of TEMA A/A+ ∪ daily expansion ∪ color-flip ∪ coils ∪ book, unique(symbol). "
-            "Leaders view is 4h A/A+ only. Expansions view is 1D coil-UP/DOWN. Not a new score. Never orders."
+            "OR of leveraged TEMA A/A+ ∪ spot daily expansion ∪ color-flip ∪ coils ∪ book, unique(symbol). "
+            "Leaders view is 4h A/A+ leverage. Expansions view is spot 1D coil-UP/DOWN. Never orders."
         ),
         "rows": visible,
     }

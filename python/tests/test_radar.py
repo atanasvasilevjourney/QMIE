@@ -495,7 +495,7 @@ class TestEarlyLongAndReplay:
         assert [r["symbol"] for r in snap.expansions] == ["SOLUSDT"]
         assert snap.expansion_shorts == []
         digest = format_radar_digest(snap)
-        assert "Expansions (1D coil-UP" in digest
+        assert "Expansions (spot 1D coil-UP" in digest
         assert "Breakouts (close-confirmed watch)" not in digest
 
     def test_follow_through_day_is_not_a_new_coil_up(self):

@@ -106,10 +106,12 @@ class DiscordNotifier(Notifier):
         strat = (sig.strategy or "").lower()
         if setup == "expansion" or "dailyexpansion" in strat:
             title_action = (
-                "EXPANSION LONG — COIL-UP" if side is Side.BUY else "EXPANSION SHORT — COIL-DOWN"
+                "EXPANSION LONG — SPOT COIL-UP" if side is Side.BUY else "EXPANSION SHORT — SPOT COIL-DOWN"
             )
         elif setup == "breakout" or "dailybreakout" in strat:
-            title_action = "BREAKOUT LONG — TREND START" if side is Side.BUY else "BREAKOUT SHORT"
+            title_action = "BREAKOUT LONG — SPOT" if side is Side.BUY else "BREAKOUT SHORT — SPOT"
+        elif "scanner" in strat:
+            title_action = "TEMA BUY — LEVERAGE" if side is Side.BUY else "TEMA SELL — LEVERAGE"
         if sig.event.value in ("exit", "close"):
             title_action = "EXIT"
         title = f"{title_action} — {sig.symbol}"
