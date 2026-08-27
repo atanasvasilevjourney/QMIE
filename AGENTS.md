@@ -16,7 +16,7 @@ Do not put service startup in the environment update script — start them in th
 ### Lint / test / build
 
 - Python: `cd python && /workspace/.venv/bin/pytest -v` (see `CLAUDE.md`). Coverage optional.
-- Desk UI: `cd web && npm run lint` and `npm run build`. Theme: LIGHT/DARK toggle in the top bar (`localStorage` key `qmie-desk-theme`). The Orbis WebGL canvas stays dark; chrome/panels go white in light mode.
+- Desk UI: `cd web && npm run lint` and `npm run build`. Theme: Light/Dark toggle (`localStorage` key `qmie-desk-theme`). Type and color tokens live in `web/DESIGN.md`. Orbis WebGL stays dark; chrome/panels follow the theme.
 - Standard Docker path remains `docker/` + root README.
 - Multi-agent briefing: `GET /agents/briefing` or `cd python && python -m improve.agents` (read-only; GO/WATCH/SKIP is not an order).
 - Analysis overlay: `GET /agents/analysis/{id}` (on-demand Take + ATR levels). Empty `OPENAI_API_KEY` uses the template. Briefing must not call OpenAI.

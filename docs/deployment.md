@@ -21,33 +21,62 @@ Two pieces, two hosts:
 | Scanner API (`uvicorn` on `:8080`) | Docker Compose on a VPS, or a **container** host (Fly / Railway / Render). See §2. |
 | Desk UI (`web/`) | Optional: Vercel static hosting of the Vite build |
 
-### Make `qmie.vercel.app` show the desk (fix the 404)
+### Why `qmie.vercel.app` is still `404: NOT_FOUND`
 
-After this repo’s `vercel.json` is on the branch Vercel deploys:
+Vercel **Production** tracks GitHub **`master`**. That commit has no `web/`
+app and no `vercel.json`, so the deploy is Ready with an empty output.
+Preview deploys of this branch are SSO-gated; they are not the apex URL.
 
-1. Vercel project → **Deployments** → **Redeploy** the latest commit (or push).
-2. Visit `https://qmie.vercel.app`. You should see **ORBIT**, not `NOT_FOUND`.
-3. **Sync will fail** until the scanner is on a public HTTPS origin.
+The live desk is **`https://qmie.onrender.com/`** (browser `Accept: text/html`).
+`GET /health` stays JSON.
 
-Without waiting for a git merge, you can also set this in the Vercel dashboard
-and redeploy:
+To make `qmie.vercel.app` itself serve ORBIT:
 
-- **Settings → General → Root Directory** = `web`
-- Framework = Vite
-- Build = `npm run build`
-- Output = `dist`
+1. Vercel → Settings → Git → **Production Branch** =
+   `cursor/render-backend-a231` (or merge this stack into `master`)
+2. Optional: **Root Directory** = `web` (then `web/vercel.json` SPA rewrites
+   apply; do not keep `outputDirectory: web/dist` in that mode)
+3. Redeploy. Desk on `*.vercel.app` calls `https://qmie.onrender.com`
+   unless you set `VITE_QMIE_API`.
 
-### Point the desk at a live scanner
-
-1. Deploy Docker (§2) behind HTTPS (Caddy/Traefik/Nginx → `qmie:8080`).
-2. Vercel → **Settings → Environment Variables** (Production):
-   - `VITE_QMIE_API` = `https://your-scanner.example.com` (no trailing slash)
-3. Redeploy the Vercel project so Vite inlines the env at **build** time.
-   Changing the variable without a rebuild does nothing.
+`vercel.json` at the repo root uses `framework: null` and builds `web/dist`.
+Do not use the Vite preset at the monorepo root — it looks for
+`vite.config` next to `vercel.json`, finds none, and ships a 404.
 
 CORS on FastAPI is already `allow_origins=["*"]` for the public scanner
 routes. Do not put `WEBHOOK_SECRET` or Discord URLs in Vercel — those belong
 in `python/.env` on the scanner host.
+
+## Render (scanner API)
+
+Yes: a **Web Service** with Docker. No: static site, cron, or the free
+spin-down plan.
+
+`https://mcp.render.com/mcp` can list deploys and logs after OAuth or
+`RENDER_API_KEY`. That URL is a **shadow MCP** (not Runlayer). Prefer a
+Runlayer-managed Render server if your org has one.
+
+The image used to bind **8080** only. Render health-checks **`$PORT`**
+(often `10000`), so the old `CMD` never passed the probe. `docker/start.sh`
+now honors `PORT` (Compose still defaults to 8080).
+
+### Dashboard (existing service)
+
+1. Runtime **Docker**, Dockerfile `docker/Dockerfile`, context **repo root**
+   (not `docker/` — `COPY python/` would fail).
+2. Start command empty (image `CMD`) **or**
+   `uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers`
+3. Health check `/health`
+4. **1** instance + a disk at `/app/data`
+5. Env: `SCAN_DATA_SOURCE=okx`, `WORKERS=1`, `DISCORD_WEBHOOK_URL`,
+   `WEBHOOK_SECRET`, optional `REDIS_URL`
+6. Redeploy. Then `curl -sS https://<service>.onrender.com/health`
+7. Browser: `https://<service>.onrender.com/` (desk). JSON: `curl` `/` still.
+
+### Blueprint
+
+`render.yaml` at the repo root. Connect the repo in Render → Blueprint.
+Fill `sync: false` secrets in the dashboard. Plan is `starter` (always-on).
 
 ---
 

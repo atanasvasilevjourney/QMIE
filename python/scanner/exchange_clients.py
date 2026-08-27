@@ -45,10 +45,19 @@ _OKX_TF     = {"1m":"1m","3m":"3m","5m":"5m","15m":"15m","30m":"30m",
                "1h":"1H","2h":"2H","4h":"4H","6h":"6H","12h":"12H",
                "1d":"1D","1w":"1W"}
 
+# Binance-era tickers → current OKX SWAP inst. Do not map 1000PEPE→PEPE
+# (different contract scale). FET has no OKX SWAP in the live book.
+_OKX_INST_ALIAS = {
+    "MATICUSDT": "POL-USDT-SWAP",
+    "RNDRUSDT": "RENDER-USDT-SWAP",
+}
+
 
 def _okx_inst(symbol: str) -> str:
-    """BTCUSDT / BTCUSDT.P → BTC-USDT-SWAP."""
+    """BTCUSDT / BTCUSDT.P → BTC-USDT-SWAP (with rebrand aliases)."""
     raw = symbol.upper().replace(".P", "").replace("-", "")
+    if raw in _OKX_INST_ALIAS:
+        return _OKX_INST_ALIAS[raw]
     if raw.endswith("USDT"):
         return f"{raw[:-4]}-USDT-SWAP"
     return f"{raw}-USDT-SWAP"

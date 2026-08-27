@@ -1,16 +1,15 @@
-import { motion } from 'framer-motion'
 import type { DeskTab, DeskTheme } from '../types'
 
-const TABS: { id: DeskTab; label: string; hint: string }[] = [
-  { id: 'orbit', label: 'ORBIT', hint: 'Orbis Universe' },
-  { id: 'ops', label: 'OPS', hint: 'Radar + strategy tables' },
-  { id: 'screens', label: 'SCREENS', hint: 'Combo review list' },
-  { id: 'charts', label: 'CHARTS', hint: 'Equity + trade marks' },
-  { id: 'guide', label: 'GUIDE', hint: 'How to trade' },
-  { id: 'agents', label: 'AGENTS', hint: 'Briefing + take' },
-  { id: 'book', label: 'BOOK', hint: 'Ranked allocation' },
-  { id: 'journal', label: 'JOURNAL', hint: 'Manual fills' },
-  { id: 'flows', label: 'FLOWS', hint: 'Operator path' },
+const TABS: { id: DeskTab; label: string }[] = [
+  { id: 'orbit', label: 'Orbit' },
+  { id: 'ops', label: 'Ops' },
+  { id: 'screens', label: 'Screens' },
+  { id: 'charts', label: 'Charts' },
+  { id: 'guide', label: 'Guide' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'book', label: 'Book' },
+  { id: 'journal', label: 'Journal' },
+  { id: 'flows', label: 'Flows' },
 ]
 
 export function TopBar({
@@ -42,24 +41,42 @@ export function TopBar({
 }) {
   const light = theme === 'light'
   return (
-    <header className="relative z-20 border-b border-cyan/15 bg-void/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[1920px] flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative grid h-12 w-12 place-items-center rounded-2xl neon-border glass">
-            <span className="font-display text-sm font-bold text-cyan">Q</span>
-            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-lime shadow-[0_0_12px_currentColor]" />
+    <header className="relative z-20 border-b border-line bg-void/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-[1920px] flex-col gap-3 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg border border-line bg-panel">
+              <span className="font-display text-sm font-bold text-cyan">Q</span>
+            </div>
+            <div>
+              <h1 className="font-display text-lg font-bold tracking-tight text-ink">
+                QMIE Desk
+              </h1>
+              <p className="text-xs text-muted">Signal-only · manual entry · never orders</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-display text-lg font-bold tracking-[0.18em] text-ink uppercase sm:text-xl">
-              QMIE <span className="text-magenta">DESK</span>
-            </h1>
-            <p className="font-mono text-[11px] text-chrome/70">
-              signal-only · cyber radar · manual entry
-            </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusChip ok={healthOk} label={healthOk ? 'Online' : 'Degraded'} />
+            <StatusChip ok label={`${universe} symbols`} />
+            <StatusChip ok label={(source || '—').toUpperCase()} />
+            <StatusChip ok label={`Up ${Math.floor(uptime)}s`} />
+            <button type="button" onClick={onTheme} className="btn" aria-pressed={light}>
+              {light ? 'Light' : 'Dark'}
+            </button>
+            <button type="button" disabled={busy} onClick={onRefresh} className="btn btn-accent">
+              Sync
+            </button>
+            <button type="button" disabled={busy} onClick={onRadar} className="btn btn-warn">
+              Radar once
+            </button>
+            <button type="button" disabled={busy} onClick={onPaper} className="btn btn-ok">
+              Paper sync
+            </button>
           </div>
         </div>
 
-        <nav className="flex flex-wrap gap-2">
+        <nav className="flex flex-wrap gap-1" aria-label="Desk sections">
           {TABS.map((t) => {
             const active = tab === t.id
             return (
@@ -67,65 +84,17 @@ export function TopBar({
                 key={t.id}
                 type="button"
                 onClick={() => onTab(t.id)}
-                className={`min-w-[7.5rem] rounded-2xl px-4 py-3 text-left transition ${
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                   active
-                    ? 'neon-border bg-cyan/10 text-cyan'
-                    : 'border border-line/15 bg-surface/40 text-chrome/80 hover:border-cyan/30 hover:text-ink'
+                    ? 'bg-cyan/15 text-cyan'
+                    : 'text-muted hover:bg-surface hover:text-ink'
                 }`}
               >
-                <div className="font-display text-xs tracking-[0.22em]">{t.label}</div>
-                <div className="font-mono text-[11px] opacity-60">{t.hint}</div>
+                {t.label}
               </button>
             )
           })}
         </nav>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusChip ok={healthOk} label={healthOk ? 'ONLINE' : 'DEGRADED'} />
-          <StatusChip ok label={`${universe} SYM`} />
-          <StatusChip ok label={(source || '—').toUpperCase()} />
-          <StatusChip ok label={`UP ${Math.floor(uptime)}s`} />
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            onClick={onTheme}
-            className={`min-w-[7.5rem] rounded-2xl px-4 py-3 text-left ${
-              light
-                ? 'border border-line/20 bg-surface text-ink'
-                : 'border border-cyan/30 bg-cyan/10 text-cyan'
-            }`}
-          >
-            <div className="font-display text-xs tracking-[0.22em]">{light ? 'LIGHT' : 'DARK'}</div>
-            <div className="font-mono text-[11px] opacity-60">theme</div>
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            disabled={busy}
-            onClick={onRefresh}
-            className="rounded-2xl border border-cyan/30 bg-cyan/10 px-4 py-3 font-display text-xs tracking-widest text-cyan disabled:opacity-40"
-          >
-            SYNC
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            disabled={busy}
-            onClick={onRadar}
-            className="rounded-2xl border border-magenta/40 bg-magenta/10 px-4 py-3 font-display text-xs tracking-widest text-magenta disabled:opacity-40"
-          >
-            RADAR ONCE
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            disabled={busy}
-            onClick={onPaper}
-            className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 font-display text-xs tracking-widest text-lime disabled:opacity-40"
-          >
-            PAPER SYNC
-          </motion.button>
-        </div>
       </div>
     </header>
   )
@@ -134,12 +103,15 @@ export function TopBar({
 function StatusChip({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
-      className={`rounded-lg border px-2.5 py-1.5 font-mono text-[10px] tracking-wider ${
+      className={`rounded-md border px-2 py-1 font-mono text-xs tabular ${
         ok
-          ? 'border-lime/30 bg-lime/5 text-lime'
+          ? 'border-line bg-panel text-muted'
           : 'border-magenta/40 bg-magenta/10 text-magenta'
       }`}
     >
+      {ok && label === 'Online' ? (
+        <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime" />
+      ) : null}
       {label}
     </span>
   )
