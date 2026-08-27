@@ -163,34 +163,34 @@ function SignalCard({
   const pnlTone = pnl == null ? 'text-muted' : pnl > 0 ? 'text-lime' : 'text-magenta'
   return (
     <div
-      className={`rounded-2xl border text-left transition ${
+      className={`rounded-xl border text-left ${
         active
           ? 'border-cyan/50 bg-cyan/10'
           : exit || accent === 'lime'
-            ? 'border-lime/35 bg-lime/5'
+            ? 'border-lime/40 bg-lime/10'
             : breakout || accent === 'amber'
-              ? 'border-amber/35 bg-amber/5'
-              : 'border-line/15 bg-surface/70'
+              ? 'border-amber/40 bg-amber/10'
+              : 'border-line bg-panel'
       }`}
     >
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4">
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4" aria-expanded={open}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-base font-medium tabular text-ink">{s.symbol}</span>
             <span className={`font-mono text-sm ${exit ? pnlTone : buy ? 'text-lime' : 'text-magenta'}`}>
               {exit
-                ? `EXIT · PnL ${pnl ?? '—'}`
+                ? `Exit · PnL ${pnl ?? '—'}`
                 : breakout
                   ? buy
-                    ? 'LONG TREND START'
-                    : 'SHORT TREND START'
+                    ? 'Long trend start'
+                    : 'Short trend start'
                   : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
             {breakout && (
-              <span className="rounded-md border border-amber/30 bg-amber/10 px-1.5 py-0.5 font-mono text-xs text-amber">Breakout</span>
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">Breakout</span>
             )}
             {exit && (
-              <span className="rounded-md border border-lime/30 bg-lime/10 px-1.5 py-0.5 font-mono text-xs text-lime">Paper close</span>
+              <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">Paper close</span>
             )}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular text-muted">
@@ -203,12 +203,10 @@ function SignalCard({
             <span>TP {s.take_profit ?? '—'}</span>
           </div>
         </div>
-        <span className="shrink-0 text-sm text-cyan">
-          {open ? 'Hide' : 'Details'}
-        </span>
+        <span className="btn btn-sm btn-accent shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
-        <div className="border-t border-line/10 px-5 py-4">
+        <div className="border-t border-line px-5 py-4">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact k="Strategy" v={s.strategy || '—'} />
             <Fact k="Reason" v={s.reason || '—'} />

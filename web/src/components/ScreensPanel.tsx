@@ -6,12 +6,12 @@ import { ChartsPanel } from './ChartsPanel'
 import { Empty, PanelShell } from './RadarPanel'
 
 const VIEWS: { id: ScreenView | 'focus'; label: string }[] = [
-  { id: 'all', label: 'COMBO' },
-  { id: 'leaders', label: '4H A/A+' },
-  { id: 'coils', label: 'COILS' },
-  { id: 'breakouts', label: 'BREAKOUTS' },
-  { id: 'book', label: 'BOOK' },
-  { id: 'focus', label: 'FOCUS' },
+  { id: 'all', label: 'Combo' },
+  { id: 'leaders', label: '4h A/A+' },
+  { id: 'coils', label: 'Coils' },
+  { id: 'breakouts', label: 'Breakouts' },
+  { id: 'book', label: 'Book' },
+  { id: 'focus', label: 'Focus' },
 ]
 
 type SortKey =
@@ -25,14 +25,14 @@ type SortKey =
   | 'symbol'
 
 const SORTS: { id: SortKey; label: string }[] = [
-  { id: 'score', label: 'SCORE' },
-  { id: 'cluster', label: 'CLUSTER' },
+  { id: 'score', label: 'Score' },
+  { id: 'cluster', label: 'Cluster' },
   { id: 'atr_pct', label: 'ATR%' },
   { id: 'adx', label: 'ADX' },
-  { id: 'coil_width_pct', label: 'COIL' },
-  { id: 'pct_since_flip', label: '%FLIP' },
+  { id: 'coil_width_pct', label: 'Coil' },
+  { id: 'pct_since_flip', label: '% flip' },
   { id: 'timeframe', label: 'TF' },
-  { id: 'symbol', label: 'SYM' },
+  { id: 'symbol', label: 'Symbol' },
 ]
 
 function num(v: number | null | undefined): number {
@@ -148,11 +148,7 @@ export function ScreensPanel({
               key={v.id}
               type="button"
               onClick={() => setView(v.id)}
-              className={`rounded-2xl px-4 py-2 font-display text-xs tracking-tight ${
-                view === v.id
-                  ? 'border border-cyan/50 bg-cyan/10 text-cyan'
-                  : 'border border-line/15 text-muted hover:border-cyan/30'
-              }`}
+              className={`chip ${view === v.id ? 'chip-on' : ''}`}
             >
               {v.label}
               {v.id === 'focus' ? ` ${focus.symbols.length}` : ''}
@@ -165,11 +161,7 @@ export function ScreensPanel({
               key={s.id}
               type="button"
               onClick={() => clickSort(s.id)}
-              className={`rounded-xl px-3 py-1.5 font-mono text-xs tracking-tight ${
-                sort === s.id
-                  ? 'border border-magenta/40 bg-magenta/10 text-magenta'
-                  : 'border border-line/15 text-muted'
-              }`}
+              className={`chip ${sort === s.id ? 'chip-alt' : ''}`}
             >
               {s.label}
               {sort === s.id ? (asc ? ' ↑' : ' ↓') : ''}
@@ -177,11 +169,11 @@ export function ScreensPanel({
           ))}
         </div>
         {modal && (
-          <p className="mb-3 font-mono text-xs text-cyan">
+          <p className="mb-3 font-mono text-sm text-cyan">
             Modal cluster {modal} (most common in this view)
           </p>
         )}
-        {err && <p className="mb-3 font-mono text-xs text-magenta">{err}</p>}
+        {err && <p className="mb-3 text-sm text-magenta">{err}</p>}
         <div className="max-h-[min(62vh,720px)] space-y-2 overflow-auto" role="listbox">
           {visible.map((r, i) => {
             const active = i === cursor
@@ -195,28 +187,28 @@ export function ScreensPanel({
                 tabIndex={active ? 0 : -1}
                 onClick={() => setCursor(i)}
                 onDoubleClick={() => onChart(r.symbol, r.timeframe || undefined)}
-                className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left ${
+                className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left ${
                   active
                     ? 'border-cyan/50 bg-cyan/10'
                     : modalHit
-                      ? 'border-cyan/25 bg-cyan/5'
-                      : 'border-line/15 bg-surface/60'
+                      ? 'border-cyan/40 bg-cyan/10'
+                      : 'border-line bg-panel'
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-display text-sm tracking-tight text-ink">{r.symbol}</span>
-                    <span className="font-mono text-xs text-muted">
+                    <span className="font-mono text-[0.9375rem] font-medium tabular text-ink">{r.symbol}</span>
+                    <span className="font-mono text-sm text-muted">
                       {(r.side || '—')} · {r.grade || 'coil'} · {(r.timeframe || '—').toUpperCase()}
                     </span>
-                    {flagged && <span className="font-mono text-xs tracking-normal text-lime">FOCUS</span>}
+                    {flagged && <span className="font-mono text-sm text-lime">Focus</span>}
                     {r.sources.map((s) => (
-                      <span key={s} className="font-mono text-xs uppercase text-magenta/80">
+                      <span key={s} className="rounded-md border border-line px-1.5 py-0.5 font-mono text-sm text-muted">
                         {s}
                       </span>
                     ))}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted">
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm tabular text-muted">
                     <span className={modalHit ? 'text-cyan' : ''}>{r.cluster || '—'}</span>
                     {r.score != null && <span>score {r.score}</span>}
                     {r.atr_pct != null && <span>ATR {r.atr_pct.toFixed(2)}%</span>}
@@ -230,13 +222,13 @@ export function ScreensPanel({
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-xl border border-line/20 px-3 py-2 font-display text-xs tracking-normal text-muted"
+                  className="btn btn-sm shrink-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     focus.toggle(r.symbol)
                   }}
                 >
-                  {flagged ? 'UNFLAG' : 'FLAG'}
+                  {flagged ? 'Unflag' : 'Flag'}
                 </button>
               </div>
             )

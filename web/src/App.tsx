@@ -77,7 +77,8 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
-      <div className="pointer-events-none fixed inset-0 grid-floor opacity-40" />
+      <a href="#desk-main" className="skip-link">Skip to desk</a>
+      <div className="pointer-events-none fixed inset-0 grid-floor opacity-30" />
       <div className="pointer-events-none fixed -left-24 top-10 h-64 w-64 rounded-full bg-cyan/10 blur-3xl theme-blob" />
       <div className="pointer-events-none fixed right-0 top-32 h-72 w-72 rounded-full bg-lime/10 blur-3xl theme-blob" />
 
@@ -96,9 +97,11 @@ export default function App() {
         onTheme={toggleTheme}
       />
 
-      <main className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
+      <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
         {(desk.error || radarMsg) && (
           <div
+            role="status"
+            aria-live="polite"
             className={`mb-5 rounded-xl border px-4 py-3 text-sm ${
               desk.error || radarFailed
                 ? 'border-magenta/40 bg-magenta/10 text-magenta'
@@ -301,7 +304,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-xs text-muted">
+      <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-sm text-muted">
         QMIE Desk · Orbit landing · Ops strategy tables · never places orders
       </footer>
     </div>
@@ -321,7 +324,7 @@ function MiniStat({
 }) {
   return (
     <div className="card rounded-xl px-4 py-3">
-      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className="text-sm font-semibold text-muted">{label}</div>
       <div className={`mt-1 ${mono ? 'font-mono text-xl tabular' : 'font-mono text-base tabular'} ${tone}`}>{value}</div>
     </div>
   )
