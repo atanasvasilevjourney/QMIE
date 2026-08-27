@@ -45,9 +45,16 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 
 - `research/notebooks/01_crypto_trend_lab.ipynb` — data, spot, TEMA, Optuna, Boruta, DF
 - `research/notebooks/02_carver_vs_ensemble.ipynb` — sizing vs timing, vol dial, blend
-- `research/notebooks/03_portfolio_kpis.ipynb` — ranked book, DD KPIs, hypothesis board
+- `research/notebooks/04_carver_btc_qqq_gld.ipynb` — ranked Carver on BTC/QQQ/GLD, ~10% DD dial, Sharpe 1.4–1.5 goal + walk-forward
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
+
+Ranked Carver book (BTC / QQQ / GLD):
+
+```bash
+cd /workspace/python
+/workspace/.venv/bin/python -m research.trend_lab.run_carver_book
+```
 
 ## Promote-to-live rule
 

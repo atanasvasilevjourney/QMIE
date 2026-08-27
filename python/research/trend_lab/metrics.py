@@ -58,22 +58,22 @@ def rolling_sharpe(net: pd.Series, window: int = 90, *, ann: int = ANN_DAYS) -> 
     return (mu / sd.replace(0, np.nan) * np.sqrt(ann)).rename("roll_sharpe")
 
 
-def kpis_from_net(net: pd.Series, *, trades: int | None = None) -> dict[str, float]:
+def kpis_from_net(net: pd.Series, *, trades: int | None = None, ann: int = ANN_DAYS) -> dict[str, float]:
     """Rebuild equity from 1.0 so CAGR/DD describe this window only."""
     net = net.fillna(0.0)
     eq = (1.0 + net).cumprod()
-    return kpis(net, eq, trades=trades)
+    return kpis(net, eq, trades=trades, ann=ann)
 
 
-def kpis(net: pd.Series, eq: pd.Series, *, trades: int | None = None) -> dict[str, float]:
+def kpis(net: pd.Series, eq: pd.Series, *, trades: int | None = None, ann: int = ANN_DAYS) -> dict[str, float]:
     return {
-        "sharpe": sharpe(net),
-        "sortino": sortino(net),
+        "sharpe": sharpe(net, ann=ann),
+        "sortino": sortino(net, ann=ann),
         "cagr": cagr(eq),
         "max_dd": max_dd(eq),
         "calmar": calmar(eq),
         "ulcer": ulcer(eq),
-        "vol": float(net.std(ddof=1) * np.sqrt(ANN_DAYS)) if len(net.dropna()) > 2 else float("nan"),
+        "vol": float(net.std(ddof=1) * np.sqrt(ann)) if len(net.dropna()) > 2 else float("nan"),
         "trades": float(trades) if trades is not None else float("nan"),
         "bars": float(len(net.dropna())),
     }

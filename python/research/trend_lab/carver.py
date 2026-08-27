@@ -27,11 +27,11 @@ def ewm_std(x: pd.Series, span: int) -> pd.Series:
     return np.sqrt(var / bc)
 
 
-def vol_stack(close: pd.Series) -> pd.DataFrame:
-    ann = np.sqrt(ANN_DAYS)
-    ret = close.pct_change().clip(-0.9, 9.0)
+def vol_stack(close: pd.Series, *, ann_days: int = ANN_DAYS) -> pd.DataFrame:
+    ann = np.sqrt(ann_days)
+    ret = close.pct_change(fill_method=None).clip(-0.9, 9.0)
     vol_short = ewm_std(ret, 30) * ann
-    vol_long = vol_short.rolling(5 * ANN_DAYS, min_periods=ANN_DAYS).mean()
+    vol_long = vol_short.rolling(5 * ann_days, min_periods=ann_days).mean()
     vol = pd.Series(
         np.where(vol_long.isna(), vol_short, 0.70 * vol_short + 0.30 * vol_long),
         index=close.index,
@@ -55,7 +55,7 @@ def position_from_forecast(
 
 
 def backtest(close: pd.Series, weight: pd.Series, *, cost_bps: float = COST_BPS, exec_lag: int = 1) -> pd.DataFrame:
-    ret = close.pct_change().fillna(0.0)
+    ret = close.pct_change(fill_method=None).fillna(0.0)
     held = weight.shift(exec_lag).fillna(0.0)
     turnover = held.diff().abs().fillna(held.abs())
     net = held * ret - turnover * (cost_bps / 1e4)
@@ -109,15 +109,24 @@ def vol_attenuation(vol: pd.Series) -> pd.Series:
     return (1.5 - p).clip(0.5, 1.5).fillna(1.0).rename("vol_att")
 
 
-def normalised_price(close: pd.Series) -> pd.Series:
-    v = vol_stack(close)
-    ann = np.sqrt(ANN_DAYS)
+def normalised_price(close: pd.Series, *, ann_days: int = ANN_DAYS) -> pd.Series:
+    v = vol_stack(close, ann_days=ann_days)
+    ann = np.sqrt(ann_days)
     rn = (v["ret"] / (v["vol"] / ann)).replace([np.inf, -np.inf], np.nan).fillna(0.0)
     return (100.0 * rn.cumsum()).rename("PN")
 
 
-def cs_momentum_forecast(panel: pd.DataFrame, target: str, horizons: tuple[int, ...] = (40, 80)) -> pd.Series:
-    pn = pd.DataFrame({c: normalised_price(panel[c].dropna()).reindex(panel.index).ffill() for c in panel.columns})
+def cs_momentum_forecast(
+    panel: pd.DataFrame,
+    target: str,
+    horizons: tuple[int, ...] = (40, 80),
+    *,
+    ann_days: int = ANN_DAYS,
+) -> pd.Series:
+    pn = pd.DataFrame({
+        c: normalised_price(panel[c].dropna(), ann_days=ann_days).reindex(panel.index).ffill()
+        for c in panel.columns
+    })
     a = pn.mean(axis=1)
     r = pn[target] - a
     subs = []
@@ -149,9 +158,17 @@ def combine_forecasts(forecasts: dict[str, pd.Series], weights: dict[str, float]
     return combined, fdm
 
 
-def full_carver(panel: pd.DataFrame, target: str, *, use_cs: bool = True, vol_target: float = VOL_TARGET) -> tuple[pd.Series, pd.Series, float]:
+def full_carver(
+    panel: pd.DataFrame,
+    target: str,
+    *,
+    use_cs: bool = True,
+    vol_target: float = VOL_TARGET,
+    ann_days: int = ANN_DAYS,
+    long_only: bool = True,
+) -> tuple[pd.Series, pd.Series, float]:
     close = panel[target].dropna()
-    vs = vol_stack(close)
+    vs = vol_stack(close, ann_days=ann_days)
     forecasts = {
         "EWMAC": ewmac_forecast(close, vs.sigma_p),
         "Breakout": breakout_forecast(close),
@@ -160,11 +177,13 @@ def full_carver(panel: pd.DataFrame, target: str, *, use_cs: bool = True, vol_ta
     }
     weights = {"EWMAC": 0.15, "Breakout": 0.15, "Accel": 0.15, "Skew": 0.20}
     if use_cs and panel.shape[1] >= 3:
-        forecasts["CSmom"] = cs_momentum_forecast(panel, target).reindex(close.index)
+        forecasts["CSmom"] = cs_momentum_forecast(panel, target, ann_days=ann_days).reindex(close.index)
         weights["CSmom"] = 0.15
     combined, fdm = combine_forecasts(forecasts, weights)
     fc_att = combined * vol_attenuation(vs.vol)
-    w = position_from_forecast(fc_att.clip(-FC_CAP, FC_CAP), vs.vol, vol_target=vol_target)
+    w = position_from_forecast(
+        fc_att.clip(-FC_CAP, FC_CAP), vs.vol, vol_target=vol_target, long_only=long_only,
+    )
     return w, combined, fdm
 
 
