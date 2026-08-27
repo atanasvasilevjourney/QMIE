@@ -22,7 +22,7 @@ export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
               <div className="font-mono text-sm font-medium tabular text-ink">
                 #{slot.rank ?? i + 1} {slot.symbol || '—'}
               </div>
-              <div className="font-mono text-xs tabular text-muted">
+              <div className="font-mono text-sm tabular text-muted">
                 {slot.side || '—'} · {slot.grade || '—'} · {slot.cluster || '—'}
                 {slot.score != null ? ` · ${slot.score}` : ''}
               </div>
@@ -31,13 +31,13 @@ export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
               <div className="font-mono text-sm text-cyan">
                 {slot.weight_pct != null ? `${slot.weight_pct.toFixed(1)}%` : '—'}
               </div>
-              <div className="font-mono text-xs text-muted">suggested</div>
+              <div className="font-mono text-sm text-muted">suggested</div>
             </div>
           </div>
         ))}
         {!slots.length && <Empty>No allocation slots — wait for a scan pass</Empty>}
       </div>
-      <p className="mt-3 font-mono text-xs text-muted">
+      <p className="mt-3 text-sm text-muted">
         weight_pct is a risk budget for you — QMIE never places orders.
       </p>
     </PanelShell>

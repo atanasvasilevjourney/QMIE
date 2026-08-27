@@ -41,7 +41,7 @@ export function TopBar({
 }) {
   const light = theme === 'light'
   return (
-    <header className="relative z-20 border-b border-line bg-void/90 backdrop-blur-md">
+    <header className="relative z-20 border-b border-line bg-void/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1920px] flex-col gap-3 px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -52,7 +52,7 @@ export function TopBar({
               <h1 className="font-display text-lg font-bold tracking-tight text-ink">
                 QMIE Desk
               </h1>
-              <p className="text-xs text-muted">Signal-only · manual entry · never orders</p>
+              <p className="text-sm text-muted">Signal-only · manual entry · never orders</p>
             </div>
           </div>
 
@@ -61,7 +61,13 @@ export function TopBar({
             <StatusChip ok label={`${universe} symbols`} />
             <StatusChip ok label={(source || '—').toUpperCase()} />
             <StatusChip ok label={`Up ${Math.floor(uptime)}s`} />
-            <button type="button" onClick={onTheme} className="btn" aria-pressed={light}>
+            <button
+              type="button"
+              onClick={onTheme}
+              className="btn"
+              aria-pressed={light}
+              aria-label={light ? 'Switch to dark theme' : 'Switch to light theme'}
+            >
               {light ? 'Light' : 'Dark'}
             </button>
             <button type="button" disabled={busy} onClick={onRefresh} className="btn btn-accent">
@@ -84,11 +90,8 @@ export function TopBar({
                 key={t.id}
                 type="button"
                 onClick={() => onTab(t.id)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                  active
-                    ? 'bg-cyan/15 text-cyan'
-                    : 'text-muted hover:bg-surface hover:text-ink'
-                }`}
+                aria-current={active ? 'page' : undefined}
+                className={`nav-tab ${active ? 'nav-tab-on' : ''}`}
               >
                 {t.label}
               </button>
@@ -103,14 +106,14 @@ export function TopBar({
 function StatusChip({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
-      className={`rounded-md border px-2 py-1 font-mono text-xs tabular ${
+      className={`rounded-md border px-2.5 py-1 font-mono text-sm tabular ${
         ok
-          ? 'border-line bg-panel text-muted'
+          ? 'border-line bg-panel text-ink'
           : 'border-magenta/40 bg-magenta/10 text-magenta'
       }`}
     >
       {ok && label === 'Online' ? (
-        <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime" />
+        <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime" aria-hidden="true" />
       ) : null}
       {label}
     </span>

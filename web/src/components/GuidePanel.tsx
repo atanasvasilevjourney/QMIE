@@ -4,7 +4,7 @@ import { Empty, PanelShell } from './RadarPanel'
 export function GuidePanel({ guide }: { guide: TradingGuide | null }) {
   if (!guide) {
     return (
-      <PanelShell title="Trading Guide" subtitle="loading…">
+      <PanelShell title="Trading Guide" subtitle="Loading…">
         <Empty>Connecting to /guide</Empty>
       </PanelShell>
     )
@@ -12,7 +12,7 @@ export function GuidePanel({ guide }: { guide: TradingGuide | null }) {
   return (
     <div className="grid gap-5">
       <PanelShell title={guide.title} subtitle={`${guide.headline ?? ''} · never orders`}>
-        <p className="text-sm leading-relaxed text-muted">
+        <p className="text-[0.9375rem] leading-relaxed text-muted">
           Paper fills every ENTRY. EXIT rows show close price + cash PnL. You still click live size
           yourself.
         </p>
@@ -22,7 +22,7 @@ export function GuidePanel({ guide }: { guide: TradingGuide | null }) {
           <section key={s.id} className="card rounded-2xl px-5 py-5">
             <p className="kicker">{s.id}</p>
             <h3 className="mt-2 font-display text-lg font-bold tracking-tight text-ink">{s.title}</h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{s.body}</p>
+            <p className="mt-3 text-[0.9375rem] leading-relaxed text-muted">{s.body}</p>
             {!!s.rules?.length && (
               <ul className="mt-4 space-y-2">
                 {s.rules.map((r) => (

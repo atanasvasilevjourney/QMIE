@@ -3,17 +3,17 @@ import type { RadarRow, RadarSnapshot } from '../types'
 
 export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   if (!radar) {
-    return <PanelShell title="Trend Radar" subtitle="loading…"><Empty>Connecting to /radar</Empty></PanelShell>
+    return <PanelShell title="Trend Radar" subtitle="Loading…"><Empty>Connecting to /radar</Empty></PanelShell>
   }
   return (
     <PanelShell
       title="Trend Radar"
-      subtitle={`UNRANKED · ${radar.status ?? radar.note ?? 'ready'} · ${radar.succeeded ?? radar.count}/${radar.requested || radar.count}`}
+      subtitle={`${radar.status ?? radar.note ?? 'Ready'} · ${radar.succeeded ?? radar.count} of ${radar.requested || radar.count} scanned`}
     >
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <Stat label="GREEN" value={radar.green} tone="lime" />
-        <Stat label="GREY" value={radar.grey} tone="chrome" />
-        <Stat label="RED" value={radar.red} tone="magenta" />
+        <Stat label="Green" value={radar.green} tone="lime" />
+        <Stat label="Grey" value={radar.grey} tone="chrome" />
+        <Stat label="Red" value={radar.red} tone="magenta" />
       </div>
       <RadarBreadth green={radar.green} grey={radar.grey} red={radar.red} />
       <div className="mt-4 grid gap-5 lg:grid-cols-2">
@@ -42,22 +42,26 @@ function Bucket({
   rows: RadarRow[]
   render: (r: RadarRow) => string
 }) {
+  const count = rows?.length ?? 0
   return (
-    <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        <span className="font-mono text-sm tabular text-muted">{rows?.length ?? 0}</span>
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="text-[0.9375rem] font-semibold text-ink">{title}</h3>
+        <span className="font-mono text-sm tabular text-muted">{count}</span>
       </div>
-      <div className="max-h-72 space-y-2 overflow-auto pr-1">
-        {(rows ?? []).slice(0, 12).map((r, i) => (
-          <RadarRowCard
-            key={`${title}-${i}-${String(r.symbol)}`}
-            row={r}
-            summary={render(r)}
-          />
-        ))}
-        {!rows?.length && <Empty>none</Empty>}
-      </div>
+      {count === 0 ? (
+        <p className="empty-note">None yet</p>
+      ) : (
+        <div className="max-h-72 space-y-2 overflow-auto pr-1">
+          {rows.slice(0, 12).map((r, i) => (
+            <RadarRowCard
+              key={`${title}-${i}-${String(r.symbol)}`}
+              row={r}
+              summary={render(r)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -65,19 +69,21 @@ function Bucket({
 function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="card rounded-2xl">
+    <div className="card rounded-xl">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-4 px-4 py-3.5 text-left"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
       >
-        <span className="min-w-0 flex-1 font-mono text-sm tabular text-ink">{summary}</span>
-        <span className="shrink-0 text-sm text-cyan">
-          {open ? 'Hide' : 'Details'}
+        <span className="min-w-0 flex-1">
+          <span className="block font-mono text-[0.9375rem] font-medium tabular text-ink">{row.symbol}</span>
+          <span className="mt-0.5 block font-mono text-sm tabular text-muted">{summary.replace(String(row.symbol), '').trim()}</span>
         </span>
+        <span className="btn btn-sm shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
-        <dl className="grid gap-3 border-t border-line/10 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid gap-3 border-t border-line px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
           <Fact k="Symbol" v={row.symbol} />
           <Fact k="Color" v={row.color} />
           <Fact k="Days in state" v={String(row.days_in_state)} />
@@ -107,7 +113,7 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
   const yp = total ? (100 * grey) / total : 0
   const rp = total ? (100 * red) / total : 0
   return (
-    <div className="mb-3 flex h-2 overflow-hidden rounded-full border border-line/15 bg-surface/80">
+    <div className="mb-3 flex h-2.5 overflow-hidden rounded-full border border-line bg-surface">
       <div className="bg-lime" style={{ width: `${gp}%` }} />
       <div className="bg-chrome/40" style={{ width: `${yp}%` }} />
       <div className="bg-magenta" style={{ width: `${rp}%` }} />
@@ -117,10 +123,10 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   const color =
-    tone === 'lime' ? 'text-lime border-lime/20' : tone === 'magenta' ? 'text-magenta border-magenta/20' : 'text-muted border-line/15'
+    tone === 'lime' ? 'text-lime border-lime/40' : tone === 'magenta' ? 'text-magenta border-magenta/40' : 'text-ink border-line'
   return (
     <div className={`rounded-lg border bg-panel px-4 py-3 ${color}`}>
-      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className="text-sm font-semibold text-muted">{label}</div>
       <div className="font-mono text-2xl tabular">{value}</div>
     </div>
   )
@@ -152,7 +158,7 @@ export function PanelShell({
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-muted">{children}</p>
+  return <p className="empty-note">{children}</p>
 }
 
 function fmtPct(v?: number | null) {

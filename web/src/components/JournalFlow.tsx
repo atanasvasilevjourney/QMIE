@@ -85,7 +85,7 @@ export function JournalFlow({
             : 'Select a signal on OPS (TEMA or Daily breakout DETAILS) to start'
         }
       >
-        <ol className="mb-4 space-y-2 font-mono text-xs text-muted">
+        <ol className="mb-4 space-y-2 text-sm leading-relaxed text-muted">
           <li>1. Pick an alert from OPS strategy tables</li>
           <li>2. Enter your real fill price & size</li>
           <li>3. Optional exit → realized R (needs stop_loss on signal)</li>
@@ -94,7 +94,7 @@ export function JournalFlow({
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Fill price" value={fillPrice} onChange={setFillPrice} placeholder={String(selected?.signal_price ?? '')} />
           <Field label="Size" value={size} onChange={setSize} />
-          <Field label="Exit price" value={exitPrice} onChange={setExitPrice} placeholder="optional" />
+          <Field label="Exit price" value={exitPrice} onChange={setExitPrice} placeholder="optional…" />
           <Field label="Notes" value={notes} onChange={setNotes} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -107,7 +107,7 @@ export function JournalFlow({
             Log fill
           </button>
         </div>
-        {msg && <p className="mt-3 font-mono text-xs text-cyan/80">{msg}</p>}
+        {msg && <p className="mt-3 text-sm text-cyan">{msg}</p>}
       </PanelShell>
 
       <PanelShell
@@ -119,21 +119,21 @@ export function JournalFlow({
         }
       >
         <div className="mb-3 grid grid-cols-3 gap-2">
-          <Mini label="FILLS" value={stats?.fills ?? fills.length} />
-          <Mini label="WINS" value={stats?.wins ?? 0} />
-          <Mini label="LOSSES" value={stats?.losses ?? 0} />
+          <Mini label="Fills" value={stats?.fills ?? fills.length} />
+          <Mini label="Wins" value={stats?.wins ?? 0} />
+          <Mini label="Losses" value={stats?.losses ?? 0} />
         </div>
         <div className="max-h-64 space-y-2 overflow-auto">
           {fills.map((f) => (
             <div key={f.id} className="card rounded-2xl px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-ink">
+                <span className="font-mono text-sm text-ink">
                   #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}{' '}
-                  {f.source === 'paper' ? 'PAPER' : ''}
+                  {f.source === 'paper' ? 'Paper' : ''}
                 </span>
-                <span className="font-mono text-xs text-muted">{f.outcome}</span>
+                <span className="font-mono text-sm text-muted">{f.outcome}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between font-mono text-xs text-muted">
+              <div className="mt-1 flex items-center justify-between font-mono text-sm text-muted">
                 <span>
                   {f.fill_price} → {f.exit_price ?? 'open'} · sz {f.size}
                   {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
@@ -144,9 +144,9 @@ export function JournalFlow({
                     <button
                       type="button"
                       onClick={() => onViewChart(f.symbol as string, f.timeframe)}
-                      className="text-cyan hover:underline"
+                      className="btn btn-sm btn-accent"
                     >
-                      CHART
+                      Chart
                     </button>
                   )}
                   {!f.exit_price && (
@@ -154,9 +154,9 @@ export function JournalFlow({
                       type="button"
                       disabled={busy}
                       onClick={() => void closeFill(f.id)}
-                      className="text-magenta hover:underline"
+                      className="btn btn-sm btn-warn"
                     >
-                      CLOSE
+                      Close
                     </button>
                   )}
                 </span>
@@ -166,7 +166,7 @@ export function JournalFlow({
           {!fills.length && <Empty>No journal fills yet</Empty>}
         </div>
         {!!openFills.length && (
-          <p className="mt-2 font-mono text-xs text-amber">{openFills.length} open fill(s)</p>
+          <p className="mt-2 text-sm text-amber">{openFills.length} open fill(s)</p>
         )}
       </PanelShell>
     </div>
@@ -186,12 +186,16 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-muted">{label}</span>
+      <span className="field-label">{label}</span>
       <input
+        name={label.toLowerCase().replace(/\s+/g, '_')}
+        autoComplete="off"
+        spellCheck={false}
+        inputMode={label.toLowerCase().includes('price') || label === 'Size' ? 'decimal' : undefined}
         value={value}
-        placeholder={placeholder}
+        placeholder={placeholder || undefined}
         onChange={(e) => onChange(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-sm text-ink outline-none focus:border-cyan"
+        className="field-input"
       />
     </label>
   )
@@ -200,7 +204,7 @@ function Field({
 function Mini({ label, value }: { label: string; value: number }) {
   return (
     <div className="card rounded-xl px-2 py-2">
-      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className="text-sm font-semibold text-muted">{label}</div>
       <div className="font-mono text-lg tabular text-cyan">{value}</div>
     </div>
   )
