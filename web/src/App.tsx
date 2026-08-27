@@ -130,8 +130,8 @@ export default function App() {
                     Orbis <span className="text-cyan">Universe</span>
                   </h2>
                   <p className="lede">
-                    Glass core and satellite orbits. Radar and strategy tables live on Ops.
-                    Signal-only — never orders.
+                    Glass core and famous crypto logos on the rails. Radar and strategy tables live
+                    on Ops. Signal-only — never orders.
                   </p>
                 </div>
                 <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">

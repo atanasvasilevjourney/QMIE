@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useLoader } from '@react-three/fiber'
 import {
   Billboard,
   ContactShadows,
@@ -10,9 +10,10 @@ import {
   Stars,
 } from '@react-three/drei'
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { RadarSnapshot } from '../types'
+import { LOGO_HALO, orbitLogoIds, type CryptoLogoId } from '../cryptoLogos'
 
 const CYAN = '#5ee9f2'
 const MAGENTA = '#ff4d9a'
@@ -161,63 +162,29 @@ function OrbitRail({
   )
 }
 
-const COIN_LABELS = ['PEPE', 'DOGE', 'WIF', 'BONK', 'BTC', 'ETH', 'SOL', 'ORDI', 'MEME', 'QMIE']
-
-function MemeCoin({ color, label }: { color: string; label: string }) {
-  const emboss = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 256
-    canvas.height = 256
-    const ctx = canvas.getContext('2d')!
-    const grd = ctx.createRadialGradient(128, 96, 12, 128, 128, 118)
-    grd.addColorStop(0, '#ffffff')
-    grd.addColorStop(0.35, color)
-    grd.addColorStop(1, '#0a0d14')
-    ctx.fillStyle = grd
-    ctx.beginPath()
-    ctx.arc(128, 128, 118, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)'
-    ctx.lineWidth = 10
-    ctx.stroke()
-    ctx.fillStyle = '#071018'
-    ctx.font = '700 52px IBM Plex Sans, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(label.slice(0, 4), 128, 132)
-    const tex = new THREE.CanvasTexture(canvas)
-    tex.colorSpace = THREE.SRGBColorSpace
-    tex.anisotropy = 8
-    return tex
-  }, [color, label])
-
-  useEffect(() => () => emboss.dispose(), [emboss])
+function LogoCoin({ id }: { id: CryptoLogoId }) {
+  const tex = useLoader(THREE.TextureLoader, `/crypto/${id}.png`)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  tex.needsUpdate = true
+  const halo = LOGO_HALO[id] ?? CYAN
 
   return (
     <Billboard follow>
       <mesh>
-        <circleGeometry args={[0.28, 48]} />
-        <meshPhysicalMaterial
-          map={emboss}
-          color="#ffffff"
-          emissive={color}
-          emissiveIntensity={0.22}
-          metalness={0.85}
-          roughness={0.2}
-          clearcoat={0.65}
-          clearcoatRoughness={0.18}
-          iridescence={0.4}
-          iridescenceIOR={1.3}
-          transparent
-          opacity={0.98}
-        />
+        <circleGeometry args={[0.38, 64]} />
+        <meshBasicMaterial color="#080c12" />
       </mesh>
-      <mesh position={[0, 0, -0.012]} scale={1.12}>
-        <ringGeometry args={[0.26, 0.3, 48]} />
+      <mesh position={[0, 0, 0.004]}>
+        <circleGeometry args={[0.34, 64]} />
+        <meshBasicMaterial map={tex} toneMapped={false} transparent />
+      </mesh>
+      <mesh position={[0, 0, -0.012]} scale={1.08}>
+        <ringGeometry args={[0.335, 0.4, 64]} />
         <meshBasicMaterial
-          color={color}
+          color={halo}
           transparent
-          opacity={0.55}
+          opacity={0.75}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           side={THREE.DoubleSide}
@@ -228,7 +195,7 @@ function MemeCoin({ color, label }: { color: string; label: string }) {
 }
 
 function TokenOrbit({
-  count,
+  logos,
   rx,
   rz,
   speed,
@@ -236,7 +203,7 @@ function TokenOrbit({
   tilt,
   reduce,
 }: {
-  count: number
+  logos: CryptoLogoId[]
   rx: number
   rz: number
   speed: number
@@ -245,16 +212,15 @@ function TokenOrbit({
   reduce: boolean
 }) {
   const holders = useRef<(THREE.Group | null)[]>([])
-  const n = Math.min(16, Math.max(8, count))
+  const n = logos.length
   const tokens = useMemo(
     () =>
-      Array.from({ length: n }, (_, i) => ({
-        phase: (i / n) * Math.PI * 2,
-        label: COIN_LABELS[i % COIN_LABELS.length],
-        color: i % 3 === 0 ? AMBER : i % 3 === 1 ? CYAN : MAGENTA,
-        scale: 0.92 + (i % 4) * 0.07,
+      logos.map((id, i) => ({
+        id,
+        phase: n ? (i / n) * Math.PI * 2 : 0,
+        scale: 0.92 + (i % 4) * 0.08,
       })),
-    [n],
+    [logos, n],
   )
 
   useFrame((state) => {
@@ -272,14 +238,16 @@ function TokenOrbit({
     <group position={[0, y, 0]} rotation={[tilt, 0.12, 0]}>
       {tokens.map((tok, i) => (
         <group
-          key={`${tok.label}-${i}`}
+          key={`${tok.id}-${i}`}
           ref={(el) => {
             holders.current[i] = el
           }}
           position={[Math.cos(tok.phase) * rx, 0, Math.sin(tok.phase) * rz]}
           scale={tok.scale}
         >
-          <MemeCoin color={tok.color} label={tok.label} />
+          <Suspense fallback={null}>
+            <LogoCoin id={tok.id} />
+          </Suspense>
         </group>
       ))}
     </group>
@@ -421,6 +389,12 @@ export function Scene3D({
   const reduce = usePrefersReducedMotion()
   const innerCount = Math.max(10, Math.min(14, green + red + 8 + Math.min(3, signalCount)))
   const outerCount = Math.max(8, innerCount - 3)
+  const logos = useMemo(() => {
+    const symbols = radar?.rows?.map((r) => r.symbol) ?? []
+    return orbitLogoIds(symbols, innerCount + outerCount)
+  }, [radar, innerCount, outerCount])
+  const innerLogos = logos.slice(0, innerCount)
+  const outerLogos = logos.slice(innerCount, innerCount + outerCount)
 
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[28px] neon-border glass scanlines universe-frame">
@@ -428,7 +402,7 @@ export function Scene3D({
         <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center universe-boot">
           <div className="text-center">
             <p className="hud-kicker">Booting Orbis…</p>
-            <p className="hud-meta">Glass core · satellite orbits</p>
+            <p className="hud-meta">Glass core · crypto logos</p>
           </div>
         </div>
       )}
@@ -460,8 +434,8 @@ export function Scene3D({
           <OrbitRail rx={2.55} rz={2.15} color={CYAN} tilt={0.28} y={0.12} />
           <OrbitRail rx={3.35} rz={2.75} color={MAGENTA} tilt={-0.32} y={-0.28} />
           <OrbitRail rx={4.05} rz={3.35} color={AMBER} tilt={0.08} y={0.02} />
-          <TokenOrbit count={innerCount} rx={2.55} rz={2.15} speed={0.32} y={0.12} tilt={0.28} reduce={reduce} />
-          <TokenOrbit count={outerCount} rx={3.35} rz={2.75} speed={-0.18} y={-0.28} tilt={-0.32} reduce={reduce} />
+          <TokenOrbit logos={innerLogos} rx={2.55} rz={2.15} speed={0.32} y={0.12} tilt={0.28} reduce={reduce} />
+          <TokenOrbit logos={outerLogos} rx={3.35} rz={2.75} speed={-0.18} y={-0.28} tilt={-0.32} reduce={reduce} />
           <SymbolNebula radar={radar} reduce={reduce} />
         </Rig>
         <ObsidianFloor />
@@ -485,7 +459,7 @@ export function Scene3D({
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
           <p className="hud-kicker">Orbis Universe</p>
-          <p className="hud-meta">Glass core · satellite tokens</p>
+          <p className="hud-meta">Famous logos on the rails</p>
         </div>
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
           <p className="hud-meta">Transmission · ACES · fog</p>
