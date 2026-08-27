@@ -99,7 +99,7 @@ export function ChartsPanel({
   }, [symbol, tf])
 
   const pnlTone =
-    (book?.sum_pnl ?? 0) > 0 ? 'text-lime' : (book?.sum_pnl ?? 0) < 0 ? 'text-magenta' : 'text-chrome/70'
+    (book?.sum_pnl ?? 0) > 0 ? 'text-lime' : (book?.sum_pnl ?? 0) < 0 ? 'text-magenta' : 'text-muted'
 
   return (
     <div className="grid gap-5">
@@ -115,7 +115,7 @@ export function ChartsPanel({
           <Mini label="FILLS" value={book?.fills ?? fills.length} />
         </div>
         <EquitySvg points={book?.points ?? []} />
-        {busy && !book && <p className="mt-2 font-mono text-[11px] text-chrome/50">Loading book…</p>}
+        {busy && !book && <p className="mt-2 font-mono text-xs text-muted">Loading book…</p>}
       </PanelShell>
       )}
 
@@ -134,10 +134,10 @@ export function ChartsPanel({
               key={s.symbol}
               type="button"
               onClick={() => setSymbol(s.symbol)}
-              className={`rounded-2xl px-4 py-2 font-mono text-[11px] ${
+              className={`rounded-2xl px-4 py-2 font-mono text-xs ${
                 symbol === s.symbol
                   ? 'border border-cyan/50 bg-cyan/10 text-cyan'
-                  : 'border border-line/15 bg-surface/60 text-chrome/70 hover:border-cyan/30'
+                  : 'border border-line/15 bg-surface/60 text-muted hover:border-cyan/30'
               }`}
             >
               {s.symbol} · {s.fills}
@@ -152,19 +152,19 @@ export function ChartsPanel({
               key={t}
               type="button"
               onClick={() => setTf(t)}
-              className={`rounded-2xl px-4 py-2 font-display text-[10px] tracking-[0.22em] ${
+              className={`rounded-2xl px-4 py-2 font-display text-xs tracking-tight ${
                 tf === t
                   ? 'border border-magenta/40 bg-magenta/10 text-magenta'
-                  : 'border border-line/15 text-chrome/70'
+                  : 'border border-line/15 text-muted'
               }`}
             >
               {t.toUpperCase()}
             </button>
           ))}
         </div>
-        {err && <p className="mb-3 font-mono text-[11px] text-magenta">{err}</p>}
+        {err && <p className="mb-3 font-mono text-xs text-magenta">{err}</p>}
         {price?.note && (
-          <p className="mb-3 font-mono text-[11px] text-amber">
+          <p className="mb-3 font-mono text-xs text-amber">
             {price.note === 'klines_unavailable' || price.note === 'no_klines'
               ? 'No closed klines — showing trade levels only'
               : price.note}
@@ -180,7 +180,7 @@ export function ChartsPanel({
 function Mini({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
     <div className="card rounded-2xl px-4 py-3">
-      <div className="font-display text-[10px] tracking-widest text-chrome/50">{label}</div>
+      <div className="font-display text-xs tracking-normal text-muted">{label}</div>
       <div className={`mt-1 font-mono text-xl ${tone || 'text-cyan'}`}>{value}</div>
     </div>
   )
@@ -381,7 +381,7 @@ function TradeLegend({ trades }: { trades: ChartTrade[] }) {
   return (
     <div className="mt-3 max-h-48 space-y-1 overflow-auto">
       {trades.map((t) => (
-        <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-[11px] text-chrome/70">
+        <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-xs text-muted">
           <span>
             #{t.fill_id} {t.symbol} {t.side} {t.source === 'paper' ? 'PAPER' : 'MANUAL'} {t.outcome}
             {t.aligned === false || t.on_ohlc === false ? ' · off-chart' : ''}

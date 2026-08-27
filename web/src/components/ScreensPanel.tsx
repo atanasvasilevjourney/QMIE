@@ -148,10 +148,10 @@ export function ScreensPanel({
               key={v.id}
               type="button"
               onClick={() => setView(v.id)}
-              className={`rounded-2xl px-4 py-2 font-display text-[10px] tracking-[0.22em] ${
+              className={`rounded-2xl px-4 py-2 font-display text-xs tracking-tight ${
                 view === v.id
                   ? 'border border-cyan/50 bg-cyan/10 text-cyan'
-                  : 'border border-line/15 text-chrome/70 hover:border-cyan/30'
+                  : 'border border-line/15 text-muted hover:border-cyan/30'
               }`}
             >
               {v.label}
@@ -165,10 +165,10 @@ export function ScreensPanel({
               key={s.id}
               type="button"
               onClick={() => clickSort(s.id)}
-              className={`rounded-xl px-3 py-1.5 font-mono text-[10px] tracking-wider ${
+              className={`rounded-xl px-3 py-1.5 font-mono text-xs tracking-tight ${
                 sort === s.id
                   ? 'border border-magenta/40 bg-magenta/10 text-magenta'
-                  : 'border border-line/15 text-chrome/55'
+                  : 'border border-line/15 text-muted'
               }`}
             >
               {s.label}
@@ -177,11 +177,11 @@ export function ScreensPanel({
           ))}
         </div>
         {modal && (
-          <p className="mb-3 font-mono text-[11px] text-cyan">
+          <p className="mb-3 font-mono text-xs text-cyan">
             Modal cluster {modal} (most common in this view)
           </p>
         )}
-        {err && <p className="mb-3 font-mono text-[11px] text-magenta">{err}</p>}
+        {err && <p className="mb-3 font-mono text-xs text-magenta">{err}</p>}
         <div className="max-h-[min(62vh,720px)] space-y-2 overflow-auto" role="listbox">
           {visible.map((r, i) => {
             const active = i === cursor
@@ -205,18 +205,18 @@ export function ScreensPanel({
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-display text-sm tracking-wider text-ink">{r.symbol}</span>
-                    <span className="font-mono text-[11px] text-chrome/60">
+                    <span className="font-display text-sm tracking-tight text-ink">{r.symbol}</span>
+                    <span className="font-mono text-xs text-muted">
                       {(r.side || '—')} · {r.grade || 'coil'} · {(r.timeframe || '—').toUpperCase()}
                     </span>
-                    {flagged && <span className="font-mono text-[10px] tracking-widest text-lime">FOCUS</span>}
+                    {flagged && <span className="font-mono text-xs tracking-normal text-lime">FOCUS</span>}
                     {r.sources.map((s) => (
-                      <span key={s} className="font-mono text-[10px] uppercase text-magenta/80">
+                      <span key={s} className="font-mono text-xs uppercase text-magenta/80">
                         {s}
                       </span>
                     ))}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-chrome/60">
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted">
                     <span className={modalHit ? 'text-cyan' : ''}>{r.cluster || '—'}</span>
                     {r.score != null && <span>score {r.score}</span>}
                     {r.atr_pct != null && <span>ATR {r.atr_pct.toFixed(2)}%</span>}
@@ -230,7 +230,7 @@ export function ScreensPanel({
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-xl border border-line/20 px-3 py-2 font-display text-[10px] tracking-widest text-chrome/70"
+                  className="shrink-0 rounded-xl border border-line/20 px-3 py-2 font-display text-xs tracking-normal text-muted"
                   onClick={(e) => {
                     e.stopPropagation()
                     focus.toggle(r.symbol)
