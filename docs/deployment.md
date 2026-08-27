@@ -49,6 +49,37 @@ CORS on FastAPI is already `allow_origins=["*"]` for the public scanner
 routes. Do not put `WEBHOOK_SECRET` or Discord URLs in Vercel — those belong
 in `python/.env` on the scanner host.
 
+## Render (scanner API)
+
+Yes: a **Web Service** with Docker. No: static site, cron, or the free
+spin-down plan.
+
+`https://mcp.render.com/mcp` can list deploys and logs after OAuth or
+`RENDER_API_KEY`. That URL is a **shadow MCP** (not Runlayer). Prefer a
+Runlayer-managed Render server if your org has one.
+
+The image used to bind **8080** only. Render health-checks **`$PORT`**
+(often `10000`), so the old `CMD` never passed the probe. `docker/start.sh`
+now honors `PORT` (Compose still defaults to 8080).
+
+### Dashboard (existing service)
+
+1. Runtime **Docker**, Dockerfile `docker/Dockerfile`, context **repo root**
+   (not `docker/` — `COPY python/` would fail).
+2. Start command empty (image `CMD`) **or**
+   `uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers`
+3. Health check `/health`
+4. **1** instance + a disk at `/app/data`
+5. Env: `SCAN_DATA_SOURCE=okx`, `WORKERS=1`, `DISCORD_WEBHOOK_URL`,
+   `WEBHOOK_SECRET`, optional `REDIS_URL`
+6. Redeploy. Then `curl -sS https://<service>.onrender.com/health`
+7. Vercel `VITE_QMIE_API=https://<service>.onrender.com` and redeploy the desk
+
+### Blueprint
+
+`render.yaml` at the repo root. Connect the repo in Render → Blueprint.
+Fill `sync: false` secrets in the dashboard. Plan is `starter` (always-on).
+
 ---
 
 ## 1. Configure

@@ -1,0 +1,34 @@
+# QMIE scanner on Render — Web Service (Docker), not a static site.
+# Blueprint: https://render.com/docs/blueprint-spec
+#
+# 1 instance. SQLite lives on the disk. Free plans sleep and miss bar closes.
+# Secrets (DISCORD_WEBHOOK_URL, WEBHOOK_SECRET) stay in the dashboard — sync: false.
+
+services:
+  - type: web
+    name: qmie
+    runtime: docker
+    plan: starter
+    dockerfilePath: docker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    numInstances: 1
+    disk:
+      name: qmie-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: WORKERS
+        value: "1"
+      - key: SCAN_DATA_SOURCE
+        value: okx
+      - key: DB_URL
+        value: sqlite+aiosqlite:///./data/qmie.db
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false

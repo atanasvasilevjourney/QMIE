@@ -22,14 +22,18 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy app
 COPY python/ /app/
+COPY docker/start.sh /app/start.sh
 
 # Persistent data dir (mount a volume here)
-RUN mkdir -p /app/data && chown -R qmie:qmie /app
+RUN chmod +x /app/start.sh \
+    && mkdir -p /app/data \
+    && chown -R qmie:qmie /app
 USER qmie
 
+ENV PORT=8080
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8080/health || exit 1
+    CMD sh -c 'curl -fsS "http://127.0.0.1:${PORT:-8080}/health" || exit 1'
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+CMD ["/app/start.sh"]
