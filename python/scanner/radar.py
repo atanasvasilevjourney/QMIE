@@ -23,6 +23,12 @@ Coil / breakout (Signum-style):
   Breakout uses the *prior* N bars (today excluded): last prior bar GREY,
   width <= coil_max_width_pct, close outside that prior Donchian.
   On a breakout row, coil_high/coil_low are the prior box (SL honesty).
+
+Early long / short *watch* (not a dispatch, not an A/A+ grade):
+  GREY + tight coil + close in the top/bottom of the box (lid/floor press).
+  The entry-shaped unranked setup is still coil-UP/DOWN on the break day.
+  Each radar pass replays the last N closed 1D bars so a missed coil-UP
+  is not lost when the latest snapshot is already GREEN.
 """
 from __future__ import annotations
 
@@ -56,6 +62,8 @@ class RadarConfig:
     min_bars: int = 60            # need enough history for ADX + coil
     notify: bool = False          # opt-in digests (data still collected)
     min_coverage_pct: float = 50.0  # suppress notify below this success rate
+    setup_lookback_bars: int = 7  # replay closed 1D bars so missed coil-UP is caught
+    early_press_frac: float = 0.80  # GREY coil close in top/bottom of box → watch
 
     def validate(self) -> None:
         """Fail-fast for bad knobs (raises ValueError)."""
@@ -79,6 +87,10 @@ class RadarConfig:
             raise ValueError(
                 f"radar kline_limit={self.kline_limit} too small; need >= {min_limit}"
             )
+        if self.setup_lookback_bars < 1:
+            raise ValueError("radar setup_lookback_bars must be >= 1")
+        if not (0.5 < self.early_press_frac <= 1.0):
+            raise ValueError("radar early_press_frac must be in (0.5, 1.0]")
 
 
 @dataclass
@@ -103,6 +115,8 @@ class RadarRow:
     is_fresh_flip: bool
     is_tight_coil: bool
     is_late_stage: bool
+    is_early_long: bool = False   # GREY tight coil pressing the box high
+    is_early_short: bool = False  # GREY tight coil pressing the box low
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -126,6 +140,8 @@ class RadarSnapshot:
     breakouts: list[dict[str, Any]] = field(default_factory=list)
     late_stage_green: list[dict[str, Any]] = field(default_factory=list)
     late_stage_red: list[dict[str, Any]] = field(default_factory=list)
+    early_longs: list[dict[str, Any]] = field(default_factory=list)
+    early_shorts: list[dict[str, Any]] = field(default_factory=list)
     rows: list[dict[str, Any]] = field(default_factory=list)
     failed_symbols: list[str] = field(default_factory=list)
     note: Optional[str] = None
@@ -252,6 +268,29 @@ def _prior_coil_metrics(
     return _range_metrics(df.iloc[-(lookback + 1):-1])
 
 
+def _coil_press_side(
+    close: float,
+    coil_lo: Optional[float],
+    coil_hi: Optional[float],
+    *,
+    frac: float,
+) -> Optional[Literal["LONG", "SHORT"]]:
+    """GREY-coil lid/floor press. frac=0.80 → top 20% LONG, bottom 20% SHORT."""
+    if coil_lo is None or coil_hi is None:
+        return None
+    if not np.isfinite(close) or not np.isfinite(coil_lo) or not np.isfinite(coil_hi):
+        return None
+    span = coil_hi - coil_lo
+    if span <= 0:
+        return None
+    pos = (close - coil_lo) / span
+    if pos >= frac:
+        return "LONG"
+    if pos <= (1.0 - frac):
+        return "SHORT"
+    return None
+
+
 def _detect_breakout(
     df: pd.DataFrame,
     colors: pd.Series,
@@ -262,6 +301,8 @@ def _detect_breakout(
     """
     One-shot breakout: prior lookback window was a GREY tight coil, and
     today's close is outside that prior range.
+    Follow-through (yesterday already broke the same side) is stripped in
+    `_row_at` so an expansion does not re-fire every day.
     Returns (side, broken_level, excess_pct).
     """
     if len(df) < lookback + 1 or len(colors) < lookback + 1:
@@ -285,60 +326,63 @@ def _detect_breakout(
     return None, None, None
 
 
-def classify_symbol(
+def _row_at(
     df: pd.DataFrame,
     symbol: str,
-    *,
-    cfg: Optional[RadarConfig] = None,
+    i: int,
+    plus_di: pd.Series,
+    minus_di: pd.Series,
+    adx_s: pd.Series,
+    colors: pd.Series,
+    cfg: RadarConfig,
 ) -> Optional[RadarRow]:
-    """Classify one symbol's daily OHLCV into a RadarRow. None if too short."""
-    cfg = cfg or RadarConfig()
-    cfg.validate()
-    if df is None or len(df) < cfg.min_bars:
+    """Classify closed bar `i` using indicators already computed on `df`."""
+    if i < 0 or i >= len(df):
         return None
-
-    plus_di, minus_di, adx_s = adx(df, cfg.adx_length)
-    colors = classify_rgg_series(
-        plus_di, minus_di, adx_s,
-        enter_adx=cfg.enter_adx,
-        exit_adx=cfg.exit_adx,
-    )
-    color = str(colors.iloc[-1])
+    sub = df.iloc[: i + 1]
+    colors_i = colors.iloc[: i + 1]
+    color = str(colors_i.iloc[-1])
     if color not in ("GREEN", "GREY", "RED"):
         color = "GREY"
 
-    # days_in_state: walk backward while color matches
     days = 1
-    for i in range(len(colors) - 2, -1, -1):
-        if colors.iloc[i] == color:
+    for j in range(len(colors_i) - 2, -1, -1):
+        if colors_i.iloc[j] == color:
             days += 1
         else:
             break
 
-    flip_idx = len(colors) - days
-    state_censored = flip_idx == 0  # state may predate the fetched window
+    flip_idx = len(colors_i) - days
+    state_censored = flip_idx == 0
     flipped_at: Optional[str] = None
     pct_since: Optional[float] = None
-    price = float(df["close"].iloc[-1])
+    price = float(sub["close"].iloc[-1])
     if not state_censored:
-        flipped_at = pd.Timestamp(df.index[flip_idx]).isoformat()
-        entry = float(df["close"].iloc[flip_idx])
+        flipped_at = pd.Timestamp(sub.index[flip_idx]).isoformat()
+        entry = float(sub["close"].iloc[flip_idx])
         if entry > 0:
             pct_since = round((price - entry) / entry * 100.0, 2)
 
-    width, coil_hi, coil_lo = _coil_metrics(df, lookback=cfg.coil_lookback)
+    width, coil_hi, coil_lo = _coil_metrics(sub, lookback=cfg.coil_lookback)
     brk, brk_level, brk_excess = _detect_breakout(
-        df, colors,
+        sub, colors_i,
         lookback=cfg.coil_lookback,
         coil_max_width_pct=cfg.coil_max_width_pct,
     )
-    # Breakout SL/display must use the prior Donchian, not today's wick.
+    # One-shot per expansion: follow-through closes are not a new coil-UP/DOWN.
+    if brk is not None and i >= 1:
+        y_brk, _, _ = _detect_breakout(
+            df.iloc[:i], colors.iloc[:i],
+            lookback=cfg.coil_lookback,
+            coil_max_width_pct=cfg.coil_max_width_pct,
+        )
+        if y_brk == brk:
+            brk, brk_level, brk_excess = None, None, None
     if brk is not None:
-        prior_w, prior_hi, prior_lo = _prior_coil_metrics(df, lookback=cfg.coil_lookback)
+        prior_w, prior_hi, prior_lo = _prior_coil_metrics(sub, lookback=cfg.coil_lookback)
         if prior_hi is not None and prior_lo is not None:
             coil_hi, coil_lo = prior_hi, prior_lo
             width = prior_w
-    # Coil watchlist: GREY + tight only (and not already broken out today)
     is_tight = (
         color == "GREY"
         and brk is None
@@ -350,7 +394,6 @@ def classify_symbol(
         and days <= cfg.fresh_flip_days
         and color in ("GREEN", "RED")
     )
-    # Late-stage: directional extension only (not abs)
     is_late = False
     if (
         not state_censored
@@ -362,7 +405,13 @@ def classify_symbol(
         elif color == "RED" and pct_since <= -cfg.late_stage_move_pct:
             is_late = True
 
-    bar_time = pd.Timestamp(df.index[-1]).isoformat()
+    press = _coil_press_side(
+        price, coil_lo, coil_hi, frac=cfg.early_press_frac,
+    ) if is_tight else None
+    is_early_long = press == "LONG"
+    is_early_short = press == "SHORT"
+
+    bar_time = pd.Timestamp(sub.index[-1]).isoformat()
     width_out = round(width, 3) if width is not None else None
 
     return RadarRow(
@@ -374,9 +423,9 @@ def classify_symbol(
         pct_since_flip=pct_since,
         price=price,
         bar_time=bar_time,
-        adx=round(float(adx_s.iloc[-1]), 2),
-        plus_di=round(float(plus_di.iloc[-1]), 2),
-        minus_di=round(float(minus_di.iloc[-1]), 2),
+        adx=round(float(adx_s.iloc[i]), 2),
+        plus_di=round(float(plus_di.iloc[i]), 2),
+        minus_di=round(float(minus_di.iloc[i]), 2),
         coil_width_pct=width_out,
         coil_high=coil_hi,
         coil_low=coil_lo,
@@ -386,7 +435,86 @@ def classify_symbol(
         is_fresh_flip=is_fresh,
         is_tight_coil=bool(is_tight),
         is_late_stage=bool(is_late),
+        is_early_long=bool(is_early_long),
+        is_early_short=bool(is_early_short),
     )
+
+
+def classify_symbol(
+    df: pd.DataFrame,
+    symbol: str,
+    *,
+    cfg: Optional[RadarConfig] = None,
+) -> Optional[RadarRow]:
+    """Classify one symbol's last closed daily bar. None if too short."""
+    cfg = cfg or RadarConfig()
+    cfg.validate()
+    if df is None or len(df) < cfg.min_bars:
+        return None
+
+    plus_di, minus_di, adx_s = adx(df, cfg.adx_length)
+    colors = classify_rgg_series(
+        plus_di, minus_di, adx_s,
+        enter_adx=cfg.enter_adx,
+        exit_adx=cfg.exit_adx,
+    )
+    return _row_at(
+        df, symbol, len(df) - 1,
+        plus_di, minus_di, adx_s, colors, cfg,
+    )
+
+
+def classify_with_recent_setups(
+    df: pd.DataFrame,
+    symbol: str,
+    *,
+    cfg: Optional[RadarConfig] = None,
+) -> tuple[Optional[RadarRow], list[dict[str, Any]]]:
+    """Latest RadarRow plus trend-starts from the last `setup_lookback_bars` closes.
+
+    Replay is how a missed coil-UP (still GREY on the break day) is recovered
+    after later bars have already gone GREEN. Does not retune W_*.
+    """
+    cfg = cfg or RadarConfig()
+    cfg.validate()
+    if df is None or len(df) < cfg.min_bars:
+        return None, []
+
+    plus_di, minus_di, adx_s = adx(df, cfg.adx_length)
+    colors = classify_rgg_series(
+        plus_di, minus_di, adx_s,
+        enter_adx=cfg.enter_adx,
+        exit_adx=cfg.exit_adx,
+    )
+    latest = _row_at(
+        df, symbol, len(df) - 1,
+        plus_di, minus_di, adx_s, colors, cfg,
+    )
+    warmup = max(cfg.coil_lookback + 1, cfg.adx_length * 2 + 5)
+    start = max(warmup, len(df) - cfg.setup_lookback_bars)
+    hist: list[RadarRow] = []
+    for i in range(start, len(df)):
+        row = _row_at(df, symbol, i, plus_di, minus_di, adx_s, colors, cfg)
+        if row is not None:
+            hist.append(row)
+    return latest, unique_trend_starts(iter_trend_starts(hist))
+
+
+def unique_trend_starts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Dedup by symbol + side + closed bar (dispatcher also keys on bar_ms)."""
+    seen: set[tuple[str, str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for item in items:
+        key = (
+            str(item.get("symbol") or "").upper(),
+            str(item.get("side") or ""),
+            str(item.get("bar_time") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
 
 
 def build_snapshot(
@@ -440,8 +568,24 @@ def build_snapshot(
     ]
     late_g = _sort_fresh([r for r in green if r.is_late_stage])
     late_r = _sort_fresh([r for r in red if r.is_late_stage])
+    early_l = [
+        r.as_dict()
+        for r in sorted(
+            [r for r in rows if r.is_early_long],
+            key=lambda x: (x.coil_width_pct if x.coil_width_pct is not None else 999.0),
+        )
+    ]
+    early_s = [
+        r.as_dict()
+        for r in sorted(
+            [r for r in rows if r.is_early_short],
+            key=lambda x: (x.coil_width_pct if x.coil_width_pct is not None else 999.0),
+        )
+    ]
 
-    has_actionable = bool(fresh_g or fresh_r or coils or brks or late_g or late_r)
+    has_actionable = bool(
+        fresh_g or fresh_r or coils or brks or late_g or late_r or early_l or early_s
+    )
 
     if succeeded == 0:
         status = "empty"
@@ -477,6 +621,8 @@ def build_snapshot(
         breakouts=brks,
         late_stage_green=late_g,
         late_stage_red=late_r,
+        early_longs=early_l,
+        early_shorts=early_s,
         rows=[r.as_dict() for r in sorted(rows, key=lambda x: x.symbol)],
         failed_symbols=sorted(failed_symbols),
         note=note,
@@ -507,6 +653,8 @@ def empty_radar_snapshot(*, enabled: bool = True, note: str = "no_radar_yet") ->
         bias="UNKNOWN",
         btc_color=None,
         coverage_pct=None,
+        early_longs=[],
+        early_shorts=[],
     )
 
 
@@ -556,6 +704,18 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
                 f"ADX{adxv} {r.get('color')}"
             )
         _cap("Breakouts (close-confirmed watch)", items, len(snap.breakouts))
+    if snap.early_longs:
+        items = [
+            f"`{r['symbol']}` {r.get('coil_width_pct', '?')}% @{r.get('price', '?')}"
+            for r in snap.early_longs[:max_items]
+        ]
+        _cap("Early long (GREY coil pressing highs — watch, not an entry)", items, len(snap.early_longs))
+    if snap.early_shorts:
+        items = [
+            f"`{r['symbol']}` {r.get('coil_width_pct', '?')}% @{r.get('price', '?')}"
+            for r in snap.early_shorts[:max_items]
+        ]
+        _cap("Early short (GREY coil pressing lows — watch, not an entry)", items, len(snap.early_shorts))
     if snap.tight_coils:
         items = [
             f"`{r['symbol']}` {r['coil_width_pct']:.1f}%"

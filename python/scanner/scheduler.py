@@ -34,10 +34,11 @@ from .radar import (
     RadarSnapshot,
     RadarRow,
     build_snapshot,
-    classify_symbol,
+    classify_with_recent_setups,
     empty_radar_snapshot,
     format_radar_digest,
     iter_trend_starts,
+    unique_trend_starts,
 )
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
@@ -436,23 +437,24 @@ class ScannerScheduler:
             )
             t0 = time.time()
 
-            async def one(sym: str) -> tuple[str, Optional[RadarRow], Optional[str]]:
+            async def one(sym: str) -> tuple[str, Optional[RadarRow], list[dict[str, Any]], Optional[str]]:
                 async with self.sem:
                     try:
                         df = await self.client.fetch_klines(
                             sym, "1d", limit=cfg.kline_limit,
                         )
-                        row = classify_symbol(df, sym, cfg=cfg)
+                        row, setups = classify_with_recent_setups(df, sym, cfg=cfg)
                         if row is None:
-                            return sym, None, "too_short_or_empty"
-                        return sym, row, None
+                            return sym, None, [], "too_short_or_empty"
+                        return sym, row, setups, None
                     except Exception as e:
-                        return sym, None, str(e)
+                        return sym, None, [], str(e)
 
             gathered = await asyncio.gather(
                 *(one(s) for s in symbols), return_exceptions=True,
             )
             rows: list[RadarRow] = []
+            replay: list[dict[str, Any]] = []
             failed: list[str] = []
             for item in gathered:
                 if isinstance(item, Exception):
@@ -460,9 +462,10 @@ class ScannerScheduler:
                     self.stats["radar_errors"] += 1
                     self.stats["errors"] += 1
                     continue
-                sym, row, err = item
+                sym, row, setups, err = item
                 if row is not None:
                     rows.append(row)
+                    replay.extend(setups)
                 else:
                     failed.append(sym)
                     self.stats["radar_errors"] += 1
@@ -501,7 +504,7 @@ class ScannerScheduler:
             )
 
             if self.radar_dispatch_trend_start:
-                await self._dispatch_trend_starts(snap)
+                await self._dispatch_trend_starts(snap, replay=replay)
 
             coverage = (
                 100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
@@ -530,9 +533,18 @@ class ScannerScheduler:
                 )
             return True
 
-    async def _dispatch_trend_starts(self, snap: RadarSnapshot) -> int:
-        """Fan out closed-1D GREY→GREEN/RED and coil UP/DOWN as inbound signals."""
-        items = iter_trend_starts(snap.rows)
+    async def _dispatch_trend_starts(
+        self,
+        snap: RadarSnapshot,
+        *,
+        replay: Optional[list[dict[str, Any]]] = None,
+    ) -> int:
+        """Fan out closed-1D GREY→GREEN/RED and coil UP/DOWN as inbound signals.
+
+        `replay` is trend-starts from the last N closed 1D bars (missed coil-UP).
+        Dedup is by symbol+side+bar_time here and again in the dispatcher.
+        """
+        items = unique_trend_starts(iter_trend_starts(snap.rows) + list(replay or []))
         n = 0
         n_long = 0
         n_short = 0

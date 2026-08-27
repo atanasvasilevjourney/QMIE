@@ -288,6 +288,41 @@ class TestRadarPass:
         assert shorts[0].stop_loss == 160.0
         assert shorts[0].strategy == "QMIE-DailyBreakout"
 
+    async def test_radar_pass_replays_missed_coil_up(self, fake_components):
+        """Latest bar is post-expansion; dispatch must still fire the coil-UP close."""
+        from tests.test_radar import _coil_then_expansion
+
+        client, universe, dispatcher = fake_components
+        df, coil_n = _coil_then_expansion()
+        client.fetch_klines = AsyncMock(return_value=df)
+        dispatcher.dispatch_inbound = AsyncMock(return_value=True)
+        dispatcher.paper = None
+        dispatcher.notifiers = []
+        scheduler = ScannerScheduler(
+            client=client,
+            universe=universe,
+            dispatcher=dispatcher,
+            timeframes=["1h"],
+            htf_map={"1h": "4h"},
+            radar_enabled=True,
+            radar_dispatch_trend_start=True,
+        )
+        ok = await scheduler._radar_pass(notify=False)
+        assert ok is True
+        assert scheduler.last_radar is not None
+        # Latest snapshot is not a live breakout (one-shot already passed)
+        assert all(not r.get("breakout") for r in scheduler.last_radar.rows)
+        calls = dispatcher.dispatch_inbound.await_args_list
+        assert calls, "replay must dispatch the missed coil-UP"
+        sigs = [c.args[0] for c in calls]
+        ups = [s for s in sigs if s.side.value == "BUY" and "coil_breakout_up" in (s.reason or "")]
+        assert len(ups) == 1
+        assert ups[0].signal_price == pytest.approx(107.0)
+        assert ups[0].stop_loss == pytest.approx(98.0)
+        assert ups[0].timeframe == "1d"
+        brk_ms = int(df.index[coil_n].value // 1_000_000)
+        assert ups[0].bar_time == brk_ms
+
 
 class TestDailyDfRouting:
     """Verify that scan_one passes the correct daily_df to compute_signal."""

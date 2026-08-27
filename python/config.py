@@ -144,6 +144,8 @@ class Settings(BaseSettings):
     radar_min_coverage_pct:   float = 50.0
     # Persist + notify 1D GREEN/RED flip and coil-UP/DOWN as breakout setups (manual only)
     radar_dispatch_trend_start: bool = True
+    # Replay last N closed 1D bars on each radar pass so a missed coil-UP is not lost
+    radar_setup_lookback_bars: int = 7
 
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
     openai_api_key: Optional[str] = None
@@ -232,6 +234,7 @@ class Settings(BaseSettings):
                 kline_limit=self.radar_kline_limit,
                 notify=self.radar_notify,
                 min_coverage_pct=self.radar_min_coverage_pct,
+                setup_lookback_bars=self.radar_setup_lookback_bars,
             ).validate()
         except ValueError as e:
             warnings.append(f"Radar config invalid: {e}")

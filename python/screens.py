@@ -123,6 +123,8 @@ def _blank_row(symbol: str) -> dict[str, Any]:
         "pct_since_flip": None,
         "is_tight_coil": False,
         "is_fresh_flip": False,
+        "is_early_long": False,
+        "is_early_short": False,
         "breakout": None,
         "weight_pct": None,
         "book_rank": None,
@@ -146,6 +148,10 @@ def _paint_radar(row: dict[str, Any], r: Optional[dict[str, Any]]) -> None:
         row["is_tight_coil"] = True
     if r.get("is_fresh_flip"):
         row["is_fresh_flip"] = True
+    if r.get("is_early_long"):
+        row["is_early_long"] = True
+    if r.get("is_early_short"):
+        row["is_early_short"] = True
     if r.get("breakout") and not row["breakout"]:
         row["breakout"] = r.get("breakout")
 
@@ -258,6 +264,8 @@ def build_screens(
             "adx": _f(coil.get("adx")),
             "coil_width_pct": _f(coil.get("coil_width_pct")),
             "is_tight_coil": True,
+            "is_early_long": bool(coil.get("is_early_long")),
+            "is_early_short": bool(coil.get("is_early_short")),
         }
         upsert(sym, sources=["coils"], tf="1d", extra=extra)
 

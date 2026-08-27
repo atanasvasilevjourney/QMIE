@@ -263,7 +263,7 @@ class TestSnapshotAndDigest:
         for k in ("as_of", "status", "enabled", "note", "requested",
                   "succeeded", "failed", "fresh_green", "breakouts",
                   "late_stage_red", "has_actionable", "bias", "btc_color",
-                  "coverage_pct"):
+                  "coverage_pct", "early_longs", "early_shorts"):
             assert k in d
 
     def test_incomplete_coverage(self, bull_trend_df):
@@ -401,3 +401,125 @@ class TestShortTrendStarts:
             "breakout": "UP",
         }]
         assert iter_short_trend_starts(rows) == []
+
+
+def _coil_then_expansion(
+    *,
+    coil_n: int = 80,
+    after_closes: tuple[float, ...] = (107.0, 112.0, 118.0, 125.0, 132.0),
+    lid_close: float = 101.7,
+) -> tuple[pd.DataFrame, int]:
+    """Tight GREY box ~98-102, last coil bar presses the lid, then expansion."""
+    close = np.concatenate([np.full(coil_n, 100.0), np.asarray(after_closes, dtype=float)])
+    df = _ohlcv_from_close(close)
+    hloc = df.columns.get_loc("high")
+    lloc = df.columns.get_loc("low")
+    cloc = df.columns.get_loc("close")
+    df.iloc[:coil_n, hloc] = 102.0
+    df.iloc[:coil_n, lloc] = 98.0
+    df.iloc[:coil_n, cloc] = 100.0
+    df.iloc[coil_n - 1, cloc] = lid_close
+    df.iloc[coil_n - 1, hloc] = 102.0
+    df.iloc[coil_n - 1, lloc] = 98.0
+    df.iloc[coil_n, cloc] = after_closes[0]
+    df.iloc[coil_n, hloc] = max(after_closes[0], 108.0)
+    df.iloc[coil_n, lloc] = 101.0
+    return df, coil_n
+
+
+class TestEarlyLongAndReplay:
+    def test_grey_coil_pressing_highs_is_early_long_not_a_dispatch(self):
+        from scanner.radar import iter_long_trend_starts
+
+        df, coil_n = _coil_then_expansion()
+        coil_only = df.iloc[:coil_n]
+        row = classify_symbol(coil_only, "SOLUSDT", cfg=RadarConfig(min_bars=60))
+        assert row is not None
+        assert row.color == "GREY"
+        assert row.breakout is None
+        assert row.is_tight_coil is True
+        assert row.is_early_long is True
+        assert row.is_early_short is False
+        assert iter_long_trend_starts([row]) == []
+
+    def test_grey_coil_pressing_lows_is_early_short(self):
+        df, coil_n = _coil_then_expansion(lid_close=98.3)
+        coil_only = df.iloc[:coil_n]
+        row = classify_symbol(coil_only, "SOLUSDT", cfg=RadarConfig(min_bars=60))
+        assert row is not None
+        assert row.color == "GREY"
+        assert row.is_early_short is True
+        assert row.is_early_long is False
+
+    def test_mid_coil_is_not_early_long(self):
+        df, coil_n = _coil_then_expansion(lid_close=100.0)
+        row = classify_symbol(df.iloc[:coil_n], "SOLUSDT", cfg=RadarConfig(min_bars=60))
+        assert row is not None
+        assert row.is_tight_coil is True
+        assert row.is_early_long is False
+        assert row.is_early_short is False
+
+    def test_replay_recovers_coil_up_after_later_green_bars(self):
+        from scanner.radar import classify_with_recent_setups
+
+        df, coil_n = _coil_then_expansion()
+        cfg = RadarConfig(min_bars=60, setup_lookback_bars=7)
+        latest = classify_symbol(df, "SOLUSDT", cfg=cfg)
+        assert latest is not None
+        assert latest.breakout is None  # expansion already happened; one-shot is gone
+
+        latest2, setups = classify_with_recent_setups(df, "SOLUSDT", cfg=cfg)
+        assert latest2 is not None
+        assert latest2.bar_time == latest.bar_time
+        ups = [s for s in setups if s.get("breakout") == "UP"]
+        assert len(ups) == 1
+        assert "coil_breakout_up" in ups[0]["reason"]
+        assert ups[0]["side"] == "BUY"
+        assert ups[0]["price"] == pytest.approx(107.0)
+        brk_time = pd.Timestamp(df.index[coil_n]).isoformat()
+        assert ups[0]["bar_time"] == brk_time
+        lid_time = pd.Timestamp(df.index[coil_n - 1]).isoformat()
+        assert all(s.get("bar_time") != lid_time for s in setups)
+        follow_prices = {112.0, 118.0, 125.0, 132.0}
+        assert all(s.get("price") not in follow_prices for s in ups)
+
+    def test_follow_through_day_is_not_a_new_coil_up(self):
+        df, coil_n = _coil_then_expansion()
+        cfg = RadarConfig(min_bars=60)
+        first = classify_symbol(df.iloc[: coil_n + 1], "SOLUSDT", cfg=cfg)
+        nxt = classify_symbol(df.iloc[: coil_n + 2], "SOLUSDT", cfg=cfg)
+        assert first is not None and first.breakout == "UP"
+        assert first.price == pytest.approx(107.0)
+        assert nxt is not None
+        assert nxt.breakout is None
+        assert nxt.price == pytest.approx(112.0)
+
+    def test_unique_trend_starts_dedupes_same_bar(self):
+        from scanner.radar import unique_trend_starts
+
+        a = {
+            "symbol": "SOLUSDT", "side": "BUY",
+            "bar_time": "2026-08-18T00:00:00+00:00", "reason": "coil_breakout_up",
+        }
+        b = dict(a)
+        b["reason"] = "coil_breakout_up+trend_start_long"
+        out = unique_trend_starts([a, b])
+        assert len(out) == 1
+        assert out[0]["reason"] == "coil_breakout_up"
+
+    def test_snapshot_buckets_early_long(self):
+        df, coil_n = _coil_then_expansion()
+        row = classify_symbol(df.iloc[:coil_n], "SOLUSDT", cfg=RadarConfig(min_bars=60))
+        assert row is not None and row.is_early_long
+        snap = build_snapshot([row], requested=1)
+        assert len(snap.early_longs) == 1
+        assert snap.early_longs[0]["symbol"] == "SOLUSDT"
+        digest = format_radar_digest(snap)
+        assert "Early long" in digest
+
+    def test_setup_lookback_and_press_frac_validate(self):
+        with pytest.raises(ValueError):
+            RadarConfig(setup_lookback_bars=0).validate()
+        with pytest.raises(ValueError):
+            RadarConfig(early_press_frac=0.5).validate()
+        RadarConfig(setup_lookback_bars=7, early_press_frac=0.80).validate()

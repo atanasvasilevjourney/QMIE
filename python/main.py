@@ -230,6 +230,7 @@ async def lifespan(app: FastAPI):
             kline_limit=s.radar_kline_limit,
             notify=s.radar_notify,
             min_coverage_pct=s.radar_min_coverage_pct,
+            setup_lookback_bars=s.radar_setup_lookback_bars,
         ),
     )
     await scheduler.start()
