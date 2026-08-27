@@ -35,6 +35,12 @@ const SORTS: { id: SortKey; label: string }[] = [
   { id: 'symbol', label: 'Symbol' },
 ]
 
+function screenChartTf(r: { timeframe?: string | null; sources?: string[] }, view: string): string {
+  if (view === 'breakouts' || view === 'coils') return '1d'
+  if (r.sources?.includes('breakouts') && !r.sources?.includes('leaders')) return '1d'
+  return r.timeframe || '1h'
+}
+
 function num(v: number | null | undefined): number {
   return v == null || Number.isNaN(v) ? Number.NEGATIVE_INFINITY : v
 }
@@ -121,12 +127,12 @@ export function ScreensPanel({
         setCursor((c) => Math.max(0, c - 1))
       } else if (e.key === 'Enter' && selected) {
         e.preventDefault()
-        onChart(selected.symbol, selected.timeframe || undefined)
+        onChart(selected.symbol, screenChartTf(selected, view))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [visible.length, selected, focus, onChart])
+  }, [visible.length, selected, focus, onChart, view])
 
   const clickSort = (k: SortKey) => {
     if (sort === k) setAsc((a) => !a)
@@ -186,7 +192,7 @@ export function ScreensPanel({
                 aria-selected={active}
                 tabIndex={active ? 0 : -1}
                 onClick={() => setCursor(i)}
-                onDoubleClick={() => onChart(r.symbol, r.timeframe || undefined)}
+                onDoubleClick={() => onChart(r.symbol, screenChartTf(r, view))}
                 className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left ${
                   active
                     ? 'border-cyan/50 bg-cyan/10'
@@ -216,8 +222,7 @@ export function ScreensPanel({
                     {r.coil_width_pct != null && <span>coil {r.coil_width_pct.toFixed(1)}%</span>}
                     {r.pct_since_flip != null && <span>flip {r.pct_since_flip.toFixed(1)}%</span>}
                     {r.radar_color && <span>{r.radar_color}</span>}
-                    {r.weight_pct != null && <span>book {r.weight_pct.toFixed(1)}%</span>}
-                    <span>qty {r.quantity}</span>
+                    {r.weight_pct != null && <span>book {r.weight_pct.toFixed(1)}% · not an order</span>}
                   </div>
                 </div>
                 <button
@@ -239,7 +244,7 @@ export function ScreensPanel({
       <ChartsPanel
         compact
         focusSymbol={selected?.symbol}
-        focusTimeframe={selected?.timeframe || '1h'}
+        focusTimeframe={selected ? screenChartTf(selected, view) : '1h'}
         fills={fills}
       />
     </div>

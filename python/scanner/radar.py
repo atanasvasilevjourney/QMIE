@@ -19,8 +19,10 @@ Hysteresis avoids daily color flicker:
 
 Coil / breakout (Signum-style):
   Width = (high-low)/low * 100 over lookback closed bars.
-  Tight coil arms only while GREY and width <= coil_max_width_pct.
-  Breakout = close outside the prior GREY tight-coil range (one-shot).
+  Tight-coil *watchlist* uses the last N bars including today.
+  Breakout uses the *prior* N bars (today excluded): last prior bar GREY,
+  width <= coil_max_width_pct, close outside that prior Donchian.
+  On a breakout row, coil_high/coil_low are the prior box (SL honesty).
 """
 from __future__ import annotations
 
@@ -129,9 +131,26 @@ class RadarSnapshot:
     note: Optional[str] = None
     enabled: bool = True
     has_actionable: bool = False  # flips / coils / breakouts / late-stage
+    bias: str = "UNKNOWN"         # LONG | SHORT | MIXED | UNKNOWN (G > 1.2× R; grey ignored)
+    btc_color: Optional[str] = None
+    coverage_pct: Optional[float] = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def breadth_bias(green: int, red: int, *, grey: int = 0) -> str:
+    """Session bias for display. Grey is ignored (not a score vote)."""
+    del grey  # documented: coil share does not flip LONG/SHORT
+    g = int(green)
+    r = int(red)
+    if g > r * 1.2 and g > 0:
+        return "LONG"
+    if r > g * 1.2 and r > 0:
+        return "SHORT"
+    if g + r <= 0:
+        return "UNKNOWN"
+    return "MIXED"
 
 
 def _raw_color(adx_v: float, pdi: float, mdi: float, *, grey_adx: float) -> Color:
@@ -197,21 +216,40 @@ def classify_rgg_series(
     return pd.Series(out, index=adx_s.index, dtype="object")
 
 
-def _coil_metrics(
-    df: pd.DataFrame,
-    *,
-    lookback: int,
+def _range_metrics(
+    window: pd.DataFrame,
 ) -> tuple[Optional[float], Optional[float], Optional[float]]:
     """Return (width_pct, high, low). Width = (hi-lo)/lo * 100 (raw, unrounded)."""
-    if len(df) < lookback:
+    if window is None or window.empty:
         return None, None, None
-    window = df.iloc[-lookback:]
     hi = float(window["high"].max())
     lo = float(window["low"].min())
     if lo <= 0 or not np.isfinite(lo):
         return None, hi, lo
     width = (hi - lo) / lo * 100.0
     return width, hi, lo
+
+
+def _coil_metrics(
+    df: pd.DataFrame,
+    *,
+    lookback: int,
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """Watchlist width: last `lookback` bars **including today**."""
+    if len(df) < lookback:
+        return None, None, None
+    return _range_metrics(df.iloc[-lookback:])
+
+
+def _prior_coil_metrics(
+    df: pd.DataFrame,
+    *,
+    lookback: int,
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """Breakout / SL box: last `lookback` bars **excluding today**."""
+    if len(df) < lookback + 1:
+        return None, None, None
+    return _range_metrics(df.iloc[-(lookback + 1):-1])
 
 
 def _detect_breakout(
@@ -228,16 +266,13 @@ def _detect_breakout(
     """
     if len(df) < lookback + 1 or len(colors) < lookback + 1:
         return None, None, None
-    prior = df.iloc[-(lookback + 1):-1]
     prior_colors = colors.iloc[-(lookback + 1):-1]
     # Require the bar immediately before the breakout to be GREY (armed coil)
     if str(prior_colors.iloc[-1]) != "GREY":
         return None, None, None
-    hi = float(prior["high"].max())
-    lo = float(prior["low"].min())
-    if lo <= 0:
+    width, hi, lo = _prior_coil_metrics(df, lookback=lookback)
+    if hi is None or lo is None or width is None:
         return None, None, None
-    width = (hi - lo) / lo * 100.0
     if width > coil_max_width_pct:
         return None, None, None
     close = float(df["close"].iloc[-1])
@@ -297,6 +332,12 @@ def classify_symbol(
         lookback=cfg.coil_lookback,
         coil_max_width_pct=cfg.coil_max_width_pct,
     )
+    # Breakout SL/display must use the prior Donchian, not today's wick.
+    if brk is not None:
+        prior_w, prior_hi, prior_lo = _prior_coil_metrics(df, lookback=cfg.coil_lookback)
+        if prior_hi is not None and prior_lo is not None:
+            coil_hi, coil_lo = prior_hi, prior_lo
+            width = prior_w
     # Coil watchlist: GREY + tight only (and not already broken out today)
     is_tight = (
         color == "GREY"
@@ -412,6 +453,13 @@ def build_snapshot(
         status = "ready"
         note = None
 
+    coverage_pct = round(100.0 * succeeded / requested, 1) if requested else None
+    btc_color: Optional[str] = None
+    for r in rows:
+        if r.symbol.upper() == "BTCUSDT":
+            btc_color = r.color
+            break
+
     return RadarSnapshot(
         as_of=as_of,
         timeframe=timeframe,
@@ -434,6 +482,9 @@ def build_snapshot(
         note=note,
         enabled=enabled,
         has_actionable=has_actionable,
+        bias=breadth_bias(len(green), len(red), grey=len(grey)),
+        btc_color=btc_color,
+        coverage_pct=coverage_pct,
     )
 
 
@@ -453,6 +504,9 @@ def empty_radar_snapshot(*, enabled: bool = True, note: str = "no_radar_yet") ->
         note=note,
         enabled=enabled,
         has_actionable=False,
+        bias="UNKNOWN",
+        btc_color=None,
+        coverage_pct=None,
     )
 
 
@@ -462,7 +516,7 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
     cov = f"{snap.succeeded}/{snap.requested}" if snap.requested else str(snap.count)
     lines = [
         f"**QMIE Trend Radar — UNRANKED DAILY CONTEXT** (1D closed through {closed})",
-        f"Coverage {cov}: 🟢{snap.green}  ⚪{snap.grey}  🔴{snap.red}",
+        f"Coverage {cov}: 🟢{snap.green}  ⚪{snap.grey}  🔴{snap.red} · bias {snap.bias}",
         "_NOT an entry · NOT a QMIE A/A+ grade · MANUAL ONLY · NO ORDER PATH_",
         "_Wait for a separate ranked A/A+ alert before acting._",
     ]

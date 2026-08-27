@@ -289,3 +289,61 @@ fixes do not count as that knob:
 
 Do not start (3) until (1) is on the desk so the operator can see which
 book they are even journaling.
+
+---
+
+## 9. Shipped 2026-08-27 (desk honesty)
+
+Presentation + SL box only. **No `W_*`. No `SCAN_TIMEFRAMES`. No broker.**
+
+- Radar snapshot now publishes `bias`, `btc_color`, `coverage_pct`.
+- RadarPanel: `as_of`, coverage, incomplete warning, bias/BTC chips,
+  hysteresis 25/20, coil-break bucket renamed.
+- Breakout `coil_high`/`coil_low` on a breakout bar = **prior** Donchian
+  (today’s wick no longer pollutes SL).
+- OPS Daily breakout tagged color-flip vs coil vs both; DETAILS is a
+  plan card (entry / stop / TP / R to TP). Chart opens **1d**.
+- Journal stats split paper/manual and 1h/4h. Pooled win% labeled not OOS.
+- Orbit HUD: closed 1D breadth; incomplete map does not tint the core
+  as if the universe is full.
+
+---
+
+## 10. How to improve next (suggestions, not this cycle’s knob)
+
+Still do **not** apply `SCAN_TIMEFRAMES=4h` from a review file. Human
+`.env` + `baseline.yaml` together. After that is live, catalog next is
+`sig_min_adx` 0 → 20.
+
+**Radar (measure before changing the arm rule)**
+
+1. Add a test that a 19-bar GREEN + 1 GREY pause does **not** arm a coil
+   — then, if you want the docstring, require all N prior bars GREY.
+   That is a product change; freeze it before any OOS.
+2. Bias that ignores 80% GREY will print LONG in a coil market. A later
+   knob (not this cycle) could require green share ≥ 40% as well as
+   G > 1.2× R. Display-only first.
+3. DI reverse inside `[20, 25)`: keep hysteresis (correct) but show
+   `+DI/−DI disagreement` on the row so the operator sees the lag.
+
+**Daily breakout (needs its own harness)**
+
+4. Walk closed 1d through `iter_trend_starts`, split 2025-01-01, four
+   books (flip long/short, coil up/down). Next-open column. Time-stop
+   10–20 days. Do not pool with 4h A/A+.
+5. Color-flip still has no SL. Either leave `R —` or freeze **one** stop
+   rule (prior 20-day low/high **or** 1.5×ATR) and measure it. Do not
+   copy TEMA 2.5×ATR TP onto this product without that table.
+6. One-shot: if the breakout bar stays GREY, a second day can fire
+   again. After the OOS exists, require the breakout bar to leave GREY
+   or suppress repeats for `coil_lookback` days.
+
+**Paper / journal**
+
+7. Keep fill-at-close and 1.5/2.5 ATR for TEMA (Pine + frozen OOS).
+8. Default Journal stats filter chips: All | paper | manual | 4h.
+9. Only enable `JOURNAL_OOS_WIN_PCT=49.1` when the compared slice is
+   **manual + 4h + A/A+**.
+10. Optional 4 bps/side as a **display** haircut on cash PnL, not inside
+    `compute_signal`.
+

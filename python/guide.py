@@ -12,7 +12,7 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.2",
+        "version": "1.3",
         "headline": "Signal-only desk. Paper fills every alert. You click live size yourself.",
         "sections": [
             {
@@ -46,14 +46,17 @@ def trading_guide() -> dict[str, Any]:
                 "id": "breakout",
                 "title": "Daily breakout (unranked)",
                 "body": (
-                    "1D GREY→GREEN / coil-UP is a long trend-start; GREY→RED / coil-DOWN "
-                    "is a short. Neither is an A/A+ grade. Checklist is usually WATCH. "
-                    "Confirm on the Daily visualizer. Paper still fills both so you can "
-                    "see how those alerts behave."
+                    "Two unranked 1D events share the OPS Daily breakout table: a day-1 "
+                    "GREY→GREEN/RED color flip, and a Donchian coil close-break. They are "
+                    "not the same setup and not an A/A+ grade. Coil SL is the prior-window "
+                    "box (not today's wick). Color-flips have no stop — no R until you "
+                    "journal a stop. Confirm on the Daily visualizer."
                 ),
                 "rules": [
                     "Not the 4h A/A+ OOS path",
-                    "Long SL is coil_low when present; short SL is coil_high",
+                    "Badge: color flip vs coil vs both",
+                    "Coil long SL = prior coil_low; coil short SL = prior coil_high",
+                    "Color-flip rows show R — until a stop exists",
                     "Late-stage GREEN or RED is not a fresh start",
                 ],
             },
