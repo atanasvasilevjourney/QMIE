@@ -26,8 +26,8 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   const bias = radarBias(radar.green, radar.red, radar.bias)
   return (
     <PanelShell
-      title="Trend Radar — unranked 1D context"
-      subtitle={`${radar.status ?? 'Ready'} · closed through ${asOf} · ${scanned} of ${requested}${coverage != null ? ` (${coverage}%)` : ''} · enter 25 / exit 20 · not a QMIE grade`}
+      title="Trend Radar — spot 1D book"
+      subtitle={`${radar.status ?? 'Ready'} · closed through ${asOf} · ${scanned} of ${requested}${coverage != null ? ` (${coverage}%)` : ''} · enter 25 / exit 20 · spot · not leverage · not a QMIE grade`}
     >
       {incomplete && (
         <p className="empty-note mb-3">
@@ -49,7 +49,16 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
       <div className="mt-4 grid gap-5 lg:grid-cols-2">
         <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
-        <Bucket title="Donchian coil break (watch)" rows={radar.breakouts} render={(r) => `${r.breakout} ADX${r.adx}`} />
+        <Bucket
+          title="Expansions (spot 1D coil-UP)"
+          rows={radar.expansions ?? (radar.breakouts || []).filter((r) => r.breakout === 'UP')}
+          render={(r) => `UP ADX${r.adx} SL ${r.coil_low ?? '—'}`}
+        />
+        <Bucket
+          title="Expansion shorts (spot coil-DOWN)"
+          rows={radar.expansion_shorts ?? (radar.breakouts || []).filter((r) => r.breakout === 'DOWN')}
+          render={(r) => `DOWN ADX${r.adx} SL ${r.coil_high ?? '—'}`}
+        />
         <Bucket
           title="Early long (coil pressing highs)"
           rows={radar.early_longs ?? []}
@@ -65,10 +74,10 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
       </div>
       <p className="lede mt-4">
-        Radar coil-break is a watchlist. OPS Daily breakout dispatches day-1 GREY→GREEN/RED
-        {' '}or coil-UP/DOWN as separate unranked setups — not an A/A+ grade.
-        Early long is a GREY coil pressing the box high (the SOL-style base); it is not an entry
-        {' '}until a close-confirmed coil-UP. Confirm on the 1D visualizer before clicking. Manual only.
+        Trend Radar is the spot book. Expansions are 1D coil-UP with a prior-box stop and no TEMA TP.
+        {' '}TEMA BUY is the leveraged USDT-perp add (printed 1.5/2.5 ATR). Color-flip stays unranked spot context.
+        Early long is a GREY coil pressing the box high; it is not clip 1 until coil-UP.
+        Confirm on the visualizer. Manual only — QMIE never sets leverage.
       </p>
     </PanelShell>
   )

@@ -82,7 +82,7 @@ export function AgentsPanel({
                 onAnalyze={c.signal_id != null ? () => void runAnalysis(c.signal_id as number) : undefined}
               />
             ))}
-            {!checklist?.cards?.length && <Empty>No A/A+ or daily-breakout rows yet</Empty>}
+            {!checklist?.cards?.length && <Empty>No A/A+, Daily expansion, or color-flip rows yet</Empty>}
           </div>
         </PanelShell>
       </div>

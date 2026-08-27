@@ -169,6 +169,10 @@ export default function App() {
                 <h2 className="page-title">
                   Radar + <span className="text-cyan">strategy tables</span>
                 </h2>
+                <p className="lede">
+                  Trend Radar is the spot book (1D coil-UP expansions). TEMA BUY is the
+                  leveraged USDT-perp add. Never orders.
+                </p>
               </div>
               <RadarPanel radar={desk.radar} />
               {desk.paper && (
@@ -203,8 +207,8 @@ export default function App() {
                   Combo <span className="text-cyan">review list</span>
                 </h2>
                 <p className="lede">
-                  Unique symbols from 4h A/A+, daily breakout, coils, and the ranked book. Not a new
-                  score. Never orders.
+                  Unique symbols from leveraged 4h A/A+, spot daily expansions, color-flip,
+                  coils, and the ranked book. Not a new score. Never orders.
                 </p>
               </div>
               <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />

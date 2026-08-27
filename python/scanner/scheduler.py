@@ -39,6 +39,7 @@ from .radar import (
     format_radar_digest,
     iter_trend_starts,
     unique_trend_starts,
+    overlay_recent_expansions,
 )
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
@@ -488,6 +489,7 @@ class ScannerScheduler:
                 failed_symbols=failed,
                 enabled=True,
             )
+            overlay_recent_expansions(snap, replay)
             self.last_radar = snap
             self.stats["radar_passes"] += 1
             self.stats["last_radar_at"] = int(time.time())
@@ -496,11 +498,11 @@ class ScannerScheduler:
 
             logger.info(
                 "Trend Radar done in %.2fs: n=%d/%d G=%d Gy=%d R=%d "
-                "flips_g=%d coils=%d brk=%d status=%s",
+                "flips_g=%d coils=%d brk=%d exp=%d status=%s",
                 time.time() - t0, snap.succeeded, snap.requested,
                 snap.green, snap.grey, snap.red,
                 len(snap.fresh_green), len(snap.tight_coils),
-                len(snap.breakouts), snap.status,
+                len(snap.breakouts), len(snap.expansions), snap.status,
             )
 
             if self.radar_dispatch_trend_start:

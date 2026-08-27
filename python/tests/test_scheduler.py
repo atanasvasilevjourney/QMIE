@@ -286,7 +286,7 @@ class TestRadarPass:
             if c.args[0].side.value == "SELL"
         ]
         assert shorts[0].stop_loss == 160.0
-        assert shorts[0].strategy == "QMIE-DailyBreakout"
+        assert shorts[0].strategy == "QMIE-DailyExpansion"
 
     async def test_radar_pass_replays_missed_coil_up(self, fake_components):
         """Latest bar is post-expansion; dispatch must still fire the coil-UP close."""
@@ -312,6 +312,7 @@ class TestRadarPass:
         assert scheduler.last_radar is not None
         # Latest snapshot is not a live breakout (one-shot already passed)
         assert all(not r.get("breakout") for r in scheduler.last_radar.rows)
+        assert [r.get("symbol") for r in scheduler.last_radar.expansions] == ["BTCUSDT"]
         calls = dispatcher.dispatch_inbound.await_args_list
         assert calls, "replay must dispatch the missed coil-UP"
         sigs = [c.args[0] for c in calls]
@@ -320,6 +321,8 @@ class TestRadarPass:
         assert ups[0].signal_price == pytest.approx(107.0)
         assert ups[0].stop_loss == pytest.approx(98.0)
         assert ups[0].timeframe == "1d"
+        assert ups[0].strategy == "QMIE-DailyExpansion"
+        assert ups[0].setup_type == "expansion"
         brk_ms = int(df.index[coil_n].value // 1_000_000)
         assert ups[0].bar_time == brk_ms
 

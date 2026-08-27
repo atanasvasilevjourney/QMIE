@@ -12,68 +12,100 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.3",
-        "headline": "Signal-only desk. Paper fills every alert. You click live size yourself.",
+        "version": "1.5",
+        "headline": "Signal-only desk. Radar is the spot book. TEMA is the leveraged add. You click size yourself.",
         "sections": [
             {
                 "id": "what",
                 "title": "What this is",
                 "body": (
-                    "QMIE scans USDT perps on closed 1h/4h bars (TEMA 9/90/199) and "
-                    "a daily trend radar. It never sends an order. The desk logs paper "
-                    "fills so you can measure the alert stream before (or instead of) "
-                    "clicking a live trade."
+                    "QMIE scans USDT-perp 1h/4h bars for TEMA (leverage book) and "
+                    "a daily Trend Radar for the spot book. It never sends an order. "
+                    "Radar klines are the same closed daily candles; you take expansions "
+                    "on spot and TEMA on a leveraged perp."
                 ),
             },
             {
                 "id": "tema",
                 "title": "TEMA scanner (graded)",
                 "body": (
-                    "Take A / A+ only, both BUY and SELL. Frozen OOS was strongest on 4h "
-                    "(SELL actually outnumbered BUY on that slice). Confirm side and "
-                    "grade on quant_visualizer.pine. A higher-low (e.g. BTC 67–68k) is "
-                    "an entry only if that closed bar actually graded A/A+ — the table "
-                    "does not reconstruct chart patterns."
+                    "Take A / A+ only, both BUY and SELL — this is the leveraged book "
+                    "on USDT-perp. Frozen OOS was strongest on 4h. Confirm side and "
+                    "grade on quant_visualizer.pine. QMIE does not send leverage to a "
+                    "venue; you set size on your perp."
                 ),
                 "rules": [
                     "Grade A or A+ on a closed bar",
-                    "Prefer 4h when sizing live",
+                    "Prefer 4h when sizing the leveraged add",
                     "Use the printed SL / TP; do not invent levels",
                     "If price already ran far from signal_price, skip the chase",
+                    "OPS TEMA BUY is A/A+ BUY only — leverage, not spot",
+                ],
+            },
+            {
+                "id": "expansion",
+                "title": "Daily expansion (spot coil-UP)",
+                "body": (
+                    "Spot book. Unranked 1D close outside an armed GREY Donchian "
+                    "coil (coil-UP long / coil-DOWN short). Strategy id "
+                    "QMIE-DailyExpansion. Stop is the prior box, not today's wick. "
+                    "No leverage and no TEMA TP. Clip 1 — wait for a 4h TEMA BUY "
+                    "if you add a leveraged clip."
+                ),
+                "rules": [
+                    "Radar Expansions = spot 1D coil-UP",
+                    "OPS Daily expansion table = dispatched QMIE-DailyExpansion",
+                    "Long SL = prior coil_low; short SL = prior coil_high",
+                    "Take it on spot — not a perp / not TEMA ATR",
+                    "Follow-through days of the same expansion do not re-fire",
+                ],
+            },
+            {
+                "id": "tema_buy",
+                "title": "TEMA BUY module (leveraged add)",
+                "body": (
+                    "Leverage book. Separate OPS table for A/A+ BUY only on USDT-perp. "
+                    "Prefer 4h — frozen swing edge (1.5×ATR stop / 2.5×ATR take). A badge "
+                    "'after expansion' means the same symbol already has a spot 1D "
+                    "coil-UP. That is clip 2. SELL A/A+ stays on the TEMA scanner table. "
+                    "QMIE never sets leverage on a venue."
+                ),
+                "rules": [
+                    "A or A+ BUY on a closed bar",
+                    "Prefer 4h printed SL / TP on the perp",
+                    "Do not hold for daily GREEN→GREY if TP already printed",
+                    "Not a broker; quantity stays 0",
                 ],
             },
             {
                 "id": "breakout",
-                "title": "Daily breakout (unranked)",
+                "title": "Daily color-flip (unranked)",
                 "body": (
-                    "Two unranked 1D events share the OPS Daily breakout table: a day-1 "
-                    "GREY→GREEN/RED color flip, and a Donchian coil close-break. They are "
-                    "not the same setup and not an A/A+ grade. Coil SL is the prior-window "
-                    "box (not today's wick). Color-flips have no stop — no R until you "
-                    "journal a stop. Confirm on the Daily visualizer."
+                    "Day-1 GREY→GREEN/RED stays QMIE-DailyBreakout on the spot radar. "
+                    "It is not a coil expansion, not leverage, and not an A/A+ grade. "
+                    "Color-flips have no stop — no R until you journal a stop."
                 ),
                 "rules": [
                     "Not the 4h A/A+ OOS path",
-                    "Badge: color flip vs coil vs both",
-                    "Coil long SL = prior coil_low; coil short SL = prior coil_high",
-                    "Color-flip rows show R — until a stop exists",
+                    "Color-flip is spot context — coil-UP is Daily expansion",
+                    "Color-flip rows show no R until a stop exists",
                     "Late-stage GREEN or RED is not a fresh start",
                 ],
             },
             {
                 "id": "screens",
-                "title": "Daily screens (four views)",
+                "title": "Daily screens (combo views)",
                 "body": (
                     "SCREENS tab is the combo list: unique symbols from 4h A/A+, "
-                    "daily breakout, radar coils, and the ranked book. Space next, "
+                    "daily expansion (coil-UP), color-flip, radar coils, and the ranked book. Space next, "
                     "Shift+Space flags a focus list (not a fill). Do not add "
                     "earnings/IPO filters."
                 ),
                 "rules": [
-                    "Leaders: 4h TEMA A/A+ (frozen OOS edge)",
-                    "Themes: 1D radar G/Y/R, fresh flips, tight coils",
+                    "Leaders: 4h TEMA A/A+ (leverage book)",
+                    "Themes: 1D radar G/Y/R, fresh flips, tight coils (spot)",
                     "Liquid book: ranked slots (quantity still 0)",
-                    "Specialist: daily GREY→GREEN/RED and coil-UP/DOWN — not an A/A+ grade",
+                    "Specialist: spot 1D coil-UP expansion + GREY→GREEN/RED color-flip",
                     "SCREENS tab: combo unique(symbol) list",
                     "Space next · Shift+Space flag · Enter opens CHARTS",
                 ],
@@ -145,9 +177,9 @@ def trading_guide() -> dict[str, Any]:
                 "id": "live",
                 "title": "If you take it live",
                 "body": (
-                    "Click the trade yourself on your venue. Log the real fill in JOURNAL "
-                    "(not the paper row) so live edge can be compared to OOS after 30 "
-                    "closed fills. Do not retune W_* from one winner."
+                    "Click the trade yourself. Radar expansions = spot. TEMA = leverage "
+                    "on your perp — you set the size. Log the real fill in JOURNAL "
+                    "(not the paper row). Do not retune W_* from one winner."
                 ),
             },
         ],

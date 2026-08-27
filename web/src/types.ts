@@ -42,6 +42,8 @@ export type RadarSnapshot = {
   late_stage_red?: RadarRow[]
   early_longs?: RadarRow[]
   early_shorts?: RadarRow[]
+  expansions?: RadarRow[]
+  expansion_shorts?: RadarRow[]
   rows: RadarRow[]
   failed_symbols?: string[]
   note?: string | null
@@ -371,7 +373,7 @@ export type PaperSnapshot = {
   closed_pnl: number
 }
 
-export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'book'
+export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'expansions' | 'book'
 
 export type ScreenRow = {
   symbol: string
@@ -394,6 +396,7 @@ export type ScreenRow = {
   is_fresh_flip?: boolean
   is_early_long?: boolean
   is_early_short?: boolean
+  is_expansion?: boolean
   breakout?: string | null
   weight_pct?: number | null
   book_rank?: number | null

@@ -263,7 +263,8 @@ class TestSnapshotAndDigest:
         for k in ("as_of", "status", "enabled", "note", "requested",
                   "succeeded", "failed", "fresh_green", "breakouts",
                   "late_stage_red", "has_actionable", "bias", "btc_color",
-                  "coverage_pct", "early_longs", "early_shorts"):
+                  "coverage_pct", "early_longs", "early_shorts",
+                  "expansions", "expansion_shorts"):
             assert k in d
 
     def test_incomplete_coverage(self, bull_trend_df):
@@ -339,6 +340,7 @@ class TestLongTrendStarts:
         out = iter_long_trend_starts(rows)
         assert len(out) == 1
         assert "coil_breakout_up" in out[0]["reason"]
+        assert out[0]["setup_type"] == "expansion"
 
 
 class TestShortTrendStarts:
@@ -390,6 +392,7 @@ class TestShortTrendStarts:
         assert len(out) == 1
         assert "coil_breakout_down" in out[0]["reason"]
         assert out[0]["side"] == "SELL"
+        assert out[0]["setup_type"] == "expansion"
 
     def test_green_flip_is_not_a_short(self):
         from scanner.radar import iter_short_trend_starts
@@ -483,6 +486,18 @@ class TestEarlyLongAndReplay:
         follow_prices = {112.0, 118.0, 125.0, 132.0}
         assert all(s.get("price") not in follow_prices for s in ups)
 
+    def test_snapshot_puts_coil_up_in_expansions(self):
+        df, coil_n = _coil_then_expansion()
+        row = classify_symbol(df.iloc[: coil_n + 1], "SOLUSDT", cfg=RadarConfig(min_bars=60))
+        assert row is not None
+        assert row.breakout == "UP"
+        snap = build_snapshot([row], requested=1, failed_symbols=[])
+        assert [r["symbol"] for r in snap.expansions] == ["SOLUSDT"]
+        assert snap.expansion_shorts == []
+        digest = format_radar_digest(snap)
+        assert "Expansions (spot 1D coil-UP" in digest
+        assert "Breakouts (close-confirmed watch)" not in digest
+
     def test_follow_through_day_is_not_a_new_coil_up(self):
         df, coil_n = _coil_then_expansion()
         cfg = RadarConfig(min_bars=60)
@@ -493,6 +508,21 @@ class TestEarlyLongAndReplay:
         assert nxt is not None
         assert nxt.breakout is None
         assert nxt.price == pytest.approx(112.0)
+
+    def test_overlay_keeps_replayed_coil_up_on_radar(self):
+        from scanner.radar import classify_with_recent_setups, overlay_recent_expansions
+
+        df, coil_n = _coil_then_expansion()
+        cfg = RadarConfig(min_bars=60, setup_lookback_bars=7)
+        latest, setups = classify_with_recent_setups(df, "SOLUSDT", cfg=cfg)
+        assert latest is not None
+        assert latest.breakout is None
+        snap = build_snapshot([latest], requested=1)
+        assert snap.expansions == []
+        overlay_recent_expansions(snap, setups)
+        assert [r["symbol"] for r in snap.expansions] == ["SOLUSDT"]
+        assert snap.has_actionable is True
+        assert "coil_breakout_up" in (snap.expansions[0].get("reason") or "")
 
     def test_unique_trend_starts_dedupes_same_bar(self):
         from scanner.radar import unique_trend_starts
