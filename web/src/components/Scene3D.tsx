@@ -172,15 +172,15 @@ function LogoCoin({ id }: { id: CryptoLogoId }) {
   return (
     <Billboard follow>
       <mesh>
-        <circleGeometry args={[0.1, 48]} />
+        <circleGeometry args={[0.128, 48]} />
         <meshBasicMaterial color="#080c12" />
       </mesh>
       <mesh position={[0, 0, 0.004]}>
-        <circleGeometry args={[0.084, 48]} />
+        <circleGeometry args={[0.108, 48]} />
         <meshBasicMaterial map={tex} toneMapped={false} transparent />
       </mesh>
       <mesh position={[0, 0, -0.01]}>
-        <ringGeometry args={[0.102, 0.118, 48]} />
+        <ringGeometry args={[0.13, 0.148, 48]} />
         <meshBasicMaterial
           color={halo}
           transparent
