@@ -444,18 +444,18 @@ export function Scene3D({
       </Canvas>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
-        <div className="hud">
+        <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
           <p className="hud-kicker">Orbis Universe</p>
           <p className="hud-meta">RGG nebula · orbit tokens</p>
         </div>
-        <div className="hud">
+        <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
           <p className="hud-meta">Bloom · ACES · fog</p>
         </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="flex items-end justify-between gap-3">
-          <div className="hud">
+          <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
             <p className="hud-kicker">Live radar core</p>
             <p className="hud-meta">
               {radar?.as_of
@@ -463,7 +463,7 @@ export function Scene3D({
                 : 'Awaiting daily snapshot · decorative nebula'}
             </p>
           </div>
-          <div className="hud flex gap-4 font-mono text-sm tabular">
+          <div className="hud flex gap-4 font-mono text-sm tabular" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
             <span className="text-lime">G {green}</span>
             <span className="text-[#c5d0dc]">Gy {grey}</span>
             <span className="text-magenta">R {red}</span>

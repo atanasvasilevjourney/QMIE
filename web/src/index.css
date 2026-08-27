@@ -189,26 +189,33 @@ html[data-theme="light"] .universe-frame {
 }
 
 .hud {
-  background: rgba(8, 12, 18, 0.86);
-  border: 1px solid rgba(126, 224, 234, 0.28);
-  color: #f2f5f8;
+  background: rgba(8, 12, 18, 0.88) !important;
+  border: 1px solid rgba(126, 224, 234, 0.32) !important;
+  color: #f2f5f8 !important;
   backdrop-filter: blur(10px);
   border-radius: 0.75rem;
   padding: 0.65rem 0.9rem;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] .hud,
+html[data-theme="light"] .hud * {
+  color: #f2f5f8;
 }
 
 .hud-kicker {
   font-family: var(--font-body);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #7ee0ea;
+  color: #7ee0ea !important;
+  text-transform: none;
 }
 
 .hud-meta {
   margin-top: 0.15rem;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  color: #c5d0dc;
+  color: #c5d0dc !important;
 }
 
 .kicker {

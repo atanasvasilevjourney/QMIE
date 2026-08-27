@@ -203,7 +203,7 @@ function SignalCard({
             <span>TP {s.take_profit ?? '—'}</span>
           </div>
         </div>
-        <span className="btn btn-sm shrink-0">{open ? 'Hide' : 'Details'}</span>
+        <span className="btn btn-sm btn-accent shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
         <div className="border-t border-line px-5 py-4">

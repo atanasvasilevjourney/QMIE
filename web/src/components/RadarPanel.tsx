@@ -80,7 +80,7 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
           <span className="block font-mono text-[0.9375rem] font-medium tabular text-ink">{row.symbol}</span>
           <span className="mt-0.5 block font-mono text-sm tabular text-muted">{summary.replace(String(row.symbol), '').trim()}</span>
         </span>
-        <span className="btn btn-sm shrink-0">{open ? 'Hide' : 'Details'}</span>
+        <span className="btn btn-sm btn-accent shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
         <dl className="grid gap-3 border-t border-line px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
