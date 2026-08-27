@@ -109,13 +109,13 @@ export function ChartsPanel({
         subtitle="Cumulative cash PnL from closed fills (paper + manual). Starting 0. Never an order."
       >
         <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Mini label="CLOSED" value={book?.closed ?? 0} />
-          <Mini label="OPEN" value={book?.open ?? 0} />
-          <Mini label="PNL USDT" value={book?.sum_pnl ?? 0} tone={pnlTone} />
-          <Mini label="FILLS" value={book?.fills ?? fills.length} />
+          <Mini label="Closed" value={book?.closed ?? 0} />
+          <Mini label="Open" value={book?.open ?? 0} />
+          <Mini label="PnL USDT" value={book?.sum_pnl ?? 0} tone={pnlTone} />
+          <Mini label="Fills" value={book?.fills ?? fills.length} />
         </div>
         <EquitySvg points={book?.points ?? []} />
-        {busy && !book && <p className="mt-2 font-mono text-xs text-muted">Loading book…</p>}
+        {busy && !book && <p className="mt-2 text-sm text-muted">Loading book…</p>}
       </PanelShell>
       )}
 
@@ -134,11 +134,7 @@ export function ChartsPanel({
               key={s.symbol}
               type="button"
               onClick={() => setSymbol(s.symbol)}
-              className={`rounded-2xl px-4 py-2 font-mono text-xs ${
-                symbol === s.symbol
-                  ? 'border border-cyan/50 bg-cyan/10 text-cyan'
-                  : 'border border-line/15 bg-surface/60 text-muted hover:border-cyan/30'
-              }`}
+              className={`chip ${symbol === s.symbol ? 'chip-on' : ''}`}
             >
               {s.symbol} · {s.fills}
             </button>
@@ -152,19 +148,15 @@ export function ChartsPanel({
               key={t}
               type="button"
               onClick={() => setTf(t)}
-              className={`rounded-2xl px-4 py-2 font-display text-xs tracking-tight ${
-                tf === t
-                  ? 'border border-magenta/40 bg-magenta/10 text-magenta'
-                  : 'border border-line/15 text-muted'
-              }`}
+              className={`chip ${tf === t ? 'chip-alt' : ''}`}
             >
               {t.toUpperCase()}
             </button>
           ))}
         </div>
-        {err && <p className="mb-3 font-mono text-xs text-magenta">{err}</p>}
+        {err && <p className="mb-3 text-sm text-magenta">{err}</p>}
         {price?.note && (
-          <p className="mb-3 font-mono text-xs text-amber">
+          <p className="mb-3 text-sm text-amber">
             {price.note === 'klines_unavailable' || price.note === 'no_klines'
               ? 'No closed klines — showing trade levels only'
               : price.note}
@@ -179,9 +171,9 @@ export function ChartsPanel({
 
 function Mini({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="card rounded-2xl px-4 py-3">
-      <div className="font-display text-xs tracking-normal text-muted">{label}</div>
-      <div className={`mt-1 font-mono text-xl ${tone || 'text-cyan'}`}>{value}</div>
+    <div className="card rounded-xl px-4 py-3">
+      <div className="text-sm font-semibold text-muted">{label}</div>
+      <div className={`mt-1 font-mono text-xl tabular ${tone || 'text-cyan'}`}>{value}</div>
     </div>
   )
 }
@@ -196,7 +188,7 @@ function EquitySvg({ points }: { points: ChartBook['points'] }) {
   const series = points.filter((p) => p.n > 0)
   if (!series.length) {
     return (
-      <div className="rounded-2xl border border-line/10 bg-surface/40 px-4 py-10">
+      <div className="rounded-xl border border-line bg-surface px-4 py-8">
         <Empty>No closed fills with PnL yet — paper exits land here after SL/TP</Empty>
       </div>
     )
@@ -226,10 +218,10 @@ function EquitySvg({ points }: { points: ChartBook['points'] }) {
           </title>
         </circle>
       ))}
-      <text x="8" y={y(yMax) + 4} fill="var(--color-chrome)" fontSize="10" fontFamily="ui-monospace, monospace">
+      <text x="8" y={y(yMax) + 4} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
         {yMax.toFixed(1)}
       </text>
-      <text x="8" y={y(yMin) + 4} fill="var(--color-chrome)" fontSize="10" fontFamily="ui-monospace, monospace">
+      <text x="8" y={y(yMin) + 4} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
         {yMin.toFixed(1)}
       </text>
     </svg>
@@ -248,7 +240,7 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   for (const b of bars) barPrices.push(b.h, b.l)
   if (!barPrices.length && !trades.length) {
     return (
-      <div className="rounded-2xl border border-line/10 bg-surface/40 px-4 py-10">
+      <div className="rounded-xl border border-line bg-surface px-4 py-8">
         <Empty>Pick a symbol with fills to plot candles and marks</Empty>
       </div>
     )
@@ -279,10 +271,10 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Price chart with trade marks">
       <rect x="0" y="0" width={W} height={H} fill="var(--color-surface)" rx="12" />
-      <text x="8" y={T + 4} fill="var(--color-chrome)" fontSize="10" fontFamily="ui-monospace, monospace">
+      <text x="8" y={T + 4} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
         {yMax.toFixed(yMax >= 100 ? 1 : 4)}
       </text>
-      <text x="8" y={H - B} fill="var(--color-chrome)" fontSize="10" fontFamily="ui-monospace, monospace">
+      <text x="8" y={H - B} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
         {yMin.toFixed(yMin >= 100 ? 1 : 4)}
       </text>
       {bars.map((b, i) => {
@@ -381,7 +373,7 @@ function TradeLegend({ trades }: { trades: ChartTrade[] }) {
   return (
     <div className="mt-3 max-h-48 space-y-1 overflow-auto">
       {trades.map((t) => (
-        <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-xs text-muted">
+        <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-sm text-muted">
           <span>
             #{t.fill_id} {t.symbol} {t.side} {t.source === 'paper' ? 'PAPER' : 'MANUAL'} {t.outcome}
             {t.aligned === false || t.on_ohlc === false ? ' · off-chart' : ''}

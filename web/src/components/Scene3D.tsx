@@ -381,12 +381,10 @@ export function Scene3D({
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[28px] neon-border glass scanlines universe-frame">
       {!ready && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-void/80">
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center universe-boot">
           <div className="text-center">
-            <p className="font-display text-xs tracking-tight text-cyan animate-pulse">
-              BOOTING ORBIS
-            </p>
-            <p className="mt-2 font-mono text-xs text-muted">WebGL · bloom · orbit tokens</p>
+            <p className="hud-kicker">Booting Orbis…</p>
+            <p className="hud-meta">WebGL · bloom · orbit tokens</p>
           </div>
         </div>
       )}
@@ -446,30 +444,28 @@ export function Scene3D({
       </Canvas>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-4">
-        <div className="card rounded-xl px-3 py-1.5 backdrop-blur-md">
-          <p className="font-display text-xs tracking-tight text-cyan uppercase">Orbis Universe</p>
-          <p className="font-mono text-xs text-muted">memecoin orbit · RGG nebula</p>
+        <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
+          <p className="hud-kicker">Orbis Universe</p>
+          <p className="hud-meta">RGG nebula · orbit tokens</p>
         </div>
-        <div className="card rounded-xl px-3 py-1.5 font-mono text-xs text-magenta backdrop-blur-md">
-          BLOOM · ACES · FOG
+        <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
+          <p className="hud-meta">Bloom · ACES · fog</p>
         </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="font-display text-xs tracking-tight text-cyan uppercase">
-              Live Radar Core
-            </p>
-            <p className="mt-1 font-mono text-xs text-muted">
+          <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
+            <p className="hud-kicker">Live radar core</p>
+            <p className="hud-meta">
               {radar?.as_of
                 ? `1D closed through ${radar.as_of.slice(0, 10)}`
-                : 'awaiting daily snapshot · decorative nebula active'}
+                : 'Awaiting daily snapshot · decorative nebula'}
             </p>
           </div>
-          <div className="card flex gap-3 rounded-xl px-3 py-2 font-mono text-xs backdrop-blur-md">
+          <div className="hud flex gap-4 font-mono text-sm tabular" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
             <span className="text-lime">G {green}</span>
-            <span className="text-muted">Gy {grey}</span>
+            <span className="text-[#c5d0dc]">Gy {grey}</span>
             <span className="text-magenta">R {red}</span>
           </div>
         </div>

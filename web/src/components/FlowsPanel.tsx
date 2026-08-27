@@ -41,8 +41,8 @@ export function FlowsPanel() {
       <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {STEPS.map((s, i) => (
           <li key={s.title} className="card rounded-xl p-4">
-            <div className="text-xs font-semibold text-muted">{i + 1}</div>
-            <h3 className="mt-1 text-sm font-semibold text-ink">{s.title}</h3>
+            <div className="text-sm font-semibold text-muted">{i + 1}</div>
+            <h3 className="mt-1 text-[0.9375rem] font-semibold text-ink">{s.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
           </li>
         ))}
@@ -59,7 +59,7 @@ export function FlowsPanel() {
 function Tip({ title, body }: { title: string; body: string }) {
   return (
     <div className="card rounded-xl p-4">
-      <div className="text-xs font-semibold text-ink">{title}</div>
+      <div className="text-sm font-semibold text-ink">{title}</div>
       <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
     </div>
   )

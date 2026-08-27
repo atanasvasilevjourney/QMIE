@@ -56,14 +56,14 @@ export function AgentsPanel({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-1">
-        <AgentCard name="SCANNER" body={agents?.scanner} />
-        <AgentCard name="RADAR" body={agents?.radar} extra={radar ? `BTC ${radar.btc_color ?? '—'} (display)` : undefined} />
-        <AgentCard name="BOOK" body={agents?.book} />
-        <AgentCard name="REVIEW" body={agents?.review} extra={reviewExtra(agents?.review)} />
+        <AgentCard name="Scanner" body={agents?.scanner} />
+        <AgentCard name="Radar" body={agents?.radar} extra={radar ? `BTC ${radar.btc_color ?? '—'} (display)` : undefined} />
+        <AgentCard name="Book" body={agents?.book} />
+        <AgentCard name="Review" body={agents?.review} extra={reviewExtra(agents?.review)} />
         <AgentCard
-          name="ANALYSIS"
+          name="Analysis"
           body={analysis}
-          extra={analysis?.openai_configured ? 'OpenAI key set · on-demand only' : 'template Take · set OPENAI_API_KEY for LLM'}
+          extra={analysis?.openai_configured ? 'OpenAI key set · on-demand only' : 'Template Take · set OPENAI_API_KEY for LLM'}
         />
       </div>
 
@@ -105,14 +105,14 @@ export function BreadthBar({
   const sum = g + y + r
   return (
     <div>
-      <div className="mb-1 flex justify-between font-mono text-xs text-muted">
-        <span>GREEN {g.toFixed(1)}%</span>
-        <span>GREY {y.toFixed(1)}%</span>
-        <span>RED {r.toFixed(1)}%</span>
+      <div className="mb-1 flex justify-between font-mono text-sm tabular text-muted">
+        <span>Green {g.toFixed(1)}%</span>
+        <span>Grey {y.toFixed(1)}%</span>
+        <span>Red {r.toFixed(1)}%</span>
       </div>
-      <div className="flex h-3 overflow-hidden rounded-full border border-line/15 bg-surface/80">
+      <div className="flex h-3 overflow-hidden rounded-full border border-line bg-surface">
         {sum <= 0 ? (
-          <div className="w-full bg-line/10" />
+          <div className="w-full bg-line" />
         ) : (
           <>
             <div className="bg-lime" style={{ width: `${g}%` }} />
@@ -139,10 +139,10 @@ function AgentCard({
     <div className={`rounded-xl border px-4 py-3 ${ok ? 'border-line bg-panel' : 'border-magenta/40 bg-magenta/10'}`}>
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-ink">{name}</span>
-        <span className={`font-mono text-xs ${ok ? 'text-lime' : 'text-magenta'}`}>{ok ? 'OK' : 'Fail'}</span>
+        <span className={`font-mono text-sm ${ok ? 'text-lime' : 'text-magenta'}`}>{ok ? 'OK' : 'Fail'}</span>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-muted">{body?.headline || body?.error || '—'}</p>
-      {extra ? <p className="mt-1 text-xs text-muted">{extra}</p> : null}
+      {extra ? <p className="mt-1 text-sm text-muted">{extra}</p> : null}
     </div>
   )
 }
@@ -163,12 +163,12 @@ function ChecklistBlock({
   return (
     <div className={`rounded-2xl border px-5 py-4 ${tone}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-display text-xs tracking-tight text-ink">
+        <span className="font-mono text-[0.9375rem] font-medium tabular text-ink">
           {card.symbol} · {card.side} · {card.grade || '—'} · {card.timeframe || '—'}
         </span>
-        <span className={`font-mono text-xs tracking-normal ${tag}`}>{card.verdict}</span>
+        <span className={`font-mono text-sm font-semibold ${tag}`}>{card.verdict}</span>
       </div>
-      <p className="mt-1 font-mono text-xs text-muted">{card.action}</p>
+      <p className="mt-1 text-sm text-muted">{card.action}</p>
       <div className="mt-2 grid gap-1">
         {card.items.map((it) => (
           <CheckLine key={it.id} item={it} />
@@ -181,13 +181,13 @@ function ChecklistBlock({
           disabled={analysis?.loading}
           className="btn btn-accent mt-3"
         >
-          {analysis?.loading ? 'Wait' : 'Analyze'}
+          {analysis?.loading ? 'Analyzing…' : 'Analyze'}
         </button>
       ) : (
-        <p className="mt-3 font-mono text-xs text-muted">No signal id — cannot analyze</p>
+        <p className="mt-3 text-sm text-muted">No signal id — cannot analyze</p>
       )}
       {analysis?.error ? (
-        <p className="mt-2 font-mono text-xs text-magenta">{analysis.error}</p>
+        <p className="mt-2 text-sm text-magenta">{analysis.error}</p>
       ) : null}
       {analysis?.card ? <AnalysisBlock card={analysis.card} /> : null}
     </div>
@@ -200,25 +200,25 @@ function AnalysisBlock({ card }: { card: AnalysisCard }) {
   return (
     <div className="card mt-3 rounded-xl p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={`font-display text-xs tracking-tight ${tone}`}>
-          {card.symbol} Status: {card.status}
+        <span className={`font-mono text-sm font-semibold ${tone}`}>
+          {card.symbol} · {card.status}
         </span>
-        <span className="font-mono text-xs text-muted">
+        <span className="font-mono text-sm text-muted">
           {card.source.startsWith('template') ? 'template' : 'openai'} · {card.zone}
         </span>
       </div>
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full font-mono text-xs">
+        <table className="w-full font-mono text-sm">
           <thead>
             <tr className="text-muted">
-              <th className="py-1 text-left font-normal">Level</th>
-              <th className="py-1 text-left font-normal">Price</th>
-              <th className="py-1 text-left font-normal">Note</th>
+              <th className="py-1.5 text-left font-normal">Level</th>
+              <th className="py-1.5 text-left font-normal">Price</th>
+              <th className="py-1.5 text-left font-normal">Note</th>
             </tr>
           </thead>
           <tbody>
             {card.levels.map((lv) => (
-              <tr key={lv.type} className="border-t border-line/10 text-muted">
+              <tr key={lv.type} className="border-t border-line text-muted">
                 <td className="py-1 pr-2 text-cyan">{lv.type}</td>
                 <td className="py-1 pr-2 text-ink">{lv.price}</td>
                 <td className="py-1 text-muted">{lv.note}</td>
@@ -227,18 +227,18 @@ function AnalysisBlock({ card }: { card: AnalysisCard }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs font-semibold text-cyan">Take</p>
+      <p className="mt-3 text-sm font-semibold text-cyan">Take</p>
       <p className="mt-1 text-sm leading-relaxed text-ink">{card.take}</p>
-      <p className="mt-3 text-xs font-semibold text-amber">Counter</p>
+      <p className="mt-3 text-sm font-semibold text-amber">Counter</p>
       <p className="mt-1 text-sm leading-relaxed text-muted">{card.counter}</p>
-      <p className="mt-2 text-xs text-muted">{card.note}</p>
+      <p className="mt-2 text-sm text-muted">{card.note}</p>
     </div>
   )
 }
 
 function CheckLine({ item }: { item: ChecklistItem }) {
   return (
-    <div className="flex gap-2 font-mono text-xs">
+    <div className="flex flex-wrap gap-2 font-mono text-sm">
       <span className={item.passed ? 'text-lime' : item.required ? 'text-magenta' : 'text-amber'}>
         {item.passed ? 'PASS' : item.required ? 'FAIL' : 'INFO'}
       </span>
@@ -260,8 +260,8 @@ function DeskDag({ graph }: { graph?: DeskGraph | null }) {
   const decisions = Object.values(graph?.decisions ?? {})
   return (
     <div className="mt-4">
-      <p className="mb-2 font-display text-xs tracking-tight text-cyan">
-        DESK DAG · quantity always 0 · never orders
+      <p className="mb-2 text-sm font-semibold text-ink">
+        Desk DAG · quantity always 0 · never orders
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {names.map((name, i) => {
@@ -269,9 +269,9 @@ function DeskDag({ graph }: { graph?: DeskGraph | null }) {
           const ok = node?.ok !== false
           return (
             <div key={name} className="flex items-center gap-2">
-              <div className={`rounded-2xl border px-4 py-3 ${ok ? 'border-cyan/30 bg-cyan/10' : 'border-magenta/40 bg-magenta/10'}`}>
-                <div className="font-display text-xs tracking-tight text-cyan">{name.toUpperCase()}</div>
-                <div className="mt-1 max-w-[160px] truncate font-mono text-xs text-muted">
+              <div className={`rounded-xl border px-4 py-3 ${ok ? 'border-cyan/40 bg-cyan/10' : 'border-magenta/40 bg-magenta/10'}`}>
+                <div className="text-sm font-semibold capitalize text-ink">{name}</div>
+                <div className="mt-1 max-w-[160px] truncate font-mono text-sm text-muted">
                   {node?.headline || node?.error || '—'}
                 </div>
               </div>
@@ -287,7 +287,7 @@ function DeskDag({ graph }: { graph?: DeskGraph | null }) {
           ))}
         </div>
       ) : (
-        <p className="mt-2 font-mono text-xs text-muted">No portfolio decisions yet</p>
+        <p className="mt-2 text-sm text-muted">No portfolio decisions yet</p>
       )}
     </div>
   )
@@ -301,7 +301,7 @@ function DecisionLine({ d }: { d: DeskDecision }) {
         ? 'text-lime'
         : 'text-amber'
   return (
-    <div className="card rounded-xl px-3 py-2 font-mono text-xs">
+    <div className="card rounded-xl px-3 py-2 font-mono text-sm">
       <span className={`tracking-normal ${tone}`}>{d.action.toUpperCase()}</span>
       <span className="ml-2 text-ink">{d.symbol}</span>
       <span className="ml-2 text-muted">qty {d.quantity}</span>
