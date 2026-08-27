@@ -65,7 +65,7 @@ function GlassCore({
     if (inner.current) {
       inner.current.rotation.y -= dt * 0.42
       inner.current.rotation.z += dt * 0.16
-      const pulse = 0.42 + Math.sin(state.clock.elapsedTime * 1.4) * 0.03
+      const pulse = 1 + Math.sin(state.clock.elapsedTime * 1.4) * 0.06
       inner.current.scale.setScalar(pulse)
     }
   })
@@ -74,30 +74,33 @@ function GlassCore({
     <group ref={spin}>
       <pointLight color={hex} intensity={18} distance={8} decay={2} />
       <mesh ref={inner}>
-        <icosahedronGeometry args={[1, 1]} />
+        <sphereGeometry args={[0.36, 32, 32]} />
         <meshStandardMaterial
           color={hex}
           emissive={hex}
-          emissiveIntensity={2.4}
-          metalness={0.2}
-          roughness={0.25}
-          wireframe
+          emissiveIntensity={3.2}
+          metalness={0.05}
+          roughness={0.18}
         />
+      </mesh>
+      <mesh scale={0.62}>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial color={hex} wireframe transparent opacity={0.35} />
       </mesh>
       <mesh>
         <sphereGeometry args={[1.08, 64, 64]} />
         <MeshTransmissionMaterial
           backside
-          samples={4}
-          resolution={192}
+          samples={6}
+          resolution={256}
           transmission={1}
           roughness={0.08}
           thickness={0.55}
           ior={1.42}
-          chromaticAberration={0.18}
-          anisotropy={0.25}
-          distortion={reduce ? 0 : 0.12}
-          distortionScale={0.18}
+          chromaticAberration={0.28}
+          anisotropy={0.35}
+          distortion={reduce ? 0 : 0.18}
+          distortionScale={0.22}
           temporalDistortion={reduce ? 0 : 0.08}
           color="#c8f7ff"
           attenuationColor={hex}
@@ -208,16 +211,6 @@ function MemeCoin({ color, label }: { color: string; label: string }) {
       <mesh position={[0, 0.026, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.195, 48]} />
         <meshStandardMaterial map={emboss} metalness={0.6} roughness={0.28} />
-      </mesh>
-      <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.035, 0.62, 10]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.28}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
       </mesh>
     </group>
   )
