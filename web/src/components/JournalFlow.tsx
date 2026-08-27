@@ -4,15 +4,20 @@ import type { JournalFill, JournalStats, SignalRow } from '../types'
 import { Empty, PanelShell } from './RadarPanel'
 
 function journalStatsLine(stats: JournalStats): string {
-  const paper = stats.by_source?.paper ?? 0
-  const manual = stats.by_source?.manual ?? 0
+  const paper = stats.by_source?.paper
+  const manual = stats.by_source?.manual
+  const hasSplit = stats.by_source != null
   const h1 = stats.by_timeframe?.['1h'] ?? stats.by_timeframe?.['1H'] ?? 0
   const h4 = stats.by_timeframe?.['4h'] ?? stats.by_timeframe?.['4H'] ?? 0
   const m4 = stats.manual_4h_closed ?? 0
+  const pooled =
+    `win ${stats.win_pct}% is pooled journal — not frozen OOS · avg R ${stats.avg_realized_r ?? '—'}`
+  if (!hasSplit) {
+    return `A/A+ closed ${stats.closed} · ${pooled}`
+  }
   return (
-    `A/A+ closed ${stats.closed} · paper ${paper} / manual ${manual} · 1h ${h1} / 4h ${h4} · ` +
-    `win ${stats.win_pct}% is pooled journal — not frozen OOS · ` +
-    `avg R ${stats.avg_realized_r ?? '—'} · manual 4h ${m4}/30 · ` +
+    `A/A+ closed ${stats.closed} · paper ${paper ?? 0} / manual ${manual ?? 0} · 1h ${h1} / 4h ${h4} · ` +
+    `${pooled} · manual 4h ${m4}/30 · ` +
     (stats.oos_edge || '4h A/A+ OOS 49.1% / E[R] +0.309')
   )
 }
