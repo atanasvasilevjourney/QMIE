@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import type { RadarRow, RadarSnapshot } from '../types'
 
+function radarBias(green: number, red: number, fallback?: string | null): string {
+  if (fallback && fallback !== 'UNKNOWN') return fallback
+  if (green > red * 1.2 && green > 0) return 'LONG'
+  if (red > green * 1.2 && red > 0) return 'SHORT'
+  if (green + red <= 0) return 'UNKNOWN'
+  return 'MIXED'
+}
+
 export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   if (!radar) {
     return <PanelShell title="Trend Radar" subtitle="Loading…"><Empty>Connecting to /radar</Empty></PanelShell>
@@ -15,7 +23,7 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   const asOf = radar.as_of ? radar.as_of.slice(0, 10) : '—'
   const incomplete = radar.status === 'incomplete'
   const btc = radar.btc_color ?? radar.rows?.find((r) => r.symbol === 'BTCUSDT')?.color
-  const bias = radar.bias ?? 'UNKNOWN'
+  const bias = radarBias(radar.green, radar.red, radar.bias)
   return (
     <PanelShell
       title="Trend Radar — unranked 1D context"
