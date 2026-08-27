@@ -43,7 +43,8 @@ Empty buckets are one dashed line (“None yet”), not a vacant card stack.
 ## Signature
 
 Orbis WebGL stays dark in both themes. Signature is a refractive glass core
-with elliptical satellite rails (not neon tubes). HUD overlays use `.hud`
+with elliptical satellite rails (not neon tubes). Orbit medallions are
+bundled famous-crypto logos (`web/public/crypto/`). HUD overlays use `.hud`
 (always-dark tokens) so Light mode does not invert the 3D chrome. Panels
 follow `data-theme`.
 
