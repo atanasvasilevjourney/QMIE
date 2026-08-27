@@ -48,9 +48,9 @@ export function FlowsPanel() {
         ))}
       </ol>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <Tip title="Daily breakout" body="1D grey→green (coil-up) = long; grey→red (coil-down) = short. Confirm on the daily visualizer, then click the trade yourself." />
-        <Tip title="4h edge" body="OOS A/A+ was strongest on 4h — prefer that timeframe for graded size." />
-        <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Otherwise outcome stays open." />
+        <Tip title="Daily breakout" body="Color-flip and coil-break are different unranked 1D setups. Confirm on the daily visualizer. Coil SL is the prior box. You still click size yourself." />
+        <Tip title="4h edge" body="Frozen OOS A/A+ was strongest on 4h (49.1% / E[R] +0.309). Pooled journal win% is not that table." />
+        <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Size is coin qty for cash math, not an order." />
       </div>
     </PanelShell>
   )

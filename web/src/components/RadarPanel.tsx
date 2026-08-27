@@ -1,15 +1,45 @@
 import { useState, type ReactNode } from 'react'
 import type { RadarRow, RadarSnapshot } from '../types'
 
+function radarBias(green: number, red: number, fallback?: string | null): string {
+  if (fallback && fallback !== 'UNKNOWN') return fallback
+  if (green > red * 1.2 && green > 0) return 'LONG'
+  if (red > green * 1.2 && red > 0) return 'SHORT'
+  if (green + red <= 0) return 'UNKNOWN'
+  return 'MIXED'
+}
+
 export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   if (!radar) {
     return <PanelShell title="Trend Radar" subtitle="Loading…"><Empty>Connecting to /radar</Empty></PanelShell>
   }
+  const scanned = radar.succeeded ?? radar.count
+  const requested = radar.requested || radar.count
+  const coverage = radar.coverage_pct != null
+    ? radar.coverage_pct
+    : requested
+      ? Math.round((1000 * scanned) / requested) / 10
+      : null
+  const asOf = radar.as_of ? radar.as_of.slice(0, 10) : '—'
+  const incomplete = radar.status === 'incomplete'
+  const btc = radar.btc_color ?? radar.rows?.find((r) => r.symbol === 'BTCUSDT')?.color
+  const bias = radarBias(radar.green, radar.red, radar.bias)
   return (
     <PanelShell
-      title="Trend Radar"
-      subtitle={`${radar.status ?? radar.note ?? 'Ready'} · ${radar.succeeded ?? radar.count} of ${radar.requested || radar.count} scanned`}
+      title="Trend Radar — unranked 1D context"
+      subtitle={`${radar.status ?? 'Ready'} · closed through ${asOf} · ${scanned} of ${requested}${coverage != null ? ` (${coverage}%)` : ''} · enter 25 / exit 20 · not a QMIE grade`}
     >
+      {incomplete && (
+        <p className="empty-note mb-3">
+          Incomplete map — {radar.failed ?? 0} symbol{(radar.failed ?? 0) === 1 ? '' : 's'} failed.
+          Breadth and Orbit tint are not a full-universe read.
+        </p>
+      )}
+      <div className="mb-3 flex flex-wrap gap-2 font-mono text-sm tabular">
+        <span className="rounded-md border border-line px-2 py-1 text-ink">bias {bias}</span>
+        <span className="rounded-md border border-line px-2 py-1 text-muted">G &gt; 1.2× R · grey ignored</span>
+        <span className="rounded-md border border-line px-2 py-1 text-ink">BTC {btc ?? '—'}</span>
+      </div>
       <div className="mb-4 grid grid-cols-3 gap-3">
         <Stat label="Green" value={radar.green} tone="lime" />
         <Stat label="Grey" value={radar.grey} tone="chrome" />
@@ -17,17 +47,17 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
       </div>
       <RadarBreadth green={radar.green} grey={radar.grey} red={radar.red} />
       <div className="mt-4 grid gap-5 lg:grid-cols-2">
-        <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `${r.symbol} d${r.days_in_state} ${fmtPct(r.pct_since_flip)}`} />
-        <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `${r.symbol} d${r.days_in_state} ${fmtPct(r.pct_since_flip)}`} />
-        <Bucket title="Breakouts" rows={radar.breakouts} render={(r) => `${r.symbol} ${r.breakout} ADX${r.adx}`} />
-        <Bucket title="Tight coils" rows={radar.tight_coils} render={(r) => `${r.symbol} ${r.coil_width_pct?.toFixed?.(1) ?? '—'}%`} />
-        <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
-        <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `${r.symbol} d${r.days_in_state} ADX${r.adx}`} />
+        <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
+        <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
+        <Bucket title="Donchian coil break (watch)" rows={radar.breakouts} render={(r) => `${r.breakout} ADX${r.adx}`} />
+        <Bucket title="Tight coils" rows={radar.tight_coils} render={(r) => `${r.coil_width_pct?.toFixed?.(1) ?? '—'}%`} />
+        <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
+        <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
       </div>
       <p className="lede mt-4">
-        Daily GREY→GREEN / coil-UP dispatch as BREAKOUT LONG; GREY→RED / coil-DOWN as
-        BREAKOUT SHORT on the Daily breakout table (OPS). Manual only — not an A/A+ grade.
-        Confirm on the 1D visualizer before clicking.
+        Radar coil-break is a watchlist. OPS Daily breakout dispatches day-1 GREY→GREEN/RED
+        {' '}or coil-UP/DOWN as separate unranked setups — not an A/A+ grade.
+        Confirm on the 1D visualizer before clicking. Manual only.
       </p>
     </PanelShell>
   )
@@ -92,6 +122,8 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
           <Fact k="+DI / −DI" v={`${row.plus_di} / ${row.minus_di}`} />
           <Fact k="Coil %" v={row.coil_width_pct != null ? row.coil_width_pct.toFixed(1) : '—'} />
           <Fact k="Breakout" v={row.breakout ? `${row.breakout} @ ${row.breakout_level ?? '—'}` : '—'} />
+          <Fact k="Coil high / low" v={row.coil_high != null && row.coil_low != null ? `${row.coil_high} / ${row.coil_low}` : '—'} />
+          <Fact k="Excess %" v={row.breakout_excess_pct != null ? `${row.breakout_excess_pct}` : '—'} />
         </dl>
       )}
     </div>

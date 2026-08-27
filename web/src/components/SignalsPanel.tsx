@@ -21,6 +21,32 @@ function isBreakout(s: SignalRow) {
   )
 }
 
+function breakoutKind(s: SignalRow): 'coil' | 'flip' | 'both' | null {
+  if (!isBreakout(s)) return null
+  const r = s.reason || ''
+  const coil = r.includes('coil_breakout')
+  const flip = r.includes('trend_start')
+  if (coil && flip) return 'both'
+  if (coil) return 'coil'
+  if (flip) return 'flip'
+  return 'flip'
+}
+
+function plannedR(s: SignalRow): string {
+  const entry = s.signal_price
+  const sl = s.stop_loss
+  const tp = s.take_profit
+  if (entry == null || sl == null || tp == null) return '—'
+  const risk = Math.abs(entry - sl)
+  if (risk <= 0) return '—'
+  return (Math.abs(tp - entry) / risk).toFixed(2)
+}
+
+function chartTimeframe(s: SignalRow): string | undefined {
+  if (isBreakout(s)) return '1d'
+  return s.timeframe
+}
+
 function isTema(s: SignalRow) {
   if (isBreakout(s) || isExit(s)) return false
   const strat = (s.strategy || '').toLowerCase()
@@ -65,7 +91,7 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="Daily breakout"
-        subtitle="1D GREY→GREEN/RED · coil-UP/DOWN · unranked · not an A/A+ grade"
+        subtitle="Unranked 1D · tagged color-flip vs coil-break · not an A/A+ grade. Chart opens 1D."
         rows={breakout}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -75,7 +101,7 @@ export function SignalsPanel({
       />
       <StrategyTable
         title="Exit"
-        subtitle="Paper close · SL first if same bar as TP · cash PnL on the row"
+        subtitle="Paper close · SL first if same bar as TP · cash PnL + R · not a broker fill"
         rows={exits}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -130,7 +156,7 @@ function StrategyTable({
             accent={accent}
             onToggle={() => setOpenId((id) => (id === s.id ? null : s.id))}
             onJournal={() => onSelect(s)}
-            onChart={onChart ? () => onChart(s.symbol, s.timeframe) : undefined}
+            onChart={onChart ? () => onChart(s.symbol, chartTimeframe(s)) : undefined}
           />
         ))}
         {!rows.length && <Empty>{empty}</Empty>}
@@ -156,11 +182,17 @@ function SignalCard({
   onJournal: () => void
   onChart?: () => void
 }) {
+  const kind = breakoutKind(s)
+  const rToTp = plannedR(s)
   const buy = (s.side || '').toUpperCase() === 'BUY'
   const breakout = isBreakout(s)
   const exit = isExit(s)
   const pnl = s.pnl
   const pnlTone = pnl == null ? 'text-muted' : pnl > 0 ? 'text-lime' : 'text-magenta'
+  const breakoutLabel =
+    kind === 'coil' ? (buy ? 'Coil-UP long' : 'Coil-DOWN short')
+    : kind === 'both' ? (buy ? 'Flip + coil long' : 'Flip + coil short')
+    : buy ? 'Color-flip long' : 'Color-flip short'
   return (
     <div
       className={`rounded-xl border text-left ${
@@ -179,15 +211,19 @@ function SignalCard({
             <span className="font-mono text-base font-medium tabular text-ink">{s.symbol}</span>
             <span className={`font-mono text-sm ${exit ? pnlTone : buy ? 'text-lime' : 'text-magenta'}`}>
               {exit
-                ? `Exit · PnL ${pnl ?? '—'}`
+                ? `Exit · PnL ${pnl ?? '—'}${s.realized_r != null ? ` · R ${s.realized_r}` : ''}`
                 : breakout
-                  ? buy
-                    ? 'Long trend start'
-                    : 'Short trend start'
+                  ? breakoutLabel
                   : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
-            {breakout && (
-              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">Breakout</span>
+            {breakout && kind === 'coil' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">coil</span>
+            )}
+            {breakout && kind === 'flip' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">color flip</span>
+            )}
+            {breakout && kind === 'both' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">flip + coil</span>
             )}
             {exit && (
               <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">Paper close</span>
@@ -201,6 +237,7 @@ function SignalCard({
             {exit && s.entry_price != null && <span>entry {s.entry_price}</span>}
             <span>SL {s.stop_loss ?? '—'}</span>
             <span>TP {s.take_profit ?? '—'}</span>
+            {!exit && <span>R to TP {rToTp}</span>}
           </div>
         </div>
         <span className="btn btn-sm btn-accent shrink-0">{open ? 'Hide' : 'Details'}</span>
@@ -210,14 +247,22 @@ function SignalCard({
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact k="Strategy" v={s.strategy || '—'} />
             <Fact k="Reason" v={s.reason || '—'} />
+            <Fact k="Side" v={s.side || '—'} />
+            <Fact k="Entry" v={s.signal_price == null ? '—' : String(s.signal_price)} />
+            <Fact k="Stop" v={s.stop_loss == null ? '—' : String(s.stop_loss)} />
+            <Fact k="TP" v={s.take_profit == null ? '—' : String(s.take_profit)} />
+            <Fact k="R to TP" v={rToTp} />
             <Fact k="Daily trend" v={s.daily_trend || '—'} />
             <Fact k="Received" v={s.received_at ? s.received_at.replace('T', ' ').slice(0, 19) : '—'} />
+            {breakout && !s.stop_loss && (
+              <Fact k="R" v="— no stop on this color-flip; not a measured book" />
+            )}
             {exit && <Fact k="PnL" v={pnl == null ? '—' : String(pnl)} />}
-            {exit && <Fact k="R" v={s.realized_r == null ? '—' : String(s.realized_r)} />}
+            {exit && <Fact k="R" v={s.realized_r == null ? 'n/a — no stop on signal' : String(s.realized_r)} />}
             {exit && <Fact k="Fill id" v={s.fill_id == null ? '—' : String(s.fill_id)} />}
           </dl>
           <p className="mt-3 text-sm text-muted">
-            Signal-only. Confirm on quant_visualizer.pine. Details does not place an order.
+            Signal-only. QMIE does not place orders. Confirm on quant_visualizer.pine. Plan card only.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {!exit && (
