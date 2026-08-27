@@ -139,6 +139,12 @@ cd web && npm install && npm run dev
 
 See [`web/README.md`](web/README.md).
 
+**Do not deploy the scanner to Vercel.** Importing this repo as a Vercel
+project serves an empty site (`404: NOT_FOUND`, status Ready). The scanner
+is Docker (`docs/deployment.md`). Vercel can only host the static desk in
+`web/` after `vercel.json` is on the deployed branch, plus `VITE_QMIE_API`
+pointing at a public FastAPI origin.
+
 The first 1H or 4H bar close after startup should trigger a scan pass —
 watch the logs (`docker logs -f qmie`) and you'll see the scan
 complete and any A/A+ grade alerts go out.

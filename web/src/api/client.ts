@@ -15,17 +15,17 @@ import type {
   ChartPrice,
   ScreenBook,
 } from '../types'
+import { resolveApiBases } from './bases'
 
-const BASES: string[] = [
-  '/qmie',
-  'http://127.0.0.1:8080',
-  'http://localhost:8080',
-  '',
-]
+const BASES = resolveApiBases(import.meta.env.VITE_QMIE_API)
 
 function describeNetworkError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err)
   if (raw === 'Failed to fetch' || raw.includes('NetworkError') || raw.includes('Failed to fetch')) {
+    const env = (import.meta.env.VITE_QMIE_API || '').trim()
+    if (env) {
+      return `desk API unreachable — VITE_QMIE_API=${env} (scanner is not Vercel; host FastAPI with Docker)`
+    }
     return 'desk API unreachable — open http://127.0.0.1:5173 (Vite /qmie → :8080) or :8080 directly'
   }
   return raw

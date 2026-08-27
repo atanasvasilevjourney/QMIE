@@ -1,0 +1,7 @@
+.venv
+python/data
+python/backtest/results
+docker/data
+docker/redis_data
+**/*.pyc
+**/__pycache__
