@@ -159,3 +159,134 @@ def n_liquidations(trades: pd.DataFrame) -> int:
     if trades.empty:
         return 0
     return int(trades["liquidated"].fillna(False).sum())
+
+
+BARS_PER_DAY_4H = 6
+ANN_4H = 365 * BARS_PER_DAY_4H  # 2190; only for raw 4h-bar Sharpe
+
+
+def daily_equity(eq: pd.Series) -> pd.Series:
+    """Last mark of each UTC day. KPIs on this series use ANN_DAYS=365."""
+    eq = eq.dropna()
+    if eq.empty:
+        return eq
+    return eq.resample("1D").last().dropna().rename(eq.name or "equity")
+
+
+def daily_net(eq: pd.Series) -> pd.Series:
+    d = daily_equity(eq)
+    if d.empty:
+        return pd.Series(dtype=float, name="net")
+    return d.pct_change().fillna(0.0).rename("net")
+
+
+def rescale_trades(
+    trades: pd.DataFrame,
+    scale: pd.Series | float,
+    *,
+    base_stake: float,
+    leverage: float,
+    cost_bps: float,
+    min_scale: float = 0.0,
+    max_scale: float = 2.5,
+) -> pd.DataFrame:
+    """Reprice an existing trade list at a new isolated stake.
+
+    ``scale`` is looked up at ``entry_time`` (as-of, no future). Isolated cap
+    is reapplied to the new stake. Same entries/exits — size only.
+    """
+    if trades.empty:
+        out = trades.copy()
+        out["stake"] = pd.Series(dtype=float)
+        out["scale"] = pd.Series(dtype=float)
+        return out
+    out = trades.copy()
+    scales: list[float] = []
+    if isinstance(scale, (int, float)):
+        s0 = float(np.clip(float(scale), min_scale, max_scale))
+        scales = [s0] * len(out)
+    else:
+        sc = scale.sort_index()
+        for ts in out["entry_time"]:
+            v = sc.asof(ts)
+            if v is None or (isinstance(v, float) and not np.isfinite(v)) or pd.isna(v):
+                v = 0.0
+            scales.append(float(np.clip(float(v), min_scale, max_scale)))
+    stake_eff = base_stake * np.asarray(scales, dtype=float)
+    ret = out["ret"].to_numpy(dtype=float)
+    notional = stake_eff * leverage
+    pnl = notional * ret - notional * (cost_bps / 1e4) * 2.0
+    liq = pnl < -stake_eff
+    pnl = np.where(liq, -stake_eff, pnl)
+    out["stake"] = stake_eff
+    out["scale"] = np.asarray(scales, dtype=float)
+    out["pnl"] = pnl
+    out["liquidated"] = liq
+    return out
+
+
+def compound_trades(
+    trades: pd.DataFrame,
+    *,
+    start_eq: float,
+    risk_frac: float,
+    leverage: float,
+    cost_bps: float,
+) -> pd.DataFrame:
+    """Each trade risks ``risk_frac`` of *current* equity as isolated stake.
+
+    ``risk_frac=0.01`` is a 1% wallet. ``risk_frac=1.0`` is the whole account
+    as isolated margin (one full SL can be ~10–20% of book, not 100%, because
+    SL is 1.5×ATR on the 10× notional).
+    """
+    if trades.empty:
+        return trades.copy()
+    eq = float(start_eq)
+    rows = []
+    for _, r in trades.iterrows():
+        rec = r.to_dict()
+        stake_i = max(0.0, eq * float(risk_frac))
+        notional = stake_i * leverage
+        pnl = notional * float(r["ret"]) - notional * (cost_bps / 1e4) * 2.0
+        liq = pnl < -stake_i
+        if liq:
+            pnl = -stake_i
+        eq = eq + pnl
+        rec["stake"] = stake_i
+        rec["pnl"] = pnl
+        rec["liquidated"] = bool(liq)
+        rec["equity"] = eq
+        rows.append(rec)
+        if eq <= 0:
+            break
+    return pd.DataFrame(rows)
+
+
+def trade_stats(trades: pd.DataFrame) -> dict[str, float]:
+    if trades.empty:
+        return {
+            "n": 0.0,
+            "win_rate": float("nan"),
+            "expectancy_usdt": float("nan"),
+            "mean_r": float("nan"),
+            "median_r": float("nan"),
+            "liquidations": 0.0,
+            "mean_bars": float("nan"),
+            "tp_share": float("nan"),
+            "sl_share": float("nan"),
+            "time_share": float("nan"),
+        }
+    n = float(len(trades))
+    oc = trades["outcome"].astype(str)
+    return {
+        "n": n,
+        "win_rate": float((trades["pnl"] > 0).mean()),
+        "expectancy_usdt": float(trades["pnl"].mean()),
+        "mean_r": float(trades["r"].mean()) if "r" in trades else float("nan"),
+        "median_r": float(trades["r"].median()) if "r" in trades else float("nan"),
+        "liquidations": float(n_liquidations(trades)),
+        "mean_bars": float(trades["bars"].mean()) if "bars" in trades else float("nan"),
+        "tp_share": float((oc == "TP").mean()),
+        "sl_share": float((oc == "SL").mean()),
+        "time_share": float((oc == "TIME").mean()),
+    }

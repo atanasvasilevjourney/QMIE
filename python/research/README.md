@@ -37,7 +37,7 @@ spot book (lookback ROC, cluster_max=1).
 ```bash
 cd /workspace/python
 /workspace/.venv/bin/pip install -r research/requirements.txt   # sklearn, optuna, plotly
-/workspace/.venv/bin/pytest tests/research/test_trend_lab.py -q
+/workspace/.venv/bin/pytest tests/research/ -q
 /workspace/.venv/bin/python -m research.trend_lab.run_lab --quick
 ```
 
@@ -45,7 +45,11 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 
 - `research/notebooks/01_crypto_trend_lab.ipynb` — data, spot, TEMA, Optuna, Boruta, DF
 - `research/notebooks/02_carver_vs_ensemble.ipynb` — sizing vs timing, vol dial, blend
-- `research/notebooks/04_carver_btc_qqq_gld.ipynb` — ranked Carver on BTC/QQQ/GLD, ~10% DD dial, Sharpe 1.4–1.5 goal + walk-forward
+- `research/notebooks/03_portfolio_kpis.ipynb` — ranked spot book + hypothesis board
+- `research/notebooks/04_carver_btc_qqq_gld.ipynb` — ranked Carver on BTC/QQQ/GLD, ~10% DD dial
+- `research/notebooks/05_tema_validation.ipynb` — frozen 4h TEMA equity, honest DD, daily-marked KPIs
+- `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
+- `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
@@ -54,6 +58,16 @@ Ranked Carver book (BTC / QQQ / GLD):
 ```bash
 cd /workspace/python
 /workspace/.venv/bin/python -m research.trend_lab.run_carver_book
+```
+
+TEMA-only lab (validation + robustness + Carver overlay). KPIs are
+**daily-marked**. The `$10k+$100` DD is an artifact — read the 1%
+compounding and full-wallet curves. Scale ref for Carver is mean lagged
+weight at IS entries so OOS average stake ≈ binary.
+
+```bash
+cd /workspace/python
+/workspace/.venv/bin/python -m research.trend_lab.run_tema_lab
 ```
 
 ## Promote-to-live rule

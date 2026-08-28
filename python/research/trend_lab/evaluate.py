@@ -10,7 +10,7 @@ from .metrics import kpis
 from .optimize import kpis_spot, kpis_tema
 from .protocol import WARMUP_BARS, SPLIT, split_frame
 from .spot_system import SpotParams, spot_signal
-from .tema_system import TemaParams, tema_trades
+from .tema_system import TemaParams, daily_equity, daily_net, tema_bar_equity, tema_trades, trade_stats
 
 
 def eval_spot(full: pd.DataFrame, params: SpotParams) -> dict[str, Any]:
@@ -51,10 +51,24 @@ def eval_tema(full: pd.DataFrame, params: TemaParams) -> dict[str, Any]:
         "params": asdict(params),
         "is": kpis_tema(parts["is"].index, is_tr),
         "oos": kpis_tema(parts["oos"].index, oos_tr),
+        "is_daily": _tema_daily(parts["is"].index, is_tr),
+        "oos_daily": _tema_daily(parts["oos"].index, oos_tr),
         "is_trades": is_tr,
         "oos_trades": oos_tr,
         "parts": parts,
     }
+
+
+def _tema_daily(index: pd.DatetimeIndex, trades: pd.DataFrame, *, start_eq: float = 10_000.0) -> dict[str, float]:
+    """Primary TEMA KPIs: daily-marked equity, ann=365. Bar-level 4h Sharpe is a footnote."""
+    bar = tema_bar_equity(index, trades, start_eq=start_eq)
+    d_eq = daily_equity(bar["equity"])
+    d_net = daily_net(bar["equity"])
+    if d_eq.empty:
+        base = kpis(pd.Series(dtype=float), pd.Series(dtype=float), trades=int(len(trades)))
+    else:
+        base = kpis(d_net, d_eq, trades=int(len(trades)))
+    return {**base, **trade_stats(trades)}
 
 
 def reverse_split_diagnostic(full: pd.DataFrame, params: SpotParams) -> dict[str, Any]:

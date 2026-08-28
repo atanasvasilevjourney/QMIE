@@ -1,4 +1,4 @@
-"""Write the three research notebooks. Run: python research/notebooks/_build.py"""
+"""Write the research notebooks. Run: python research/notebooks/_build.py"""
 from __future__ import annotations
 
 import json
@@ -368,5 +368,320 @@ else:
 * **Chop:** ADX < ~18 is “no trade / size 0”, not a new oscillator to fit.
 * **Cross-section:** five names is a toy book. Cluster_max stops doubling ETH-beta. This is still not a 50-name futures book.
 * **Live engine:** 4h A/A+ TEMA 9/90/199 is the frozen measured edge. Daily TEMA A/A+ OOS loses. This lab does not add `1d` to `SCAN_TIMEFRAMES` and does not change Pine.
+"""),
+])
+
+
+write("05_tema_validation.ipynb", [
+    cell(True, """# 05 — TEMA validation (short-term 4h book)
+
+Frozen live stack **9 / 90 / 199**, agreement `>= 1`, isolated **10×**, SL 1.5×ATR / TP 2.5×ATR, same-bar both → SL. QMIE stays signal-only. **Do not retune live `W_*`.**
+
+This notebook is the hedge-fund read of *this* book only — not spot, not the BTC/QQQ/GLD Carver trio.
+
+## Protocol
+
+| Slice | Window | Use |
+|---|---|---|
+| IS | 2019-09-01 → 2022-12-31 | describe, never steal OOS for a story |
+| OOS | 2023-01-01 → today | the test |
+| Warmup | 220 4h bars | OOS indicators seeded from last 220 IS bars |
+
+Vision USDT-M 4h starts ~2020-01, not 2018.
+
+## How to read equity and drawdown
+
+KPIs are **daily-marked** (`ann=365`). A 4h bar Sharpe with `ann=365` understates vol.
+
+The lab default `$10k account + $100 isolated stake` makes max DD look tiny (~3%). That is **not** control — it is a 1% wallet. This notebook also compounds:
+
+* **1% compounding** — each ticket risks 1% of *current* equity as isolated margin (prop-like).
+* **Full isolated wallet** — the whole account is the stake. One 1.5×ATR SL at 10× is a mid-teens hit, not a rounding error.
+
+## H8
+
+Frozen TEMA has a usable OOS path with controlled DD once stake is honest.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+import pandas as pd
+from research.trend_lab.evaluate import eval_tema
+from research.trend_lab.data import load_symbol
+from research.trend_lab.metrics import kpi_table
+from research.trend_lab.plots import equity_overlay, price_signals, rolling_sharpe_fig, underwater
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS, split_frame
+from research.trend_lab.tema_robust import daily_kpis
+from research.trend_lab.tema_system import TemaParams, compound_trades, daily_equity, tema_bar_equity
+
+print("IS", SPLIT.is_start, "→", SPLIT.is_end)
+print("OOS", SPLIT.oos_start, "→", SPLIT.oos_end)
+print("warmup", WARMUP_BARS)
+print("frozen 9/90/199 10× isolated — Optuna does not belong in this notebook")
+"""),
+    cell(False, """
+btc, src = load_symbol("BTCUSDT", "4h")
+print("BTC 4h", src, len(btc), btc.index[0], "→", btc.index[-1])
+parts = split_frame(btc)
+p10 = TemaParams(leverage=10.0)
+p1 = TemaParams(leverage=1.0)
+t10 = eval_tema(btc, p10)
+t1 = eval_tema(btc, p1)
+oos_idx, is_idx = parts["oos"].index, parts["is"].index
+
+comp_1pct = compound_trades(t10["oos_trades"], start_eq=10_000.0, risk_frac=0.01, leverage=10.0, cost_bps=p10.cost_bps)
+comp_full = compound_trades(t10["oos_trades"], start_eq=10_000.0, risk_frac=1.0, leverage=10.0, cost_bps=p10.cost_bps)
+
+def deq(idx, tr, start=10_000.0):
+    return daily_equity(tema_bar_equity(idx, tr, start_eq=start)["equity"])
+
+board = kpi_table({
+    "frozen_10x_IS_daily": t10["is_daily"],
+    "frozen_10x_OOS_daily": t10["oos_daily"],
+    "frozen_1x_OOS_daily": t1["oos_daily"],
+    "compound_1pct_OOS": daily_kpis(oos_idx, comp_1pct),
+    "compound_full_wallet_OOS": daily_kpis(oos_idx, comp_full),
+})
+display(board.round(3))
+print("IS trades", len(t10["is_trades"]), "OOS trades", len(t10["oos_trades"]))
+if len(t10["oos_trades"]):
+    display(t10["oos_trades"]["outcome"].value_counts().to_frame("n"))
+    display(t10["oos_trades"][["r", "pnl", "bars"]].describe().round(3))
+"""),
+    cell(False, """
+eq_art = deq(oos_idx, t10["oos_trades"])
+eq_1x = deq(oos_idx, t1["oos_trades"])
+eq_1pct = deq(oos_idx, comp_1pct)
+eq_full = deq(oos_idx, comp_full)
+eq_is = deq(is_idx, t10["is_trades"])
+
+equity_overlay({
+    "$10k+$100 10× (artifact)": eq_art,
+    "1× same trades": eq_1x,
+    "1% compounding": eq_1pct,
+    "full isolated wallet": eq_full,
+}, "OOS TEMA 9/90/199 — daily-marked equity").show()
+rolling_sharpe_fig({
+    "artifact": eq_art.pct_change().fillna(0),
+    "1%": eq_1pct.pct_change().fillna(0),
+    "full wallet": eq_full.pct_change().fillna(0),
+}, 90, "OOS 90d rolling Sharpe").show()
+underwater(eq_art, "OOS DD — $10k+$100 (understated)").show()
+underwater(eq_1pct, "OOS DD — 1% compounding").show()
+underwater(eq_full, "OOS DD — full isolated wallet").show()
+equity_overlay({"IS frozen 10×": eq_is}, "IS TEMA — daily-marked").show()
+underwater(eq_is, "IS DD — $10k+$100").show()
+price_signals(
+    parts["oos"],
+    entries=pd.DatetimeIndex(t10["oos_trades"]["entry_time"]) if len(t10["oos_trades"]) else None,
+    exits=pd.DatetimeIndex(t10["oos_trades"]["exit_time"]) if len(t10["oos_trades"]) else None,
+    title="BTC 4h OOS — frozen TEMA entries",
+    max_bars=800,
+).show()
+"""),
+    cell(True, """## How to read this
+
+If OOS Sharpe on the $100-stake book is ~0.3 and DD is −3%, **do not** call that a 10× edge with tight risk. Leverage scaled expectancy (H2 in notebook 01); it did not invent a Sharpe. The full-wallet curve is the honest “what if this *were* the book.” 1% compounding is the honest “what if we size like a desk.”
+
+0 liquidations on this sample is a KPI, not a guarantee — isolated cap is load-bearing (`pnl >= -stake`).
+
+Promote-to-live still needs DF + OOS vs frozen 9/90/199. This notebook does not search.
+"""),
+])
+
+
+write("06_tema_robustness_sensitivity.ipynb", [
+    cell(True, """# 06 — TEMA robustness and parameter sensitivity
+
+Same frozen 9/90/199 book. **Fit never sees OOS.** Inner-IS (last 20% of IS) is the DF neighborhood. 2022 is a *stress fold*, not a training window.
+
+## H9 / H10
+
+* Walk-forward years do not reverse the frozen book; nearby periods do not stably beat 9/90/199 on inner-IS.
+* SL/TP and ADX/ATR grids are a plateau around 1.5 / 2.5 and ADX 20 — not a one-cell peak that wants a live retune.
+
+Optuna stays `do_not_promote=True`. A hotter IS Sharpe that dies on DF or OOS is overfit theatre.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+import pandas as pd
+from research.trend_lab.data import load_symbol
+from research.trend_lab.evaluate import eval_tema
+from research.trend_lab.optimize import optimize_tema
+from research.trend_lab.plots import df_scatter, param_heatmap
+from research.trend_lab.protocol import split_frame
+from research.trend_lab.tema_robust import (
+    FROZEN, frozen_neighborhood, sensitivity_gates, sensitivity_periods,
+    sensitivity_sl_tp, walk_forward,
+)
+from research.trend_lab.tema_system import TemaParams
+
+btc, src = load_symbol("BTCUSDT", "4h")
+print("BTC 4h", src, len(btc))
+parts = split_frame(btc)
+is_4h = parts["is"]
+print("IS bars", len(is_4h), "OOS bars", len(parts["oos"]))
+"""),
+    cell(True, """## Walk-forward
+
+Each fold: frozen params, OOS window seeded with 220 IS bars from *before* that fold. No vol dial, no Optuna inside the fold.
+"""),
+    cell(False, """
+wf = walk_forward(btc, FROZEN)
+display(wf.round(3))
+print("2022 stress row:")
+display(wf.loc[wf["stress"]].round(3) if "stress" in wf else "no stress flag")
+"""),
+    cell(True, """## Sensitivity (IS only)
+
+Frozen 9/90/199 / 1.5 / 2.5 / ADX 20 is always a row. Rank is not a license to promote the top cell.
+"""),
+    cell(False, """
+per = sensitivity_periods(is_4h)
+sltp = sensitivity_sl_tp(is_4h)
+gates = sensitivity_gates(is_4h)
+display(per.round(3))
+display(sltp.head(8).round(3))
+display(gates.round(3))
+param_heatmap(sltp, "sl_atr", "tp_atr", "sharpe", "IS Sharpe — SL vs TP (periods frozen)").show()
+param_heatmap(sltp, "sl_atr", "tp_atr", "max_dd", "IS max DD — SL vs TP").show()
+param_heatmap(gates, "min_adx", "min_atr_pct", "sharpe", "IS Sharpe — ADX vs ATR% gate").show()
+print("frozen periods rank", int(per.reset_index(drop=True).index[per.reset_index(drop=True)["frozen"]].tolist()[0] + 1) if per["frozen"].any() else None)
+"""),
+    cell(True, """## DF neighborhood (inner IS)
+
+Among neighbors with train Sharpe ≥ 0.3, we want a *pool* whose val Sharpe std is small — a plateau. An empty pool or a single spike is a no-promote.
+"""),
+    cell(False, """
+dfn_p = frozen_neighborhood(is_4h, which="periods")
+dfn_e = frozen_neighborhood(is_4h, which="exits")
+print("periods", dfn_p["status"], "val_std", dfn_p.get("val_sharpe_std"), "n_stable", dfn_p.get("n_stable"))
+print("exits  ", dfn_e["status"], "val_std", dfn_e.get("val_sharpe_std"), "n_stable", dfn_e.get("n_stable"))
+if dfn_p.get("table") is not None and len(dfn_p["table"]):
+    df_scatter(dfn_p["table"], "TEMA DF — fast/mid/slow (inner IS)").show()
+if dfn_e.get("table") is not None and len(dfn_e["table"]):
+    df_scatter(dfn_e["table"], "TEMA DF — SL/TP/ADX (inner IS)").show()
+"""),
+    cell(True, """## Optuna (research only)
+
+Run if you want the H3 replay. The winner is **not** written into the scanner. Skip this cell in a quick pass.
+"""),
+    cell(False, """
+# ot = optimize_tema(is_4h, n_trials=12, leverage=10.0)
+# ot_ev = eval_tema(btc, ot["params"])
+# print("do_not_promote", ot["do_not_promote"], ot.get("engine"), ot["params"])
+# print("frozen IS", ot["frozen_9_90_199_is"])
+# print("optuna IS", ot["is_kpis"])
+# print("optuna OOS daily", ot_ev["oos_daily"])
+print("Optuna cell left commented — frozen 9/90/199 is the live stack. Uncomment to replay H3.")
+"""),
+    cell(True, """## Verdict rule
+
+Promote 9/90/199 *away* only if IS Sharpe **and** DF neighborhood **and** OOS all clear for the challenger. A prettier IS heatmap is not that.
+"""),
+])
+
+
+write("07_tema_carver_sizing.ipynb", [
+    cell(True, """# 07 — Can Carver size the TEMA book?
+
+Two systems, one overlay.
+
+* **TEMA** decides *when* (event-driven 4h, frozen 9/90/199, isolated 10×, SL/TP).
+* **Carver** decides *how much* (continuous forecast → vol-targeted weight, `exec_lag=1`).
+
+Carver does **not** change periods, SL, or TP. Entries/exits stay the frozen list unless we explicitly **filter** (skip ticket if lagged weight < 0.05).
+
+## Honest size
+
+BTC-only Carver mean weight is ~12%. If we set `stake *= weight` raw, DD shrinks because the book got smaller — that is not an overlay result. **Scale reference = mean lagged weight at IS entries**, so OOS average stake ≈ binary TEMA. Then we compare paths.
+
+| Book | What it tests |
+|---|---|
+| binary | constant $100 isolated stake |
+| carver_daily | daily Carver (no CS) as-of onto 4h entries, IS-normalized |
+| carver_4h | same-timescale Carver on 4h bars (`ann=2190`) |
+| inv_vol | always-long vol target (forecast pinned +10) |
+| carver_filter | skip entry if daily held < 0.05 (changes the list) |
+
+## H11
+
+Carver can size TEMA tickets and tighten OOS DD vs binary. The *forecast* vs inverse-vol is the tell: if daily-Carver ≈ inv-vol, you bought a vol dial, not Strat 17–19 skill.
+
+Forecast skill at entry: `corr(fc_t, trade.ret)` — ~0 means no timing alpha on this ticket list.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+import numpy as np
+import pandas as pd
+from research.trend_lab.carver import VOL_TARGET
+from research.trend_lab.data import load_symbol
+from research.trend_lab.evaluate import eval_tema
+from research.trend_lab.metrics import kpi_table
+from research.trend_lab.plots import allocation_fig, equity_overlay, rolling_sharpe_fig, underwater
+from research.trend_lab.protocol import split_frame
+from research.trend_lab.tema_carver import overlay_pack
+from research.trend_lab.tema_robust import daily_kpis
+from research.trend_lab.tema_system import TemaParams, daily_equity, tema_bar_equity
+
+btc, src = load_symbol("BTCUSDT", "4h")
+parts = split_frame(btc)
+p10 = TemaParams(leverage=10.0)
+t10 = eval_tema(btc, p10)
+print("OOS trades", len(t10["oos_trades"]), "IS trades", len(t10["is_trades"]))
+
+pack = overlay_pack(
+    btc, t10["oos_trades"], t10["is_trades"]["entry_time"],
+    base_stake=p10.stake, leverage=p10.leverage, cost_bps=p10.cost_bps, vol_target=VOL_TARGET,
+)
+pack_is = overlay_pack(
+    btc, t10["is_trades"], t10["is_trades"]["entry_time"],
+    base_stake=p10.stake, leverage=p10.leverage, cost_bps=p10.cost_bps, vol_target=VOL_TARGET,
+)
+print("IS scale refs", pack["refs"], "FDM", pack["fdm"])
+
+oos_idx, is_idx = parts["oos"].index, parts["is"].index
+rows, eqs = {}, {}
+for name in ("binary", "carver_daily", "carver_4h", "inv_vol", "carver_filter"):
+    rows[f"{name}_OOS"] = daily_kpis(oos_idx, pack[name])
+    rows[f"{name}_IS"] = daily_kpis(is_idx, pack_is[name])
+    eqs[name] = daily_equity(tema_bar_equity(oos_idx, pack[name])["equity"])
+display(kpi_table(rows).round(3))
+"""),
+    cell(False, """
+equity_overlay(eqs, "OOS TEMA — binary vs Carver size (IS-normalized)").show()
+rolling_sharpe_fig({k: v.pct_change().fillna(0) for k, v in eqs.items() if len(v)}, 90, "OOS 90d rolling Sharpe").show()
+underwater(eqs["binary"], "OOS binary TEMA DD").show()
+underwater(eqs["carver_daily"], "OOS Carver-daily size DD").show()
+underwater(eqs["inv_vol"], "OOS inverse-vol size DD").show()
+allocation_fig({
+    "daily held (lagged)": pack["held_daily"].reindex(oos_idx),
+    "4h held (lagged)": pack["held_4h"].reindex(oos_idx),
+}, "OOS Carver weight on the 4h index").show()
+
+# forecast skill on the frozen OOS ticket list
+fcs, rets = [], []
+fc = pack["fc_daily"].sort_index()
+for _, r in t10["oos_trades"].iterrows():
+    v = fc.asof(r["entry_time"])
+    if v is not None and np.isfinite(v) and not pd.isna(v):
+        fcs.append(float(v)); rets.append(float(r["ret"]))
+if len(fcs) >= 8:
+    corr = float(np.corrcoef(fcs, rets)[0, 1])
+    hit = float(np.mean((np.array(fcs) > 0) == (np.array(rets) > 0)))
+    print(f"OOS corr(fc, trade ret)={corr:.3f}  hit={hit:.3f}  n={len(fcs)}")
+else:
+    print("not enough overlapping forecasts")
+print("mean OOS daily held", float(pack["held_daily"].reindex(oos_idx).mean()))
+print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median()))
+"""),
+    cell(True, """## How to implement (research → desk, still no broker)
+
+1. Keep TEMA entries exactly as live (9/90/199, ADX/ATR/RSI gates, SL/TP).
+2. At signal close, read **yesterday’s** Carver weight (daily last 4h close, `exec_lag=1`).
+3. `stake_eff = stake_ref * clip(w / w_IS_mean, 0, 2.5)`. Isolated cap on `stake_eff`.
+4. Do **not** skip the ticket from a weak forecast unless H11’s filter book clearly wins OOS *and* DF — that is a second change.
+5. Do **not** write Carver into `W_*` or Pine. Sizing is not scoring.
+
+If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
