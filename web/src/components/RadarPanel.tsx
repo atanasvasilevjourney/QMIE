@@ -50,6 +50,16 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket title="Donchian coil break (watch)" rows={radar.breakouts} render={(r) => `${r.breakout} ADX${r.adx}`} />
+        <Bucket
+          title="Early long (coil pressing highs)"
+          rows={radar.early_longs ?? []}
+          render={(r) => `${r.coil_width_pct?.toFixed?.(1) ?? '—'}% @${r.price}`}
+        />
+        <Bucket
+          title="Early short (coil pressing lows)"
+          rows={radar.early_shorts ?? []}
+          render={(r) => `${r.coil_width_pct?.toFixed?.(1) ?? '—'}% @${r.price}`}
+        />
         <Bucket title="Tight coils" rows={radar.tight_coils} render={(r) => `${r.coil_width_pct?.toFixed?.(1) ?? '—'}%`} />
         <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
@@ -57,7 +67,8 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
       <p className="lede mt-4">
         Radar coil-break is a watchlist. OPS Daily breakout dispatches day-1 GREY→GREEN/RED
         {' '}or coil-UP/DOWN as separate unranked setups — not an A/A+ grade.
-        Confirm on the 1D visualizer before clicking. Manual only.
+        Early long is a GREY coil pressing the box high (the SOL-style base); it is not an entry
+        {' '}until a close-confirmed coil-UP. Confirm on the 1D visualizer before clicking. Manual only.
       </p>
     </PanelShell>
   )

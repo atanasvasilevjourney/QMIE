@@ -105,7 +105,14 @@ def test_coil_only_symbol_included():
     radar = {
         "rows": [{"symbol": "ADAUSDT", "color": "GREY", "adx": 18.0, "is_tight_coil": True, "coil_width_pct": 2.4}],
         "tight_coils": [
-            {"symbol": "ADAUSDT", "price": 0.4, "adx": 18.0, "coil_width_pct": 2.4, "is_tight_coil": True}
+            {
+                "symbol": "ADAUSDT",
+                "price": 0.4,
+                "adx": 18.0,
+                "coil_width_pct": 2.4,
+                "is_tight_coil": True,
+                "is_early_long": True,
+            }
         ],
         "breakouts": [],
     }
@@ -114,6 +121,7 @@ def test_coil_only_symbol_included():
     row = out["rows"][0]
     assert row["symbol"] == "ADAUSDT"
     assert row["is_tight_coil"] is True
+    assert row["is_early_long"] is True
     assert row["coil_width_pct"] == 2.4
     assert "coils" in row["sources"]
     assert row["grade"] is None

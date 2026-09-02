@@ -19,6 +19,8 @@ export type RadarRow = {
   is_fresh_flip: boolean
   is_tight_coil: boolean
   is_late_stage: boolean
+  is_early_long?: boolean
+  is_early_short?: boolean
 }
 
 export type RadarSnapshot = {
@@ -38,6 +40,8 @@ export type RadarSnapshot = {
   breakouts: RadarRow[]
   late_stage_green: RadarRow[]
   late_stage_red?: RadarRow[]
+  early_longs?: RadarRow[]
+  early_shorts?: RadarRow[]
   rows: RadarRow[]
   failed_symbols?: string[]
   note?: string | null
@@ -388,6 +392,8 @@ export type ScreenRow = {
   pct_since_flip?: number | null
   is_tight_coil?: boolean
   is_fresh_flip?: boolean
+  is_early_long?: boolean
+  is_early_short?: boolean
   breakout?: string | null
   weight_pct?: number | null
   book_rank?: number | null
