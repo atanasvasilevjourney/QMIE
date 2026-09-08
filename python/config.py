@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     telegram_chat_id:       Optional[str] = None
     telegram_enabled:       bool = False
 
+    # Slack: prefer bot token + chat.postMessage (Block Kit). Incoming
+    # webhook URL is a fallback. Neither path is a broker.
+    slack_enabled:          bool = False
+    slack_bot_token:        Optional[str] = None
+    slack_channel:          Optional[str] = None
+    slack_webhook_url:      Optional[str] = None
+
     # ─── Scanner ─────────────────────────────────────────────────────────
     # Comma-separated USDT perps. OKX uses POL/RENDER; Binance still has
     # MATIC/RNDR on some books. 1000PEPE and FET are omitted (no OKX SWAP).
@@ -88,7 +95,7 @@ class Settings(BaseSettings):
     w_vol:        int = 5
 
     # ─── TradingView deep-link config ────────────────────────────────────
-    # Used in Discord/Telegram embeds: clicking opens the chart in TV.
+    # Used in Discord/Telegram/Slack cards: clicking opens the chart in TV.
     tv_chart_prefix: str = "BINANCE"       # BINANCE / BYBIT / etc.
 
     # ─── Risk filtering (signals, not orders) ────────────────────────────
@@ -179,6 +186,15 @@ class Settings(BaseSettings):
         return (self.w_supertrend + self.w_ema + self.w_rsi + self.w_adx
                 + self.w_htf + self.w_sr + self.w_vol)
 
+    @property
+    def slack_configured(self) -> bool:
+        """True when Slack can actually post (bot+channel or webhook)."""
+        if not self.slack_enabled:
+            return False
+        bot = bool(self.slack_bot_token and self.slack_channel)
+        hook = bool(self.slack_webhook_url)
+        return bot or hook
+
     def validate_runtime(self) -> list[str]:
         """Return list of warnings; called once at startup."""
         warnings = []
@@ -207,6 +223,11 @@ class Settings(BaseSettings):
             warnings.append(
                 f"ALLOC_MODE={self.alloc_mode!r} invalid; "
                 "expected ranked, all, or rotation."
+            )
+        if self.slack_enabled and not self.slack_configured:
+            warnings.append(
+                "SLACK_ENABLED is true but neither "
+                "SLACK_BOT_TOKEN+SLACK_CHANNEL nor SLACK_WEBHOOK_URL is set."
             )
         if self.alloc_defensive2.lower() not in (
             "off", "cash", "paxg", "paxg_then_cash",

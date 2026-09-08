@@ -118,3 +118,79 @@ def test_telegram_includes_ranked_line():
     assert "Ranked" in text
     assert r"\#2" in text
     assert "ETH" in text
+
+
+def _slack_field_map(blocks: list) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for b in blocks:
+        for f in b.get("fields") or []:
+            raw = f["text"]
+            label, _, value = raw.partition("\n")
+            out[label.strip("*")] = value
+    return out
+
+
+def test_slack_blocks_include_ranked_slot():
+    from notifiers.slack import SlackNotifier
+
+    n = SlackNotifier(webhook_url="https://hooks.slack.com/services/x/y/z")
+    blocks = n._build_blocks(
+        _sig(alloc_rank=1, alloc_weight_pct=25.0, alloc_cluster="BTC"),
+        None,
+    )
+    fields = _slack_field_map(blocks)
+    assert "Ranked slot" in fields
+    assert "#1" in fields["Ranked slot"]
+    assert "25.0%" in fields["Ranked slot"]
+    assert "BTC" in fields["Ranked slot"]
+
+
+def test_slack_breakout_title():
+    from notifiers.slack import _signal_title
+
+    sig = TVSignal(
+        strategy="QMIE-DailyBreakout",
+        event=EventType.ENTRY,
+        symbol="ETHUSDT",
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.BUY,
+        signal_price=3000.0,
+        reason="trend_start_long",
+        setup_type="breakout",
+    )
+    assert "BREAKOUT LONG" in _signal_title(sig)
+
+
+def test_slack_expansion_title():
+    from notifiers.slack import _signal_title
+
+    sig = TVSignal(
+        strategy="QMIE-DailyExpansion",
+        event=EventType.ENTRY,
+        symbol="SOLUSDT",
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.BUY,
+        signal_price=107.0,
+        stop_loss=98.0,
+        reason="coil_breakout_up",
+        setup_type="expansion",
+    )
+    title = _signal_title(sig)
+    assert "EXPANSION LONG — SPOT COIL-UP" in title
+    assert "BREAKOUT LONG" not in title
+
+
+def test_slack_tv_button_when_chart_url():
+    from notifiers.slack import SlackNotifier
+
+    n = SlackNotifier(webhook_url="https://hooks.slack.com/services/x/y/z")
+    sig = _sig()
+    sig.chart_url = "https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT.P"
+    blocks = n._build_blocks(sig, None)
+    actions = [b for b in blocks if b.get("type") == "actions"]
+    assert actions
+    btn = actions[0]["elements"][0]
+    assert btn["url"].startswith("https://www.tradingview.com")
+    assert "TradingView" in btn["text"]["text"]

@@ -24,6 +24,7 @@ if str(_PY_ROOT) not in sys.path:
 os.environ.setdefault("WEBHOOK_SECRET", "test-secret-do-not-use-in-prod")
 os.environ.setdefault("DISCORD_ENABLED", "false")
 os.environ.setdefault("TELEGRAM_ENABLED", "false")
+os.environ.setdefault("SLACK_ENABLED", "false")
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────

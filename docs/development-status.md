@@ -39,7 +39,7 @@ teams over-claim.
 |---|---|---|---|---|
 | Live scanner core (engine, scheduler, exchanges, universe) | 30 | 92% | 27.6 | Code + 100+ unit tests; funding filter currently dead |
 | Pine visualizer parity | 10 | 88% | 8.8 | 7-component math present; daily-trend label on chart |
-| Notifiers + HTTP API | 10 | 85% | 8.5 | Discord/Telegram + `/health` `/signals` `/scan/once`; no HTTP tests |
+| Notifiers + HTTP API | 10 | 85% | 8.5 | Discord/Telegram/Slack + `/health` `/signals` `/scan/once`; no HTTP tests |
 | Backtest harness (data, runner, CLI, dashboard) | 15 | 90% | 13.5 | Full pipeline; no committed results parquet |
 | Backtest robustness (equity, DD, MC, quantstats) | 10 | 80% | 8.0 | Implemented in `app.py` / `run.py`; trailing-stop variant missing |
 | Live feedback loop (paper, grade-distribution drift) | 10 | 0% | 0.0 | Phase 4 not started |

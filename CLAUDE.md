@@ -9,7 +9,7 @@ run / test it without you having to re-explain.
 QMIE is a server-side crypto market scanner. It scans ~30 USDT-perp
 symbols on 1H and 4H timeframes, computes a 7-component weighted
 score (Triple EMA 9/90/199 + EMA199 + RSI + ADX + HTF alignment + S/R room +
-Volatility), and dispatches A/A+ signals to Discord and/or Telegram with a
+Volatility), and dispatches A/A+ signals to Discord, Telegram, and/or Slack with a
 TradingView chart deep-link. It does **not** execute trades. Manual
 entry only — by design.
 
@@ -51,7 +51,8 @@ qmie/
 │   ├── improve/desk.py               Hedge-fund DAG analog (no orders)
 │   ├── notifiers/
 │   │   ├── discord.py                Rich embed + chart link
-│   │   └── telegram.py               MarkdownV2 + chart link
+│   │   ├── telegram.py               MarkdownV2 + chart link
+│   │   └── slack.py                  Block Kit + chart button
 │   ├── tests/                        214 pytest tests (CI installs requests+pyarrow for backtest)
 │   ├── requirements.txt
 │   ├── pytest.ini
