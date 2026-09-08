@@ -51,7 +51,7 @@ from desk_static import desk_file, find_desk_dist, wants_html
 from config import Settings, get_settings
 from db import Database
 from models import Grade, JournalClose, JournalCreate, TVSignal
-from notifiers import DiscordNotifier, Notifier, TelegramNotifier
+from notifiers import DiscordNotifier, Notifier, SlackNotifier, TelegramNotifier
 from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher
 from scanner.exchange_clients import get_client
@@ -142,6 +142,14 @@ async def lifespan(app: FastAPI):
             chat_id=s.telegram_chat_id,
         ))
         logger.info("Telegram notifier armed")
+    if s.slack_configured:
+        notifiers.append(SlackNotifier(
+            bot_token=s.slack_bot_token or "",
+            channel=s.slack_channel or "",
+            webhook_url=s.slack_webhook_url or "",
+        ))
+        path = "bot" if (s.slack_bot_token and s.slack_channel) else "webhook"
+        logger.info("Slack notifier armed (%s)", path)
     state.notifiers = notifiers
 
     # Exchange data client

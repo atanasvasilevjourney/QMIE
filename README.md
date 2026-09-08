@@ -3,7 +3,7 @@
 **Scanner Edition · Crypto-Focused · Manual-Entry**
 
 A server-side multi-symbol crypto scanner that detects A/A+ trade setups
-in real time and pushes alerts to Discord and Telegram. You execute
+in real time and pushes alerts to Discord, Telegram, and Slack. You execute
 manually — no automated brokers, no API keys for trading, no prop-firm
 guardrails to break.
 
@@ -27,7 +27,7 @@ Every time a 1H or 4H bar closes (configurable), the server:
 4. Ranks A/A+ (and optionally B) setups with **Ranked Asset
    Allocation** — top N long + top N short per timeframe, cluster cap
    so correlated names do not stack — then dispatches those slots to
-   Discord and/or Telegram with a TradingView chart deep-link and a
+   Discord, Telegram, and/or Slack with a TradingView chart deep-link and a
    suggested book weight (not an order)
 5. Persists every signal in SQLite for audit and later analysis
 
@@ -199,7 +199,7 @@ Independent of the 1H/4H scoring scanner. Once per closed **daily** bar
 | **Breakouts** | Close outside a prior GREY tight-coil range (one-shot) |
 
 This is **unranked daily context**, not a QMIE A/A+ entry. Digests default
-**off** (`RADAR_NOTIFY=false`); enable explicitly if you want Discord/Telegram.
+**off** (`RADAR_NOTIFY=false`); enable explicitly if you want Discord/Telegram/Slack.
 
 ```bash
 curl -s localhost:8080/radar | jq '.status,.green,.fresh_green,.breakouts,.tight_coils'
@@ -252,7 +252,7 @@ What remains:
    alerts have a baseline (needs ≥ 30 closed journal fills).
 
 2. **Position sizing:** Ranked Asset Allocation is built in
-   (`ALLOC_MODE=ranked`). Discord shows rank, suggested weight %, and
+   (`ALLOC_MODE=ranked`). Discord/Slack show rank, suggested weight %, and
    cluster. You still size and click the order yourself.
 
 3. **Do not refit weights** on the same sample you use to report hit

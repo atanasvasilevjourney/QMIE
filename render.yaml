@@ -2,7 +2,7 @@
 # Blueprint: https://render.com/docs/blueprint-spec
 #
 # 1 instance. SQLite lives on the disk. Free plans sleep and miss bar closes.
-# Secrets (DISCORD_WEBHOOK_URL, WEBHOOK_SECRET) stay in the dashboard — sync: false.
+# Secrets (DISCORD_WEBHOOK_URL, SLACK_*, WEBHOOK_SECRET) stay in the dashboard — sync: false.
 
 services:
   - type: web
@@ -27,6 +27,12 @@ services:
       - key: DB_URL
         value: sqlite+aiosqlite:///./data/qmie.db
       - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_CHANNEL
+        sync: false
+      - key: SLACK_WEBHOOK_URL
         sync: false
       - key: WEBHOOK_SECRET
         sync: false

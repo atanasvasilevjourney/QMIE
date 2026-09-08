@@ -26,15 +26,15 @@
                    │                                  │             │
                    │       ┌──────────────────────────┼──────┐      │
                    │       ▼                          ▼      ▼      │
-                   │  ┌──────────┐              ┌──────────┐ ┌─────┐│
-                   │  │ Discord  │              │ Telegram │ │ ... ││
-                   │  │ embed    │              │ MarkdownV2│ │     ││
-                   │  └────┬─────┘              └──────┬───┘ └─────┘│
-                   └───────┼───────────────────────────┼────────────┘
-                           ▼                           ▼
-                   Discord channel              Telegram chat
-                   (rich embed +                (markdown +
-                    TV deep link)                TV deep link)
+                   │  ┌──────────┐              ┌──────────┐ ┌───────┐│
+                   │  │ Discord  │              │ Telegram │ │ Slack ││
+                   │  │ embed    │              │ MarkdownV2│ │ Block ││
+                   │  └────┬─────┘              └──────┬───┘ └───┬───┘│
+                   └───────┼───────────────────────────┼─────────┼────┘
+                           ▼                           ▼         ▼
+                   Discord channel              Telegram chat  Slack channel
+                   (rich embed +                (markdown +    (Block Kit +
+                    TV deep link)                TV deep link)  TV button)
                                             │
                                             │ (user clicks link)
                                             ▼

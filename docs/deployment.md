@@ -11,7 +11,7 @@ serve.
 
 Vercel **cannot** run QMIE. The product is a long-lived FastAPI process
 (bar-close scheduler, SQLite, optional Redis, exchange REST). Serverless
-functions time out and have no persistent loop. Discord/Telegram alerts do
+functions time out and have no persistent loop. Discord/Telegram/Slack alerts do
 **not** need Vercel.
 
 Two pieces, two hosts:
@@ -44,7 +44,7 @@ Do not use the Vite preset at the monorepo root — it looks for
 `vite.config` next to `vercel.json`, finds none, and ships a 404.
 
 CORS on FastAPI is already `allow_origins=["*"]` for the public scanner
-routes. Do not put `WEBHOOK_SECRET` or Discord URLs in Vercel — those belong
+routes. Do not put `WEBHOOK_SECRET`, Discord URLs, or Slack tokens in Vercel — those belong
 in `python/.env` on the scanner host.
 
 ## Render (scanner API)
@@ -68,7 +68,8 @@ now honors `PORT` (Compose still defaults to 8080).
    `uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers`
 3. Health check `/health`
 4. **1** instance + a disk at `/app/data`
-5. Env: `SCAN_DATA_SOURCE=okx`, `WORKERS=1`, `DISCORD_WEBHOOK_URL`,
+5. Env: `SCAN_DATA_SOURCE=okx`, `WORKERS=1`, `DISCORD_WEBHOOK_URL` and/or
+   Slack (`SLACK_BOT_TOKEN` + `SLACK_CHANNEL` or `SLACK_WEBHOOK_URL`),
    `WEBHOOK_SECRET`, optional `REDIS_URL`
 6. Redeploy. Then `curl -sS https://<service>.onrender.com/health`
 7. Browser: `https://<service>.onrender.com/` (desk). JSON: `curl` `/` still.
@@ -94,6 +95,14 @@ Minimum for Discord alerts:
 | `WEBHOOK_SECRET` | 64 hex chars if you use `POST /webhook` |
 | `SCAN_DATA_SOURCE` | `binance` (default) or `bybit` |
 | `REDIS_URL` | `redis://redis:6379/0` in Compose — **set this in production** or a restart can re-fire the last bar |
+
+Optional Slack (Block Kit, scanner host only):
+
+| Variable | Notes |
+|---|---|
+| `SLACK_ENABLED` | `true` |
+| `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` | Slack app bot (`chat:write`). Invite the bot to the channel. `C…` id or `#name`. |
+| `SLACK_WEBHOOK_URL` | Incoming webhook fallback if you do not want a bot |
 
 Optional: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `SCAN_MIN_ALERT_GRADE`, `W_*` (sum ~100), `SIG_MIN_ADX`, `SIG_FUNDING_RATE_THRESHOLD`, `SIG_MAX_SIGNALS_PER_SYMBOL_PER_DAY`.
 
@@ -153,7 +162,7 @@ Do not run this inside the `qmie` service.
 
 - `/health` → `status: ok`, `db_ok: true`
 - Logs: `Scan pass tf=1h completed` after a bar close
-- Discord/Telegram: A/A+ embeds with a TradingView deep-link
+- Discord/Telegram/Slack: A/A+ cards with a TradingView deep-link
 - After a container restart, the same bar does **not** re-alert (Redis)
 
 Canonical edge measurement: `docs/backtest-baseline.md` (Sprint 1).
