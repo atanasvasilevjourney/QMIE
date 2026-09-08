@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 
@@ -32,7 +33,57 @@ def flatten_signal(row: dict[str, Any]) -> dict[str, Any]:
             continue
         if v is not None and v != "":
             out[k] = v
+    _stamp_closed_bar(out)
     return out
+
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        dt = value
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    if isinstance(value, (int, float)):
+        n = float(value)
+        if n > 10_000_000_000:  # ms
+            n /= 1000.0
+        try:
+            return datetime.fromtimestamp(n, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def closed_bar_iso(flat: dict[str, Any]) -> Optional[str]:
+    """ISO time of the *closed* bar the price belongs to (not received_at)."""
+    for key in ("timestamp", "bar_time"):
+        dt = _parse_dt(flat.get(key))
+        if dt is not None:
+            return dt.isoformat()
+    ts = flat.get("timestamp")
+    if ts not in (None, ""):
+        return str(ts)
+    return None
+
+
+def _stamp_closed_bar(out: dict[str, Any]) -> None:
+    """Surface bar-close vs wall-clock receive so lookback catch-up is obvious."""
+    closed = closed_bar_iso(out)
+    if closed:
+        out["closed_bar_at"] = closed
+    rec = _parse_dt(out.get("received_at"))
+    bar = _parse_dt(closed)
+    if rec is not None and bar is not None and (rec - bar).total_seconds() >= 12 * 3600:
+        out["lookback_catchup"] = True
 
 
 def _f(v: Any) -> Optional[float]:
