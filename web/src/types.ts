@@ -65,6 +65,10 @@ export type SignalRow = {
   take_profit?: number
   timeframe?: string
   received_at?: string
+  closed_bar_at?: string | null
+  lookback_catchup?: boolean
+  timestamp?: string | null
+  bar_time?: number | string | null
   daily_trend?: string
   strategy?: string
   reason?: string

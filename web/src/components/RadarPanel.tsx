@@ -138,6 +138,9 @@ function RadarRowCard({ row, summary }: { row: RadarRow; summary: string }) {
           <Fact k="Color" v={row.color} />
           <Fact k="Days in state" v={String(row.days_in_state)} />
           <Fact k="Price" v={String(row.price)} />
+          <Fact k="Closed bar" v={row.bar_time ? String(row.bar_time).replace('T', ' ').slice(0, 19) : '—'} />
+          <Fact k="Flipped at" v={row.flipped_at ? String(row.flipped_at).replace('T', ' ').slice(0, 19) : '—'} />
+          <Fact k="% since flip" v={row.pct_since_flip != null ? `${row.pct_since_flip}` : '—'} />
           <Fact k="ADX" v={String(row.adx)} />
           <Fact k="+DI / −DI" v={`${row.plus_di} / ${row.minus_di}`} />
           <Fact k="Coil %" v={row.coil_width_pct != null ? row.coil_width_pct.toFixed(1) : '—'} />

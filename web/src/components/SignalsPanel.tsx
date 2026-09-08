@@ -44,6 +44,15 @@ function breakoutKind(s: SignalRow): 'coil' | 'flip' | 'both' | null {
   return 'flip'
 }
 
+function fmtWhen(v?: string | null): string {
+  if (!v) return '—'
+  return v
+    .replace('T', ' ')
+    .replace(/\.\d+/, '')
+    .replace(/\+00:00$/, ' UTC')
+    .replace(/Z$/, ' UTC')
+}
+
 function plannedR(s: SignalRow): string {
   const entry = s.signal_price
   const sl = s.stop_loss
@@ -301,6 +310,9 @@ function SignalCard({
             {breakout && kind === 'both' && (
               <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">flip + coil</span>
             )}
+            {s.lookback_catchup && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">lookback</span>
+            )}
             {exit && (
               <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">Paper close</span>
             )}
@@ -310,6 +322,7 @@ function SignalCard({
             <span>{(s.timeframe || '—').toUpperCase()}</span>
             {s.score != null && <span>score {s.score}</span>}
             <span>{exit ? 'exit' : 'px'} {s.signal_price ?? '—'}</span>
+            {s.closed_bar_at && <span>bar {fmtWhen(s.closed_bar_at)}</span>}
             {exit && s.entry_price != null && <span>entry {s.entry_price}</span>}
             <span>SL {s.stop_loss ?? '—'}</span>
             <span>TP {s.take_profit ?? '—'}</span>
@@ -329,7 +342,8 @@ function SignalCard({
             <Fact k="TP" v={s.take_profit == null ? '—' : String(s.take_profit)} />
             <Fact k="R to TP" v={rToTp} />
             <Fact k="Daily trend" v={s.daily_trend || '—'} />
-            <Fact k="Received" v={s.received_at ? s.received_at.replace('T', ' ').slice(0, 19) : '—'} />
+            <Fact k="Closed bar" v={fmtWhen(s.closed_bar_at || s.timestamp)} />
+            <Fact k="Received" v={fmtWhen(s.received_at)} />
             {breakout && !s.stop_loss && (
               <Fact k="R" v="— no stop on this color-flip; not a measured book" />
             )}
@@ -343,6 +357,9 @@ function SignalCard({
           </dl>
           <p className="mt-3 text-sm text-muted">
             Signal-only. QMIE does not place orders. Confirm on quant_visualizer.pine. Plan card only.
+            {s.lookback_catchup
+              ? ' Entry price is the close of that 1D bar, not the live print at Received. Radar replays the last 7 closed days after downtime.'
+              : ''}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {!exit && (

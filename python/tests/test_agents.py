@@ -49,6 +49,33 @@ def test_flatten_prefers_column_over_raw():
     assert "raw" not in flat
 
 
+def test_flatten_stamps_closed_bar_not_received():
+    row = _row()
+    row["received_at"] = "2026-09-08T12:10:57"
+    row["raw"] = json.dumps({
+        "timeframe": "1d",
+        "strategy": "QMIE-DailyBreakout",
+        "timestamp": "2026-09-02T16:00:00+00:00",
+        "bar_time": 1788364800000,
+        "reason": "trend_start_long",
+    })
+    row["signal_price"] = 1.986
+    flat = flatten_signal(row)
+    assert flat["closed_bar_at"].startswith("2026-09-02T16:00:00")
+    assert flat["lookback_catchup"] is True
+    assert flat["received_at"].startswith("2026-09-08")
+    assert flat["signal_price"] == 1.986
+
+
+def test_flatten_no_catchup_when_received_near_bar():
+    row = _row()
+    row["received_at"] = "2026-09-02T16:00:08+00:00"
+    row["raw"] = json.dumps({"timestamp": "2026-09-02T16:00:00+00:00"})
+    flat = flatten_signal(row)
+    assert flat.get("lookback_catchup") is not True
+    assert flat["closed_bar_at"].startswith("2026-09-02T16:00:00")
+
+
 def test_atr_pct_from_atr_and_price():
     assert atr_pct_of({"atr": 2.0, "signal_price": 200.0}) == pytest.approx(1.0)
 

@@ -384,6 +384,8 @@ class TestDailyBreakoutInbound:
         assert sig.timeframe == "1d"
         assert sig.setup_type == "breakout"
         assert sig.reason == "trend_start_long"
+        assert sig.timestamp == "2026-08-16T00:00:00+00:00"
+        assert sig.signal_price == 3000.0
 
     def test_coil_up_maps_to_daily_expansion(self):
         sig = trend_start_to_tvsignal({
