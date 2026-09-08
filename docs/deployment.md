@@ -36,8 +36,12 @@ To make `qmie.vercel.app` itself serve ORBIT:
    `cursor/render-backend-a231` (or merge this stack into `master`)
 2. Optional: **Root Directory** = `web` (then `web/vercel.json` SPA rewrites
    apply; do not keep `outputDirectory: web/dist` in that mode)
-3. Redeploy. Desk on `*.vercel.app` calls `https://qmie.onrender.com`
-   unless you set `VITE_QMIE_API`.
+3. Redeploy. Desk on `*.vercel.app` (and any custom domain) calls
+   `https://qmie.onrender.com`. Same-origin `/health` is **not** FastAPI —
+   that is the SPA (or a Vercel `404 NOT_FOUND`). `vercel.json` also
+   proxies `/health`, `/radar`, `/signals`, … to Render so old clients
+   recover after deploy. Do not set `VITE_QMIE_API` to a `*.vercel.app`
+   URL.
 
 `vercel.json` at the repo root uses `framework: null` and builds `web/dist`.
 Do not use the Vite preset at the monorepo root — it looks for

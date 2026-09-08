@@ -15,12 +15,23 @@ import type {
   ChartPrice,
   ScreenBook,
 } from '../types'
-import { resolveApiBases } from './bases'
+import { RENDER_API, resolveApiBases } from './bases'
 
 const BASES = resolveApiBases(import.meta.env.VITE_QMIE_API)
 
+function clipBody(text: string): string {
+  const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (/NOT_FOUND|The page could not be found/i.test(plain)) {
+    return 'this host is the Vercel SPA, not FastAPI'
+  }
+  return plain.slice(0, 140)
+}
+
 function describeNetworkError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err)
+  if (raw.includes('Vercel SPA') || raw.includes('NOT_FOUND')) {
+    return `desk API missed FastAPI (Vercel has no scanner). Use ${RENDER_API} — cold start can take ~30s`
+  }
   if (raw === 'Failed to fetch' || raw.includes('NetworkError') || raw.includes('Failed to fetch')) {
     const env = (import.meta.env.VITE_QMIE_API || '').trim()
     if (env) {
@@ -31,17 +42,21 @@ function describeNetworkError(err: unknown): string {
   return raw
 }
 
+async function parseScannerJson<T>(res: Response, path: string): Promise<T> {
+  const ct = res.headers.get('content-type') || ''
+  if (!res.ok || !ct.includes('application/json')) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${path}: ${clipBody(text) || res.statusText || ct || 'non-JSON'}`)
+  }
+  return res.json() as Promise<T>
+}
+
 async function getJson<T>(path: string): Promise<T> {
   let last: Error | null = null
   for (const base of BASES) {
     try {
       const res = await fetch(`${base}${path}`)
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        last = new Error(`${res.status} ${path}: ${text || res.statusText}`)
-        continue
-      }
-      return res.json() as Promise<T>
+      return await parseScannerJson<T>(res, path)
     } catch (e) {
       last = e instanceof Error ? e : new Error(String(e))
     }
@@ -62,12 +77,7 @@ async function sendJson<T>(
         headers: body ? { 'content-type': 'application/json' } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       })
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        last = new Error(`${res.status} ${path}: ${text || res.statusText}`)
-        continue
-      }
-      return res.json() as Promise<T>
+      return await parseScannerJson<T>(res, path)
     } catch (e) {
       last = e instanceof Error ? e : new Error(String(e))
     }
