@@ -5,6 +5,20 @@
   "buildCommand": "npm --prefix web run build",
   "outputDirectory": "web/dist",
   "rewrites": [
+    { "source": "/health", "destination": "https://qmie.onrender.com/health" },
+    { "source": "/universe", "destination": "https://qmie.onrender.com/universe" },
+    { "source": "/signals", "destination": "https://qmie.onrender.com/signals" },
+    { "source": "/allocation", "destination": "https://qmie.onrender.com/allocation" },
+    { "source": "/radar", "destination": "https://qmie.onrender.com/radar" },
+    { "source": "/radar/:path*", "destination": "https://qmie.onrender.com/radar/:path*" },
+    { "source": "/screens", "destination": "https://qmie.onrender.com/screens" },
+    { "source": "/guide", "destination": "https://qmie.onrender.com/guide" },
+    { "source": "/paper", "destination": "https://qmie.onrender.com/paper" },
+    { "source": "/paper/:path*", "destination": "https://qmie.onrender.com/paper/:path*" },
+    { "source": "/charts/:path*", "destination": "https://qmie.onrender.com/charts/:path*" },
+    { "source": "/journal", "destination": "https://qmie.onrender.com/journal" },
+    { "source": "/journal/:path*", "destination": "https://qmie.onrender.com/journal/:path*" },
+    { "source": "/agents/:path*", "destination": "https://qmie.onrender.com/agents/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
