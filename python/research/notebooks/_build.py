@@ -455,16 +455,15 @@ eq_full = deq(oos_idx, comp_full)
 eq_is = deq(is_idx, t10["is_trades"])
 
 equity_overlay({
-    "$10k+$100 10× (artifact)": eq_art,
+    "$10k+$100 10×": eq_art,
     "1× same trades": eq_1x,
     "1% compounding": eq_1pct,
-    "full isolated wallet": eq_full,
-}, "OOS TEMA 9/90/199 — daily-marked equity").show()
+}, "OOS TEMA 9/90/199 — 1% isolated book (daily-marked)").show()
+equity_overlay({"full isolated wallet": eq_full}, "OOS TEMA — full isolated wallet (ruin path)").show()
 rolling_sharpe_fig({
-    "artifact": eq_art.pct_change().fillna(0),
-    "1%": eq_1pct.pct_change().fillna(0),
-    "full wallet": eq_full.pct_change().fillna(0),
-}, 90, "OOS 90d rolling Sharpe").show()
+    "1% book": eq_1pct.pct_change().fillna(0),
+    "$100 stake": eq_art.pct_change().fillna(0),
+}, 90, "OOS 90d rolling Sharpe — 1% book").show()
 underwater(eq_art, "OOS DD — $10k+$100 (understated)").show()
 underwater(eq_1pct, "OOS DD — 1% compounding").show()
 underwater(eq_full, "OOS DD — full isolated wallet").show()

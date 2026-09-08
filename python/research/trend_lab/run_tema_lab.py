@@ -113,22 +113,49 @@ def _k_from_trades(index: pd.DatetimeIndex, trades: pd.DataFrame, *, start_eq: f
 
 
 def _verdict_carver(binary: dict, daily: dict, inv: dict, filt: dict) -> str:
-    """Does Carver sizing improve OOS DD without wrecking Sharpe? Filter is a different list."""
+    """Forecast overlay vs inverse-vol vs binary. Filter is a different trade list."""
     b_dd, d_dd = binary.get("max_dd"), daily.get("max_dd")
     b_sh, d_sh = binary.get("sharpe"), daily.get("sharpe")
-    i_sh = inv.get("sharpe")
-    if not all(np.isfinite(x) for x in (b_dd, d_dd, b_sh, d_sh) if x is not None):
+    i_sh, i_dd = inv.get("sharpe"), inv.get("max_dd")
+    needed = (b_dd, d_dd, b_sh, d_sh)
+    if not all(x is not None and np.isfinite(x) for x in needed):
         return "INCONCLUSIVE — not enough finite KPIs"
-    tighter = float(d_dd) > float(b_dd)  # less negative
+    tighter = float(d_dd) > float(b_dd)
     sharpe_ok = float(d_sh) >= float(b_sh) - 0.15
-    fc_helps = np.isfinite(i_sh) and float(d_sh) > float(i_sh) + 0.10
-    if tighter and sharpe_ok and fc_helps:
-        return "PASS — Carver size tightens DD and beats inverse-vol (forecast is doing work)"
+    fc_beats_inv = i_sh is not None and np.isfinite(i_sh) and float(d_sh) > float(i_sh) + 0.10
+    inv_holds = (
+        i_sh is not None and np.isfinite(i_sh)
+        and float(i_sh) >= float(b_sh) - 0.05
+        and (i_dd is None or not np.isfinite(i_dd) or float(i_dd) >= float(b_dd) - 0.01)
+    )
+    if tighter and sharpe_ok and fc_beats_inv:
+        return "PASS — Carver forecast size tightens DD and beats inverse-vol. Still do not write into W_*."
+    if inv_holds and not fc_beats_inv:
+        return (
+            "PARTIAL — inverse-vol sizing holds OOS vs binary; the Carver *forecast* does not beat "
+            "inv-vol. Ship a vol dial on the isolated stake, not Strat 17–19. Do not promote."
+        )
     if tighter and sharpe_ok:
         return "PARTIAL — size tightens DD vs binary; forecast vs inv-vol is not a clear add. Do not promote."
     if tighter:
         return "PARTIAL — tighter DD but Sharpe slipped. Vol dial, not an edge. Do not promote."
     return "FAIL — Carver overlay does not control TEMA OOS drawdown vs binary. Keep constant stake."
+
+
+def _norm(s: pd.Series) -> pd.Series:
+    s = s.dropna()
+    if s.empty or float(s.iloc[0]) == 0:
+        return s
+    return s / s.iloc[0]
+
+
+def _png(series: dict[str, pd.Series], stem: str, *, title: str, ylabel: str, hline: float | None = None) -> None:
+    for root in (ART, LOCAL):
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            write_png_mpl(series, root / f"{stem}.png", title=title, ylabel=ylabel, hline=hline)
+        except Exception as exc:
+            log.warning("png %s: %s", stem, exc)
 
 
 def run(quick: bool = True) -> dict[str, Any]:
@@ -203,40 +230,30 @@ def run(quick: bool = True) -> dict[str, Any]:
     eq_is_10 = _bar_to_daily_eq(is_idx, t10["is_trades"])
     bh_oos = (1.0 + parts["oos"]["close"].resample("1D").last().dropna().pct_change().fillna(0.0)).cumprod()
 
+    # Full-wallet 30× path flattens the 1% book on a shared axis — split the charts.
     fig_eq = equity_overlay({
-        "$10k+$100 10× (artifact)": eq_oos_10,
+        "$10k+$100 10×": eq_oos_10,
         "1× same trades": eq_oos_1,
         "1% compounding": eq_oos_1pct,
-        "full isolated wallet": eq_oos_full,
-    }, "OOS TEMA 9/90/199 — daily-marked equity")
+    }, "OOS TEMA 9/90/199 — 1% isolated book (daily-marked)")
     _save_fig(fig_eq, "tema_oos_equity")
-    write_png_mpl(
-        {
-            "10x $100 stake": eq_oos_10 / eq_oos_10.iloc[0] if len(eq_oos_10) else eq_oos_10,
-            "1% compound": eq_oos_1pct / eq_oos_1pct.iloc[0] if len(eq_oos_1pct) else eq_oos_1pct,
-            "full wallet": eq_oos_full / eq_oos_full.iloc[0] if len(eq_oos_full) else eq_oos_full,
-        },
-        ART / "tema_oos_equity.png",
-        title="OOS frozen TEMA — growth of $1",
+    _png(
+        {"10x $100 stake": _norm(eq_oos_10), "1% compound": _norm(eq_oos_1pct), "1× same trades": _norm(eq_oos_1)},
+        "tema_oos_equity",
+        title="OOS frozen TEMA — 1% book, growth of $1",
         ylabel="Multiple",
     )
-    write_png_mpl(
-        {
-            "10x $100 stake": eq_oos_10 / eq_oos_10.iloc[0] if len(eq_oos_10) else eq_oos_10,
-            "1% compound": eq_oos_1pct / eq_oos_1pct.iloc[0] if len(eq_oos_1pct) else eq_oos_1pct,
-            "full wallet": eq_oos_full / eq_oos_full.iloc[0] if len(eq_oos_full) else eq_oos_full,
-        },
-        LOCAL / "tema_oos_equity.png",
-        title="OOS frozen TEMA — growth of $1",
-        ylabel="Multiple",
-    )
+    _save_fig(equity_overlay({"full isolated wallet": eq_oos_full}, "OOS TEMA — full isolated wallet (ruin path)"), "tema_oos_equity_full")
+    _png({"full wallet": _norm(eq_oos_full)}, "tema_oos_equity_full", title="OOS frozen TEMA — full isolated wallet", ylabel="Multiple")
     _save_fig(underwater(eq_oos_10, "OOS TEMA DD — $10k+$100 (understated)"), "tema_oos_dd_artifact")
     _save_fig(underwater(eq_oos_1pct, "OOS TEMA DD — 1% compounding"), "tema_oos_dd_1pct")
     _save_fig(underwater(eq_oos_full, "OOS TEMA DD — full isolated wallet"), "tema_oos_dd_full")
+    if len(eq_oos_1pct):
+        dd_1 = eq_oos_1pct / eq_oos_1pct.cummax() - 1.0
+        _png({"1% compound DD": dd_1}, "tema_oos_dd_1pct", title="OOS TEMA 1% compounding drawdown", ylabel="DD", hline=0.0)
     if len(eq_oos_full):
         dd_full = eq_oos_full / eq_oos_full.cummax() - 1.0
-        write_png_mpl({"full wallet DD": dd_full}, ART / "tema_oos_dd_full.png", title="OOS TEMA full-wallet drawdown", ylabel="DD", hline=0.0)
-        write_png_mpl({"full wallet DD": dd_full}, LOCAL / "tema_oos_dd_full.png", title="OOS TEMA full-wallet drawdown", ylabel="DD", hline=0.0)
+        _png({"full wallet DD": dd_full}, "tema_oos_dd_full", title="OOS TEMA full-wallet drawdown", ylabel="DD", hline=0.0)
     _save_fig(
         rolling_sharpe_fig({
             "10x $100": eq_oos_10.pct_change().fillna(0.0),
@@ -340,18 +357,7 @@ def run(quick: bool = True) -> dict[str, Any]:
         carver_rows[f"{name}_IS"] = _k_from_trades(is_idx, pack_is[name])
     _save_csv(kpi_table(carver_rows).reset_index().rename(columns={"index": "book"}), "tema_carver_kpis.csv")
     _save_fig(equity_overlay(eq_map, "OOS TEMA — binary vs Carver size (IS-normalized stake)"), "tema_carver_oos_equity")
-    write_png_mpl(
-        {k: (v / v.iloc[0] if len(v) else v) for k, v in eq_map.items()},
-        ART / "tema_carver_oos_equity.png",
-        title="OOS TEMA binary vs Carver size",
-        ylabel="Multiple",
-    )
-    write_png_mpl(
-        {k: (v / v.iloc[0] if len(v) else v) for k, v in eq_map.items()},
-        LOCAL / "tema_carver_oos_equity.png",
-        title="OOS TEMA binary vs Carver size",
-        ylabel="Multiple",
-    )
+    _png({k: _norm(v) for k, v in eq_map.items()}, "tema_carver_oos_equity", title="OOS TEMA binary vs Carver size", ylabel="Multiple")
     if len(eq_map.get("carver_daily", pd.Series(dtype=float))):
         _save_fig(underwater(eq_map["carver_daily"], "OOS TEMA Carver-daily size DD"), "tema_carver_oos_dd")
     _save_fig(
