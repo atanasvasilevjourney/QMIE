@@ -64,8 +64,11 @@ import { resolveApiBases, RENDER_API } from './src/api/bases.ts'
 const cases = {
   local: resolveApiBases(undefined, 'localhost'),
   vercel: resolveApiBases(undefined, 'qmie.vercel.app'),
+  preview: resolveApiBases(undefined, 'qmie-git-desk-api-404-a231.vercel.app'),
+  custom: resolveApiBases(undefined, 'desk.example.com'),
   render: resolveApiBases(undefined, 'qmie.onrender.com'),
   envWins: resolveApiBases('https://custom.example', 'qmie.vercel.app'),
+  envVercelIgnored: resolveApiBases('https://qmie.vercel.app', 'qmie.vercel.app'),
   renderApi: RENDER_API,
 }
 console.log(JSON.stringify(cases))
@@ -81,6 +84,19 @@ console.log(JSON.stringify(cases))
     cases = json.loads(proc.stdout)
     assert cases["local"][0] == "/qmie"
     assert cases["vercel"] == ["https://qmie.onrender.com"]
+    assert cases["preview"] == ["https://qmie.onrender.com"]
+    assert cases["custom"] == ["https://qmie.onrender.com"]
     assert cases["render"] == [""]
-    assert cases["envWins"] == ["https://custom.example"]
+    assert cases["envWins"] == ["https://custom.example", "https://qmie.onrender.com"]
+    assert cases["envVercelIgnored"] == ["https://qmie.onrender.com"]
     assert cases["renderApi"] == "https://qmie.onrender.com"
+
+
+def test_vercel_json_proxies_health_and_radar_to_render():
+    import json
+
+    cfg = json.loads((ROOT / "vercel.json").read_text())
+    sources = {row["source"]: row["destination"] for row in cfg["rewrites"]}
+    assert sources["/health"] == "https://qmie.onrender.com/health"
+    assert sources["/radar"] == "https://qmie.onrender.com/radar"
+    assert sources["/(.*)"] == "/index.html"
