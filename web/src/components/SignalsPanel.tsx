@@ -46,7 +46,11 @@ function breakoutKind(s: SignalRow): 'coil' | 'flip' | 'both' | null {
 
 function fmtWhen(v?: string | null): string {
   if (!v) return '—'
-  return v.replace('T', ' ').replace('+00:00', ' UTC').slice(0, 22)
+  return v
+    .replace('T', ' ')
+    .replace(/\.\d+/, '')
+    .replace(/\+00:00$/, ' UTC')
+    .replace(/Z$/, ' UTC')
 }
 
 function plannedR(s: SignalRow): string {
