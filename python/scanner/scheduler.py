@@ -41,6 +41,13 @@ from .radar import (
     unique_trend_starts,
     overlay_recent_expansions,
 )
+from .alt_selector import (
+    AttentionConfig,
+    AttentionSnapshot,
+    build_attention_snapshot,
+    empty_attention_snapshot,
+)
+from .microstructure import MicrostructureConfig
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
 
@@ -88,6 +95,8 @@ class ScannerScheduler:
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
         radar_dispatch_trend_start: bool = True,
+        attention_enabled: bool = True,
+        attention_cfg: Optional[AttentionConfig] = None,
     ):
         self.client = client
         self.universe = universe
@@ -124,6 +133,23 @@ class ScannerScheduler:
         self._radar_task: Optional[asyncio.Task] = None
         self._radar_warmup_done = False
 
+        # Altcoin attention / microstructure (read-only overlay)
+        self.attention_enabled = attention_enabled
+        self.attention_cfg = attention_cfg or AttentionConfig()
+        try:
+            self.attention_cfg.validate()
+        except ValueError as e:
+            logger.warning("AttentionConfig invalid at init (%s); disabling", e)
+            self.attention_enabled = False
+        self.last_attention: Optional[AttentionSnapshot] = empty_attention_snapshot(
+            enabled=self.attention_enabled,
+            data_source=getattr(client, "name", "okx"),
+        )
+        self._prev_oi: dict[str, float] = {}
+        self._last_attention_at: float = 0.0
+        self._attention_lock = asyncio.Lock()
+        self._attention_task: Optional[asyncio.Task] = None
+
         # tf → unix-sec of the most recent bar we've already scanned
         self._last_seen: dict[str, int] = {}
         self._task: Optional[asyncio.Task] = None
@@ -137,6 +163,9 @@ class ScannerScheduler:
             "radar_passes": 0,
             "last_radar_at": None,
             "radar_errors": 0,
+            "attention_passes": 0,
+            "last_attention_at": None,
+            "attention_errors": 0,
         }
 
     # ─── Lifecycle ───────────────────────────────────────────────────────
@@ -226,6 +255,14 @@ class ScannerScheduler:
                     self.stats["radar_errors"] += 1
                     self.stats["errors"] += 1
 
+        if self.attention_enabled:
+            refresh = max(60, int(self.attention_cfg.refresh_sec))
+            if now - self._last_attention_at >= refresh:
+                if not self._attention_lock.locked() and (
+                    self._attention_task is None or self._attention_task.done()
+                ):
+                    self._attention_task = asyncio.create_task(self._attention_pass())
+
     async def request_radar_once(self, *, notify: bool = False) -> dict[str, Any]:
         """Coalesced manual/admin radar pass. Returns status for the HTTP layer."""
         if not self.radar_enabled:
@@ -238,6 +275,75 @@ class ScannerScheduler:
             self._radar_pass(notify=notify, mark_seen=False)
         )
         return {"ok": True, "queued": True, "notify": notify}
+
+    async def request_attention_once(self) -> dict[str, Any]:
+        """Coalesced manual/admin attention pass."""
+        if not self.attention_enabled:
+            return {"ok": False, "queued": False, "reason": "attention_disabled"}
+        if self._attention_lock.locked() or (
+            self._attention_task is not None and not self._attention_task.done()
+        ):
+            return {"ok": True, "queued": False, "already_running": True}
+        self._attention_task = asyncio.create_task(self._attention_pass())
+        return {"ok": True, "queued": True}
+
+    async def _attention_pass(self) -> bool:
+        """Microstructure + altcoin attention rank. Read-only — no dispatch."""
+        async with self._attention_lock:
+            cfg = self.attention_cfg
+            radar_rows = (
+                self.last_radar.rows if self.last_radar is not None else []
+            )
+            tema_syms: set[str] = set()
+            try:
+                db = getattr(self.dispatcher, "db", None)
+                if db is not None:
+                    recent = await db.recent_signals(limit=80)
+                    for row in recent:
+                        g = str(row.get("grade") or "")
+                        if g in ("A", "A+"):
+                            tema_syms.add(str(row.get("symbol") or "").upper())
+            except Exception:
+                logger.debug("attention: tema symbol lookup skipped", exc_info=True)
+
+            t0 = time.time()
+            try:
+                snap, new_oi = await build_attention_snapshot(
+                    self.client,
+                    cfg=cfg,
+                    prev_oi=self._prev_oi,
+                    radar_rows=radar_rows,
+                    tema_symbols=tema_syms,
+                    sem=self.sem,
+                )
+            except Exception as e:
+                logger.exception("Attention pass failed")
+                self.stats["attention_errors"] += 1
+                self.stats["errors"] += 1
+                self.last_attention = AttentionSnapshot(
+                    as_of=None,
+                    status="error",
+                    data_source=self.client.name,
+                    count=0,
+                    note=str(e),
+                    enabled=True,
+                )
+                return False
+
+            self._prev_oi = new_oi
+            self.last_attention = snap
+            self._last_attention_at = time.time()
+            self.stats["attention_passes"] += 1
+            self.stats["last_attention_at"] = int(time.time())
+            logger.info(
+                "Attention pass done in %.2fs: n=%d status=%s top=%s",
+                time.time() - t0,
+                snap.count,
+                snap.status,
+                snap.rows[0]["symbol"] if snap.rows else "—",
+            )
+            return snap.status == "ready"
+
     # ─── One scan pass at one timeframe ──────────────────────────────────
     async def _scan_pass(self, tf: str) -> None:
         symbols = await self.universe.get()
