@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     scan_min_24h_quote_volume: float = 50_000_000.0   # $50M filter
 
     # Timeframes to scan. Pine alert syntax: 15m / 1h / 4h / 1d
-    scan_timeframes: str = "1h,4h"
+    scan_timeframes: str = "4h"
     # How often the dispatcher loop wakes up (seconds). It only ACTUALLY
     # scans a timeframe when its bar closes, so this can be tight.
     scan_loop_interval_sec: int = 30
