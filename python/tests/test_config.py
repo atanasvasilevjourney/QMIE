@@ -32,6 +32,11 @@ class TestProperties:
         s = Settings(scan_timeframes="1H,4H,1D", webhook_secret="x")
         assert s.timeframes_list == ["1h", "4h", "1d"]
 
+    def test_default_scan_timeframes_is_4h_only(self):
+        s = Settings(webhook_secret="x")
+        assert s.scan_timeframes == "4h"
+        assert s.timeframes_list == ["4h"]
+
     def test_htf_map_parses(self):
         s = Settings(scan_htf_map="1h:4h, 4h:1d , 1d:1w",
                      webhook_secret="x")
