@@ -92,6 +92,27 @@ console.log(JSON.stringify(cases))
     assert cases["renderApi"] == "https://qmie.onrender.com"
 
 
+def test_orbit_logo_pngs_cover_crypto_logo_ids():
+    src = (ROOT / "web" / "src" / "cryptoLogos.ts").read_text()
+    ids = []
+    in_list = False
+    for line in src.splitlines():
+        if "export const CRYPTO_LOGOS" in line:
+            in_list = True
+            continue
+        if in_list and line.strip().startswith("]"):
+            break
+        if in_list:
+            token = line.strip().strip("',")
+            if token:
+                ids.append(token)
+    assert "btc" in ids and "eth" in ids and "near" in ids
+    missing = [i for i in ids if not (ROOT / "web" / "public" / "crypto" / f"{i}.png").is_file()]
+    assert not missing, f"missing orbit logos: {missing}"
+    assert "logoUrl" in src
+    assert "import.meta.glob" in src
+
+
 def test_vercel_json_proxies_health_and_radar_to_render():
     import json
 

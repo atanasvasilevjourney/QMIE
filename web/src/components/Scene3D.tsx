@@ -13,7 +13,7 @@ import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocess
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import type { RadarSnapshot } from '../types'
-import { LOGO_HALO, orbitLogoIds, type CryptoLogoId } from '../cryptoLogos'
+import { LOGO_HALO, CRYPTO_LOGOS, logoUrl, orbitLogoIds, type CryptoLogoId } from '../cryptoLogos'
 
 const CYAN = '#5ee9f2'
 const MAGENTA = '#ff4d9a'
@@ -163,29 +163,32 @@ function OrbitRail({
 }
 
 function LogoCoin({ id }: { id: CryptoLogoId }) {
-  const tex = useLoader(THREE.TextureLoader, `/crypto/${id}.png`)
+  const tex = useLoader(THREE.TextureLoader, logoUrl(id))
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 8
+  tex.generateMipmaps = true
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.magFilter = THREE.LinearFilter
   tex.needsUpdate = true
   const halo = LOGO_HALO[id] ?? CYAN
 
   return (
     <Billboard follow>
       <mesh>
-        <circleGeometry args={[0.128, 48]} />
-        <meshBasicMaterial color="#080c12" />
+        <circleGeometry args={[0.2, 48]} />
+        <meshBasicMaterial color="#080c12" toneMapped={false} />
       </mesh>
-      <mesh position={[0, 0, 0.004]}>
-        <circleGeometry args={[0.108, 48]} />
-        <meshBasicMaterial map={tex} toneMapped={false} transparent />
+      <mesh position={[0, 0, 0.006]}>
+        <circleGeometry args={[0.168, 48]} />
+        <meshBasicMaterial map={tex} toneMapped={false} transparent depthWrite={false} />
       </mesh>
-      <mesh position={[0, 0, -0.01]}>
-        <ringGeometry args={[0.13, 0.148, 48]} />
+      <mesh position={[0, 0, -0.008]}>
+        <ringGeometry args={[0.205, 0.228, 48]} />
         <meshBasicMaterial
           color={halo}
+          toneMapped={false}
           transparent
-          opacity={0.62}
-          blending={THREE.AdditiveBlending}
+          opacity={0.38}
           depthWrite={false}
           side={THREE.DoubleSide}
         />
@@ -366,9 +369,9 @@ function StudioLights() {
 function UniverseFX() {
   return (
     <EffectComposer multisampling={0}>
-      <Bloom intensity={0.95} luminanceThreshold={0.22} luminanceSmoothing={0.4} mipmapBlur />
-      <Noise opacity={0.018} />
-      <Vignette eskil={false} offset={0.22} darkness={0.72} />
+      <Bloom intensity={0.55} luminanceThreshold={0.72} luminanceSmoothing={0.35} mipmapBlur />
+      <Noise opacity={0.014} />
+      <Vignette eskil={false} offset={0.22} darkness={0.62} />
     </EffectComposer>
   )
 }
@@ -397,6 +400,11 @@ export function Scene3D({
     const symbols = radar?.rows?.map((r) => r.symbol) ?? []
     return orbitLogoIds(symbols, innerCount + midCount + outerCount)
   }, [radar])
+  useEffect(() => {
+    for (const id of CRYPTO_LOGOS) {
+      useLoader.preload(THREE.TextureLoader, logoUrl(id))
+    }
+  }, [])
   const innerLogos = logos.slice(0, innerCount)
   const midLogos = logos.slice(innerCount, innerCount + midCount)
   const outerLogos = logos.slice(innerCount + midCount, innerCount + midCount + outerCount)

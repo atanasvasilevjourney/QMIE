@@ -119,6 +119,17 @@ export function orbitLogoIds(radarSymbols: string[], count: number): CryptoLogoI
 
 const imageCache = new Map<string, Promise<HTMLImageElement>>()
 
+const LOGO_URLS = import.meta.glob('../public/crypto/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>
+
+export function logoUrl(id: string): string {
+  const hit = Object.entries(LOGO_URLS).find(([path]) => path.endsWith(`/${id}.png`))
+  return hit?.[1] ?? `/crypto/${id}.png`
+}
+
 export function loadCryptoLogo(id: string): Promise<HTMLImageElement> {
   let pending = imageCache.get(id)
   if (!pending) {
@@ -127,7 +138,7 @@ export function loadCryptoLogo(id: string): Promise<HTMLImageElement> {
       img.decoding = 'async'
       img.onload = () => resolve(img)
       img.onerror = () => reject(new Error(`logo ${id}`))
-      img.src = `/crypto/${id}.png`
+      img.src = logoUrl(id)
     })
     imageCache.set(id, pending)
   }
