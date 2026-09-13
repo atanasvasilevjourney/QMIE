@@ -82,7 +82,7 @@ export function TopBar({
           </div>
         </div>
 
-        <nav className="flex flex-wrap gap-1" aria-label="Desk sections">
+        <nav className="flex flex-wrap gap-1.5 lg:hidden" aria-label="Desk sections">
           {TABS.map((t) => {
             const active = tab === t.id
             return (

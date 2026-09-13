@@ -119,7 +119,7 @@ export function SignalsPanel({
   )
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-8 xl:grid-cols-2">
       <StrategyTable
         title="Daily expansion"
         subtitle="Spot book · 1D coil-UP long / coil-DOWN short · prior-box SL · no leverage · no TEMA TP. Chart opens spot 1D."
@@ -213,7 +213,7 @@ function StrategyTable({
   const [openId, setOpenId] = useState<number | null>(null)
   return (
     <PanelShell title={title} subtitle={`${subtitle} · ${rows.length} row${rows.length === 1 ? '' : 's'}`}>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {rows.map((s) => (
           <SignalCard
             key={s.id}
@@ -278,7 +278,7 @@ function SignalCard({
               : 'border-line bg-panel'
       }`}
     >
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4" aria-expanded={open}>
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-5" aria-expanded={open}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-base font-medium tabular text-ink">{s.symbol}</span>

@@ -250,6 +250,192 @@ html[data-theme="light"] .hud * {
   text-wrap: pretty;
 }
 
+.lede-wide {
+  max-width: 52rem;
+}
+
+.desk-shell {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.desk-sidebar {
+  position: sticky;
+  top: 5.5rem;
+  width: 13.5rem;
+  flex-shrink: 0;
+  padding: 1rem 0 2rem;
+}
+
+.desk-sidebar-kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 0 0.75rem 0.5rem;
+}
+
+.desk-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.desk-sidebar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.625rem;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.desk-sidebar-item:hover {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+}
+
+.desk-sidebar-item-on {
+  background: color-mix(in oklab, var(--color-cyan) 12%, var(--color-panel));
+  border-color: color-mix(in oklab, var(--color-cyan) 35%, var(--color-line));
+}
+
+.desk-sidebar-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.desk-sidebar-item-on .desk-sidebar-label {
+  color: var(--color-cyan);
+}
+
+.desk-sidebar-hint {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.module-card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+html[data-theme="light"] .module-card {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.module-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-line);
+  background: color-mix(in oklab, var(--color-surface) 55%, var(--color-panel));
+}
+
+.module-card-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
+.module-card-subtitle {
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+  max-width: 48rem;
+}
+
+.module-card-body {
+  padding: 1.5rem;
+}
+
+.module-card-footer {
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--color-line);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-muted);
+}
+
+.module-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .module-grid {
+    gap: 2rem;
+  }
+}
+
+.stat-tile {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  padding: 1rem 1.15rem;
+}
+
+.stat-tile-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.stat-tile-value {
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-ink);
+}
+
+.stat-tile-hint {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.stat-tile-lime { border-color: color-mix(in oklab, var(--color-lime) 35%, var(--color-line)); }
+.stat-tile-lime .stat-tile-value { color: var(--color-lime); }
+.stat-tile-magenta { border-color: color-mix(in oklab, var(--color-magenta) 35%, var(--color-line)); }
+.stat-tile-magenta .stat-tile-value { color: var(--color-magenta); }
+.stat-tile-cyan { border-color: color-mix(in oklab, var(--color-cyan) 35%, var(--color-line)); }
+.stat-tile-cyan .stat-tile-value { color: var(--color-cyan); }
+.stat-tile-amber { border-color: color-mix(in oklab, var(--color-amber) 35%, var(--color-line)); }
+.stat-tile-amber .stat-tile-value { color: var(--color-amber); }
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

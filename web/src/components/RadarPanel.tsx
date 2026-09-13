@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { RadarRow, RadarSnapshot } from '../types'
+import { EmptyNote, ModuleCard, StatTile } from './layout/ModuleCard'
 
 function radarBias(green: number, red: number, fallback?: string | null): string {
   if (fallback && fallback !== 'UNKNOWN') return fallback
@@ -11,7 +12,11 @@ function radarBias(green: number, red: number, fallback?: string | null): string
 
 export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   if (!radar) {
-    return <PanelShell title="Trend Radar" subtitle="Loading…"><Empty>Connecting to /radar</Empty></PanelShell>
+    return (
+      <ModuleCard title="Trend Radar" subtitle="Loading…">
+        <EmptyNote>Connecting to /radar</EmptyNote>
+      </ModuleCard>
+    )
   }
   const scanned = radar.succeeded ?? radar.count
   const requested = radar.requested || radar.count
@@ -24,29 +29,33 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   const incomplete = radar.status === 'incomplete'
   const btc = radar.btc_color ?? radar.rows?.find((r) => r.symbol === 'BTCUSDT')?.color
   const bias = radarBias(radar.green, radar.red, radar.bias)
+  const statusLine = `${radar.status ?? 'Ready'} · closed ${asOf} · ${scanned}/${requested}${coverage != null ? ` · ${coverage}%` : ''}`
+
   return (
-    <PanelShell
-      title="Trend Radar — spot 1D book"
-      subtitle={`${radar.status ?? 'Ready'} · closed through ${asOf} · ${scanned} of ${requested}${coverage != null ? ` (${coverage}%)` : ''} · enter 25 / exit 20 · spot · not leverage · not a QMIE grade`}
+    <ModuleCard
+      title="Trend Radar"
+      subtitle={`Spot 1D context · ${statusLine} · ADX enter 25 / exit 20 · not a QMIE grade`}
+      footer="Trend Radar is the spot book. Expansions are coil-UP/DOWN with prior-box stop. TEMA is the leveraged add. Early long = GREY coil pressing highs. Manual only."
     >
       {incomplete && (
-        <p className="empty-note mb-3">
+        <p className="empty-note mb-5">
           Incomplete map — {radar.failed ?? 0} symbol{(radar.failed ?? 0) === 1 ? '' : 's'} failed.
           Breadth and Orbit tint are not a full-universe read.
         </p>
       )}
-      <div className="mb-3 flex flex-wrap gap-2 font-mono text-sm tabular">
-        <span className="rounded-md border border-line px-2 py-1 text-ink">bias {bias}</span>
-        <span className="rounded-md border border-line px-2 py-1 text-muted">G &gt; 1.2× R · grey ignored</span>
-        <span className="rounded-md border border-line px-2 py-1 text-ink">BTC {btc ?? '—'}</span>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <span className="meta-chip">bias {bias}</span>
+        <span className="meta-chip text-muted">G &gt; 1.2× R</span>
+        <span className="meta-chip">BTC {btc ?? '—'}</span>
       </div>
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        <Stat label="Green" value={radar.green} tone="lime" />
-        <Stat label="Grey" value={radar.grey} tone="chrome" />
-        <Stat label="Red" value={radar.red} tone="magenta" />
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile label="Green" value={radar.green} tone="lime" />
+        <StatTile label="Grey" value={radar.grey} hint="coil regime" />
+        <StatTile label="Red" value={radar.red} tone="magenta" />
+        <StatTile label="Coverage" value={coverage != null ? `${coverage}%` : '—'} tone="cyan" />
       </div>
       <RadarBreadth green={radar.green} grey={radar.grey} red={radar.red} />
-      <div className="mt-4 grid gap-5 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 xl:grid-cols-2">
         <Bucket title="Fresh GREEN" rows={radar.fresh_green} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket title="Fresh RED" rows={radar.fresh_red} render={(r) => `d${r.days_in_state} ${fmtPct(r.pct_since_flip)} ADX${r.adx}`} />
         <Bucket
@@ -73,13 +82,7 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
         <Bucket title="Late GREEN" rows={radar.late_stage_green} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
         <Bucket title="Late RED" rows={radar.late_stage_red ?? []} render={(r) => `d${r.days_in_state} ADX${r.adx}`} />
       </div>
-      <p className="lede mt-4">
-        Trend Radar is the spot book. Expansions are 1D coil-UP with a prior-box stop and no TEMA TP.
-        {' '}TEMA BUY is the leveraged USDT-perp add (printed 1.5/2.5 ATR). Color-flip stays unranked spot context.
-        Early long is a GREY coil pressing the box high; it is not clip 1 until coil-UP.
-        Confirm on the visualizer. Manual only — QMIE never sets leverage.
-      </p>
-    </PanelShell>
+    </ModuleCard>
   )
 }
 
@@ -94,15 +97,15 @@ function Bucket({
 }) {
   const count = rows?.length ?? 0
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h3 className="text-[0.9375rem] font-semibold text-ink">{title}</h3>
+    <div className="module-bucket">
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-line pb-2">
+        <h3 className="text-sm font-semibold tracking-tight text-ink">{title}</h3>
         <span className="font-mono text-sm tabular text-muted">{count}</span>
       </div>
       {count === 0 ? (
         <p className="empty-note">None yet</p>
       ) : (
-        <div className="max-h-72 space-y-2 overflow-auto pr-1">
+        <div className="max-h-80 space-y-3 overflow-auto pr-1">
           {rows.slice(0, 12).map((r, i) => (
             <RadarRowCard
               key={`${title}-${i}-${String(r.symbol)}`}
@@ -176,17 +179,7 @@ function RadarBreadth({ green, grey, red }: { green: number; grey: number; red: 
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
-  const color =
-    tone === 'lime' ? 'text-lime border-lime/40' : tone === 'magenta' ? 'text-magenta border-magenta/40' : 'text-ink border-line'
-  return (
-    <div className={`rounded-lg border bg-panel px-4 py-3 ${color}`}>
-      <div className="text-sm font-semibold text-muted">{label}</div>
-      <div className="font-mono text-2xl tabular">{value}</div>
-    </div>
-  )
-}
-
+/** @deprecated use ModuleCard — kept for panels not yet migrated */
 export function PanelShell({
   title,
   subtitle,
@@ -199,21 +192,14 @@ export function PanelShell({
   action?: ReactNode
 }) {
   return (
-    <section className="glass relative overflow-hidden rounded-xl p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
-          {subtitle && <p className="mt-1 max-w-4xl text-sm leading-relaxed text-muted">{subtitle}</p>}
-        </div>
-        {action}
-      </div>
+    <ModuleCard title={title} subtitle={subtitle} action={action}>
       {children}
-    </section>
+    </ModuleCard>
   )
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="empty-note">{children}</p>
+  return <EmptyNote>{children}</EmptyNote>
 }
 
 function fmtPct(v?: number | null) {

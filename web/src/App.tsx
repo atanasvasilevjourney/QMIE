@@ -14,6 +14,8 @@ import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
 import { ChartsPanel } from './components/ChartsPanel'
 import { ScreensPanel } from './components/ScreensPanel'
+import { DeskShell, DeskSidebar } from './components/layout/DeskShell'
+import { PageHeader } from './components/layout/ModuleCard'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
@@ -97,12 +99,13 @@ export default function App() {
         onTheme={toggleTheme}
       />
 
-      <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
+      <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-8 sm:px-8 lg:py-10">
+        <DeskShell sidebar={<DeskSidebar tab={tab} onTab={setTab} />}>
         {(desk.error || radarMsg) && (
           <div
             role="status"
             aria-live="polite"
-            className={`mb-5 rounded-xl border px-4 py-3 text-sm ${
+            className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
               desk.error || radarFailed
                 ? 'border-magenta/40 bg-magenta/10 text-magenta'
                 : 'border-cyan/40 bg-cyan/10 text-cyan'
@@ -123,25 +126,21 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="kicker">Landing</p>
-                  <h2 className="page-title">
-                    Orbis <span className="text-cyan">Universe</span>
-                  </h2>
-                  <p className="lede">
-                    Glass core and famous crypto logos on the rails. Radar and strategy tables live
-                    on Ops. Signal-only — never orders.
-                  </p>
-                </div>
-                <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">
-                  Open Ops
-                </button>
-              </div>
+              <PageHeader
+                kicker="Landing"
+                title="Orbis"
+                highlight="Universe"
+                lede="Glass core and crypto logos on the rails. Radar and strategy tables live on Ops. Signal-only — never orders."
+                actions={
+                  <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">
+                    Open Ops
+                  </button>
+                }
+              />
               <div className="h-[min(78vh,860px)] min-h-[520px]">
                 <Scene3D radar={desk.radar} signalCount={desk.signals.length} allowZoom />
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
                 <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
                 <MiniStat label="Signals" value={desk.signals.length} tone="text-cyan" />
                 <MiniStat label="Universe" value={desk.universeCount} tone="text-lime" />
@@ -162,28 +161,57 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
-              className="grid gap-5"
+              className="module-grid"
             >
-              <div>
-                <p className="kicker">Operations</p>
-                <h2 className="page-title">
-                  Radar + <span className="text-cyan">strategy tables</span>
-                </h2>
-                <p className="lede">
-                  Trend Radar is the spot book (1D coil-UP expansions). TEMA BUY is the
-                  leveraged USDT-perp add. Never orders.
-                </p>
-              </div>
-              <RadarPanel radar={desk.radar} />
-              {desk.paper && (
-                <div className="card rounded-xl px-4 py-3 text-sm text-muted">
-                  Paper book · {desk.paper.open} open · {desk.paper.closed} closed · PnL{' '}
-                  <span className={desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}>
-                    {desk.paper.closed_pnl}
-                  </span>{' '}
-                  USDT · never orders
+              <PageHeader
+                kicker="Operations"
+                title="Radar +"
+                highlight="strategy tables"
+                lede="Trend Radar is the spot book (1D coil-UP). TEMA BUY is the leveraged USDT-perp add. Never orders."
+              />
+              <div className="grid gap-8 xl:grid-cols-12">
+                <div className="xl:col-span-8">
+                  <RadarPanel radar={desk.radar} />
                 </div>
-              )}
+                <aside className="module-grid xl:col-span-4">
+                  {desk.paper && (
+                    <div className="module-card">
+                      <header className="module-card-header">
+                        <h2 className="module-card-title">Paper book</h2>
+                      </header>
+                      <div className="module-card-body grid gap-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <MiniStat label="Open" value={desk.paper.open} tone="text-cyan" />
+                          <MiniStat label="Closed" value={desk.paper.closed} tone="text-muted" />
+                        </div>
+                        <p className="text-sm text-muted">
+                          PnL{' '}
+                          <span className={`font-mono tabular ${desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}`}>
+                            {desk.paper.closed_pnl} USDT
+                          </span>
+                          · never orders
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="module-card">
+                    <header className="module-card-header">
+                      <h2 className="module-card-title">Quick read</h2>
+                    </header>
+                    <div className="module-card-body space-y-3 text-sm text-muted">
+                      <p>
+                        <span className="font-semibold text-ink">Spot:</span> Radar expansions &amp; daily flip
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink">Leverage:</span> TEMA A/A+ on 4h
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink">Alerts:</span> Discord / Telegram on the API host
+                      </p>
+                    </div>
+                  </div>
+                </aside>
+              </div>
               <SignalsPanel
                 signals={desk.signals}
                 selectedId={selected?.id}
@@ -201,16 +229,12 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-5">
-                <p className="kicker">Screens</p>
-                <h2 className="page-title">
-                  Combo <span className="text-cyan">review list</span>
-                </h2>
-                <p className="lede">
-                  Unique symbols from leveraged 4h A/A+, spot daily expansions, color-flip,
-                  coils, and the ranked book. Not a new score. Never orders.
-                </p>
-              </div>
+              <PageHeader
+                kicker="Screens"
+                title="Combo"
+                highlight="review list"
+                lede="Unique symbols from 4h A/A+, spot expansions, color-flip, coils, and ranked book. Not a new score."
+              />
               <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />
             </motion.div>
           )}
@@ -223,15 +247,12 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-5">
-                <p className="kicker">Charts</p>
-                <h2 className="page-title">
-                  Equity + <span className="text-cyan">visualised trades</span>
-                </h2>
-                <p className="lede">
-                  SVG from closed fills and closed klines. Not TradingView. Not an order ticket.
-                </p>
-              </div>
+              <PageHeader
+                kicker="Charts"
+                title="Equity +"
+                highlight="visualised trades"
+                lede="SVG from closed fills and closed klines. Not TradingView. Not an order ticket."
+              />
               <ChartsPanel
                 focusSymbol={chartFocus?.symbol}
                 focusTimeframe={chartFocus?.timeframe}
@@ -306,6 +327,7 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        </DeskShell>
       </main>
 
       <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-sm text-muted">
@@ -327,7 +349,7 @@ function MiniStat({
   mono?: boolean
 }) {
   return (
-    <div className="card rounded-xl px-4 py-3">
+    <div className="stat-tile">
       <div className="text-sm font-semibold text-muted">{label}</div>
       <div className={`mt-1 ${mono ? 'font-mono text-xl tabular' : 'font-mono text-base tabular'} ${tone}`}>{value}</div>
     </div>
