@@ -1,7 +1,27 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { JournalFill, JournalStats, SignalRow } from '../types'
+import { formatPrice } from '../lib/formatPrice'
 import { Empty, PanelShell } from './RadarPanel'
+
+function journalStatsLine(stats: JournalStats): string {
+  const paper = stats.by_source?.paper
+  const manual = stats.by_source?.manual
+  const hasSplit = stats.by_source != null
+  const h1 = stats.by_timeframe?.['1h'] ?? stats.by_timeframe?.['1H'] ?? 0
+  const h4 = stats.by_timeframe?.['4h'] ?? stats.by_timeframe?.['4H'] ?? 0
+  const m4 = stats.manual_4h_closed ?? 0
+  const pooled =
+    `win ${stats.win_pct}% is pooled journal — not frozen OOS · avg R ${stats.avg_realized_r ?? '—'}`
+  if (!hasSplit) {
+    return `A/A+ closed ${stats.closed} · ${pooled}`
+  }
+  return (
+    `A/A+ closed ${stats.closed} · paper ${paper ?? 0} / manual ${manual ?? 0} · 1h ${h1} / 4h ${h4} · ` +
+    `${pooled} · manual 4h ${m4}/30 · ` +
+    (stats.oos_edge || '4h A/A+ OOS 49.1% / E[R] +0.309')
+  )
+}
 
 export function JournalFlow({
   selected,
@@ -27,6 +47,14 @@ export function JournalFlow({
     () => fills.filter((f) => !f.exit_price || f.outcome === 'OPEN'),
     [fills],
   )
+
+  useEffect(() => {
+    if (!selected?.signal_price) {
+      setFillPrice('')
+      return
+    }
+    setFillPrice(String(selected.signal_price))
+  }, [selected?.id, selected?.signal_price])
 
   async function createFill() {
     if (!selected) return
@@ -82,19 +110,35 @@ export function JournalFlow({
         subtitle={
           selected
             ? `Selected signal #${selected.id} ${selected.symbol} ${selected.side}/${selected.grade}`
-            : 'Select a signal on OPS (TEMA or Daily breakout DETAILS) to start'
+            : 'Select a signal on OPS (spot Daily expansion, leveraged TEMA BUY, or color-flip DETAILS) to start'
         }
       >
-        <ol className="mb-4 space-y-2 font-mono text-[11px] text-chrome/70">
-          <li>1. Pick an alert from OPS strategy tables</li>
-          <li>2. Enter your real fill price & size</li>
-          <li>3. Optional exit → realized R (needs stop_loss on signal)</li>
-          <li>4. Sync — compare vs OOS baseline later</li>
+        <ol className="mb-4 space-y-2 text-sm leading-relaxed text-muted">
+          <li>1. OPS → strategy row → <strong className="text-ink">Journal</strong> (not Details only), or Screens → Track manually</li>
+          <li>2. Fill price pre-fills from scanner entry — edit if your fill differed</li>
+          <li>3. Optional exit → realized R (uses signal stop_loss)</li>
+          <li>4. Pooled win% is not frozen OOS. Need 30 manual 4h A/A+ fills</li>
         </ol>
+        {selected && (selected.signal_price != null || selected.stop_loss != null) && (
+          <div className="alert-level-grid mb-4">
+            <div className="stat-tile stat-tile-cyan">
+              <div className="stat-tile-label">Scanner entry</div>
+              <div className="stat-tile-value">{formatPrice(selected.signal_price)}</div>
+            </div>
+            <div className="stat-tile stat-tile-magenta">
+              <div className="stat-tile-label">Stop</div>
+              <div className="stat-tile-value">{formatPrice(selected.stop_loss)}</div>
+            </div>
+            <div className="stat-tile stat-tile-lime">
+              <div className="stat-tile-label">Target</div>
+              <div className="stat-tile-value">{formatPrice(selected.take_profit)}</div>
+            </div>
+          </div>
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Fill price" value={fillPrice} onChange={setFillPrice} placeholder={String(selected?.signal_price ?? '')} />
-          <Field label="Size" value={size} onChange={setSize} />
-          <Field label="Exit price" value={exitPrice} onChange={setExitPrice} placeholder="optional" />
+          <Field label="Size (base coins, cash math only)" value={size} onChange={setSize} />
+          <Field label="Exit price" value={exitPrice} onChange={setExitPrice} placeholder="optional…" />
           <Field label="Notes" value={notes} onChange={setNotes} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -102,41 +146,42 @@ export function JournalFlow({
             type="button"
             disabled={!selected || busy}
             onClick={() => void createFill()}
-            className="rounded-2xl border border-lime/40 bg-lime/10 px-5 py-3 font-display text-xs tracking-widest text-lime disabled:opacity-40"
+            className="btn btn-ok"
           >
-            LOG FILL
+            Log fill
           </button>
         </div>
-        {msg && <p className="mt-3 font-mono text-[11px] text-cyan/80">{msg}</p>}
+        {msg && <p className="mt-3 text-sm text-cyan">{msg}</p>}
       </PanelShell>
 
       <PanelShell
         title="Fills & Stats"
         subtitle={
           stats
-            ? `A/A+ win ${stats.win_pct}% · closed ${stats.closed} · avg R ${stats.avg_realized_r ?? '—'}`
+            ? journalStatsLine(stats)
             : '—'
         }
       >
         <div className="mb-3 grid grid-cols-3 gap-2">
-          <Mini label="FILLS" value={stats?.fills ?? fills.length} />
-          <Mini label="WINS" value={stats?.wins ?? 0} />
-          <Mini label="LOSSES" value={stats?.losses ?? 0} />
+          <Mini label="Fills" value={stats?.fills ?? fills.length} />
+          <Mini label="Wins" value={stats?.wins ?? 0} />
+          <Mini label="Losses" value={stats?.losses ?? 0} />
         </div>
         <div className="max-h-64 space-y-2 overflow-auto">
           {fills.map((f) => (
             <div key={f.id} className="card rounded-2xl px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[11px] text-ink">
+                <span className="font-mono text-sm text-ink">
                   #{f.id} {f.symbol || `sig ${f.signal_id}`} {f.side || ''} {f.grade || ''}{' '}
-                  {f.source === 'paper' ? 'PAPER' : ''}
+                  {f.source === 'paper' ? 'Paper' : ''}
                 </span>
-                <span className="font-mono text-[10px] text-chrome/60">{f.outcome}</span>
+                <span className="font-mono text-sm text-muted">{f.outcome}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-chrome/55">
-                <span>
-                  {f.fill_price} → {f.exit_price ?? 'open'} · sz {f.size}
+              <div className="mt-1 flex items-center justify-between font-mono text-sm text-muted">
+                <span className="tabular">
+                  {formatPrice(f.fill_price)} → {f.exit_price != null ? formatPrice(f.exit_price) : 'open'} · sz {f.size}
                   {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
+                  {f.realized_r != null ? ` · ${f.realized_r.toFixed(2)}R` : ''}
                   {f.exit_reason ? ` · ${f.exit_reason}` : ''}
                 </span>
                 <span className="flex gap-3">
@@ -144,9 +189,9 @@ export function JournalFlow({
                     <button
                       type="button"
                       onClick={() => onViewChart(f.symbol as string, f.timeframe)}
-                      className="text-cyan hover:underline"
+                      className="btn btn-sm btn-accent"
                     >
-                      CHART
+                      Chart
                     </button>
                   )}
                   {!f.exit_price && (
@@ -154,9 +199,9 @@ export function JournalFlow({
                       type="button"
                       disabled={busy}
                       onClick={() => void closeFill(f.id)}
-                      className="text-magenta hover:underline"
+                      className="btn btn-sm btn-warn"
                     >
-                      CLOSE
+                      Close
                     </button>
                   )}
                 </span>
@@ -166,7 +211,7 @@ export function JournalFlow({
           {!fills.length && <Empty>No journal fills yet</Empty>}
         </div>
         {!!openFills.length && (
-          <p className="mt-2 font-mono text-[10px] text-amber">{openFills.length} open fill(s)</p>
+          <p className="mt-2 text-sm text-amber">{openFills.length} open fill(s)</p>
         )}
       </PanelShell>
     </div>
@@ -186,12 +231,16 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="font-display text-[9px] tracking-widest text-chrome/50 uppercase">{label}</span>
+      <span className="field-label">{label}</span>
       <input
+        name={label.toLowerCase().replace(/\s+/g, '_')}
+        autoComplete="off"
+        spellCheck={false}
+        inputMode={label.toLowerCase().includes('price') || label === 'Size' ? 'decimal' : undefined}
         value={value}
-        placeholder={placeholder}
+        placeholder={placeholder || undefined}
         onChange={(e) => onChange(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-4 py-3 font-mono text-sm text-ink outline-none focus:border-cyan/50"
+        className="field-input"
       />
     </label>
   )
@@ -200,8 +249,8 @@ function Field({
 function Mini({ label, value }: { label: string; value: number }) {
   return (
     <div className="card rounded-xl px-2 py-2">
-      <div className="font-display text-[9px] tracking-widest text-chrome/50">{label}</div>
-      <div className="font-mono text-lg text-cyan">{value}</div>
+      <div className="text-sm font-semibold text-muted">{label}</div>
+      <div className="font-mono text-lg tabular text-cyan">{value}</div>
     </div>
   )
 }

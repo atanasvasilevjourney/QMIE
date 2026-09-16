@@ -343,7 +343,9 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             sql = """
-                SELECT f.outcome, f.realized_r, f.pnl, s.grade
+                SELECT f.outcome, f.realized_r, f.pnl, s.grade,
+                       ifnull(f.source, 'manual') AS source,
+                       json_extract(s.raw, '$.timeframe') AS timeframe
                 FROM fills f
                 JOIN signals s ON s.id = f.signal_id
                 """
@@ -362,6 +364,23 @@ class Database:
         avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
         pnls = [float(r["pnl"]) for r in closed if r.get("pnl") is not None]
         sum_pnl = round(sum(pnls), 4) if pnls else None
+
+        def _norm_tf(raw: Any) -> str:
+            t = str(raw or "").strip().lower()
+            return t if t else "unknown"
+
+        paper_closed = [r for r in closed if str(r.get("source") or "manual") == "paper"]
+        manual_closed = [r for r in closed if str(r.get("source") or "manual") != "paper"]
+        by_source = {"paper": len(paper_closed), "manual": len(manual_closed)}
+        by_timeframe: dict[str, int] = {}
+        for r in closed:
+            tf = _norm_tf(r.get("timeframe"))
+            by_timeframe[tf] = by_timeframe.get(tf, 0) + 1
+        manual_4h = sum(
+            1
+            for r in manual_closed
+            if _norm_tf(r.get("timeframe")) in ("4h", "4hour", "240")
+        )
         return {
             "fills": len(rows),
             "closed": len(closed),
@@ -371,6 +390,11 @@ class Database:
             "avg_realized_r": avg_r,
             "sum_pnl": sum_pnl,
             "grades": list(grades) if grades else "all",
+            "by_source": by_source,
+            "by_timeframe": by_timeframe,
+            "manual_4h_closed": manual_4h,
+            "pooled": True,
+            "oos_edge": "4h A/A+ OOS 49.1% / E[R] +0.309 — not this mix",
         }
 
     # ─── Orders (unused in scanner edition; kept for schema compatibility) ─

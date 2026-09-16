@@ -20,6 +20,14 @@ class TestProperties:
                      webhook_secret="x")
         assert s.symbols_static == ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
+    def test_default_universe_uses_okx_tickers(self):
+        default = Settings.model_fields["scan_symbols"].default
+        assert "POLUSDT" in default
+        assert "RENDERUSDT" in default
+        assert "PEPEUSDT" in default
+        for dead in ("MATICUSDT", "RNDRUSDT", "FETUSDT", "1000PEPEUSDT"):
+            assert dead not in default
+
     def test_timeframes_list_lowercases(self):
         s = Settings(scan_timeframes="1H,4H,1D", webhook_secret="x")
         assert s.timeframes_list == ["1h", "4h", "1d"]

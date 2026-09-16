@@ -3,62 +3,54 @@ import { PanelShell } from './RadarPanel'
 const STEPS = [
   {
     title: 'Sync the desk',
-    body: 'Confirm ONLINE + universe count. Radar warms on boot; force RADAR ONCE if empty.',
+    body: 'Confirm Online and the symbol count. Radar warms on boot; use Radar once if empty.',
   },
   {
-    title: 'Land on Orbis',
-    body: 'ORBIT is the landing page (3D universe). OPS is radar + separate TEMA / daily-breakout / EXIT tables.',
+    title: 'Land on Orbit',
+    body: 'Orbit is the 3D universe. Ops holds spot radar (Daily expansion) plus leveraged TEMA BUY / scanner tables.',
   },
   {
-    title: 'Read the trading guide',
-    body: 'GUIDE tab: TEMA vs daily breakout, paper fills, EXIT + PnL. Signal-only — you click live size.',
+    title: 'Read the guide',
+    body: 'Guide tab: spot Daily expansion vs leveraged TEMA BUY vs color-flip. You still click live size.',
   },
   {
-    title: 'Wait for TEMA A/A+ or daily breakout',
-    body: 'OPS tables are split: TEMA scanner vs 1D BREAKOUT vs EXIT. Open DETAILS, then the visualizer.',
+    title: 'Wait for a setup',
+    body: 'Ops tables split spot Daily expansion vs leveraged TEMA BUY vs TEMA scanner vs 1D color-flip vs exit.',
   },
   {
     title: 'Paper book',
-    body: 'PAPER SYNC auto-fills every ENTRY at signal_price ($1000 notional). EXIT rows show close + PnL. Never an order.',
+    body: 'Paper sync fills every entry at signal price. Exit rows show close and PnL. Never an order.',
   },
   {
     title: 'Combo screens',
-    body: 'SCREENS tab unions 4h A/A+, breakouts, coils, and the book into unique symbols. Space / Shift+Space. Not a new score.',
+    body: 'Screens unions 4h A/A+, expansions, color-flip, coils, and the book. Space / Shift+Space. Not a new score.',
   },
   {
     title: 'Confirm on chart',
-    body: 'CHARTS tab: SVG equity + closed candles with entry/exit and SL/TP. Pine visualizer should still match side/grade.',
+    body: 'Charts: SVG equity and closed candles with entry, exit, SL, TP. Pine should still match.',
   },
   {
     title: 'Manual live fill',
-    body: 'If you click it live, log the real fill in JOURNAL (not the paper row). Need 30 closed before retune talk.',
+    body: 'If you take it live, log the real fill in Journal. Need 30 closed fills before retune talk.',
   },
 ]
 
 export function FlowsPanel() {
   return (
-    <PanelShell title="Operator Flows" subtitle="best-path manual trading loop · no broker">
-      <div className="relative grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+    <PanelShell title="Operator flows" subtitle="Manual trading loop · no broker">
+      <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {STEPS.map((s, i) => (
-          <div
-            key={s.title}
-            className="relative rounded-2xl border border-cyan/20 bg-gradient-to-b from-cyan/10 to-transparent p-4"
-          >
-            <div className="font-display text-[10px] tracking-[0.3em] text-magenta">
-              STEP 0{i + 1}
-            </div>
-            <h3 className="mt-2 font-display text-xs tracking-wide text-ink">{s.title}</h3>
-            <p className="mt-2 font-mono text-[10px] leading-relaxed text-chrome/65">{s.body}</p>
-            {i < STEPS.length - 1 && (
-              <div className="pointer-events-none absolute -right-2 top-1/2 hidden h-px w-4 bg-cyan/40 md:block" />
-            )}
-          </div>
+          <li key={s.title} className="card rounded-xl p-4">
+            <div className="text-sm font-semibold text-muted">{i + 1}</div>
+            <h3 className="mt-1 text-[0.9375rem] font-semibold text-ink">{s.title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
+          </li>
         ))}
-      </div>
+      </ol>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <Tip title="Daily breakout" body="1D GREY→GREEN (coil-UP) = long; GREY→RED (coil-DOWN) = short. Confirm on Daily visualizer, then click the trade yourself." />
-        <Tip title="4H edge" body="OOS A/A+ was strongest on 4H — prefer that TF for graded size." />
-        <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Otherwise outcome stays OPEN." />
+        <Tip title="Spot vs leverage" body="Trend Radar + Daily expansion = spot (prior-box stop, no TEMA TP). TEMA BUY = leveraged USDT-perp add with printed 1.5/2.5 ATR. QMIE never sets leverage. You still click size yourself." />
+        <Tip title="4h edge" body="Frozen OOS A/A+ was strongest on 4h (49.1% / E[R] +0.309). Pooled journal win% is not that table." />
+        <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Size is coin qty for cash math, not an order." />
       </div>
     </PanelShell>
   )
@@ -66,9 +58,9 @@ export function FlowsPanel() {
 
 function Tip({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-magenta/20 bg-magenta/5 p-4">
-      <div className="font-display text-[10px] tracking-widest text-magenta uppercase">{title}</div>
-      <p className="mt-2 font-mono text-[11px] text-chrome/70">{body}</p>
+    <div className="card rounded-xl p-4">
+      <div className="text-sm font-semibold text-ink">{title}</div>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
     </div>
   )
 }
