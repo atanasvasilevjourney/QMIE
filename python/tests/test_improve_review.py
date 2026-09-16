@@ -102,6 +102,14 @@ def test_pick_knob_scan_timeframes_first_when_live_default():
     assert knob.to_value == "4h"
 
 
+def test_pick_knob_sig_min_adx_when_4h_live():
+    used = already_proposed(Path(__file__).resolve().parents[2] / "strategy" / "reviews")
+    knob = pick_knob({"scan_timeframes": "4h", "sig_min_adx": 0.0}, used)
+    assert knob is not None
+    assert knob.name == "sig_min_adx"
+    assert knob.to_value == 20.0
+
+
 def test_towards_goal_success():
     goals = {
         "success": {"min_win_pct": 48.0, "min_expectancy_r": 0.15},

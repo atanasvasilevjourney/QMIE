@@ -12,14 +12,14 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.5",
+        "version": "1.6",
         "headline": "Signal-only desk. Radar is the spot book. TEMA is the leveraged add. You click size yourself.",
         "sections": [
             {
                 "id": "what",
                 "title": "What this is",
                 "body": (
-                    "QMIE scans USDT-perp 1h/4h bars for TEMA (leverage book) and "
+                    "QMIE scans USDT-perp 4h bars for TEMA (leverage book) and "
                     "a daily Trend Radar for the spot book. It never sends an order. "
                     "Radar klines are the same closed daily candles; you take expansions "
                     "on spot and TEMA on a leveraged perp."
@@ -163,14 +163,15 @@ def trading_guide() -> dict[str, Any]:
                     "ATR×2.5, SMA20 trail). Do not port it into TEMA 9/90/199. too_late, "
                     "BTC buys_allowed, and two-loss cooldown were measured on 4h A/A+ and "
                     "taken off: they skip winners, not an expectancy engine. "
-                    "SCAN_TIMEFRAMES=4h is still the outstanding live knob. "
+                    "Live scanner is 4h-only (SCAN_TIMEFRAMES=4h, applied 2026-09-12). "
+                    "Next catalog knob is sig_min_adx 0→20 — measure 4h fills first. "
                     "Map: docs/kovaview-equity-map.md."
                 ),
                 "rules": [
                     "too_late / BTC-RED / cooldown are not checklist skips — they cut winners",
                     "Do not add KAMA / EWMAC / z_52 as score votes",
                     "Printed stop stays 1.5×ATR; 1.25% equity is operator sizing",
-                    "One outstanding knob: 4h-only, then ADX≥20 — not both",
+                    "Next catalog knob: ADX≥20 — not until 4h journal is measured",
                 ],
             },
             {
