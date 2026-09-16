@@ -88,6 +88,29 @@ class ExchangeClient(ABC):
         """Return at least ``lastFundingRate`` (float, e.g. 0.0001 = 0.01%/8h)."""
 
     @abstractmethod
+    async def fetch_market_tickers(self) -> list[dict[str, Any]]:
+        """All USDT linear perps: normalized ticker rows for microstructure scans.
+
+        Each row should include when available:
+          symbol, last, price_change_pct_24h, quote_volume_24h,
+          funding_rate, open_interest, open_interest_usd
+        """
+
+    async def fetch_liquidation_orders(
+        self, symbol: str, *, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Recent liquidation prints for one symbol (empty if unsupported)."""
+        del symbol, limit
+        return []
+
+    async def fetch_agg_trades(
+        self, symbol: str, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Recent aggregated trades for whale-print detection."""
+        del symbol, limit
+        return []
+
+    @abstractmethod
     async def close(self) -> None: ...
 
 
@@ -214,6 +237,110 @@ class BinanceClient(ExchangeClient):
         raise last_err if last_err else RuntimeError(
             "Binance premiumIndex: unknown failure")
 
+    async def fetch_market_tickers(self) -> list[dict[str, Any]]:
+        """Merge 24h ticker stats with all-symbol premiumIndex funding."""
+        sess = await self._s()
+        async with sess.get(f"{self.BASE}/fapi/v1/ticker/24hr") as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"Binance ticker HTTP {resp.status}")
+            tickers = await resp.json()
+        funding_map: dict[str, float] = {}
+        async with sess.get(f"{self.BASE}/fapi/v1/premiumIndex") as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"Binance premiumIndex HTTP {resp.status}")
+            prem = await resp.json()
+        if isinstance(prem, list):
+            for row in prem:
+                sym = str(row.get("symbol") or "")
+                if sym.endswith("USDT"):
+                    try:
+                        funding_map[sym] = float(row.get("lastFundingRate") or 0)
+                    except (TypeError, ValueError):
+                        funding_map[sym] = 0.0
+        out: list[dict[str, Any]] = []
+        if not isinstance(tickers, list):
+            return out
+        for d in tickers:
+            sym = str(d.get("symbol") or "")
+            if not sym.endswith("USDT"):
+                continue
+            try:
+                last = float(d.get("lastPrice") or 0)
+                qv = float(d.get("quoteVolume") or 0)
+                chg = float(d.get("priceChangePercent") or 0)
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "symbol": sym,
+                "last": last,
+                "price_change_pct_24h": chg,
+                "quote_volume_24h": qv,
+                "funding_rate": funding_map.get(sym, 0.0),
+                "open_interest": None,
+                "open_interest_usd": None,
+            })
+        return out
+
+    async def fetch_liquidation_orders(
+        self, symbol: str, *, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        sym = symbol.upper().replace(".P", "")
+        url = f"{self.BASE}/fapi/v1/allForceOrders"
+        params = {"symbol": sym, "limit": min(limit, 100)}
+        sess = await self._s()
+        async with sess.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return []
+            data = await resp.json()
+        if not isinstance(data, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for row in data:
+            try:
+                px = float(row.get("price") or 0)
+                qty = float(row.get("origQty") or row.get("executedQty") or 0)
+                side = str(row.get("side") or "")
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "symbol": sym,
+                "side": side,
+                "price": px,
+                "qty": qty,
+                "notional_usd": px * qty,
+                "time_ms": int(row.get("time") or 0),
+            })
+        return out
+
+    async def fetch_agg_trades(
+        self, symbol: str, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        sym = symbol.upper().replace(".P", "")
+        url = f"{self.BASE}/fapi/v1/aggTrades"
+        params = {"symbol": sym, "limit": min(limit, 1000)}
+        sess = await self._s()
+        async with sess.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return []
+            data = await resp.json()
+        if not isinstance(data, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for row in data:
+            try:
+                px = float(row.get("p") or 0)
+                qty = float(row.get("q") or 0)
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "price": px,
+                "qty": qty,
+                "notional_usd": px * qty,
+                "time_ms": int(row.get("T") or 0),
+                "buyer_maker": bool(row.get("m")),
+            })
+        return out
+
 
 # ═══════════════════════════════════════════════════════════════════════
 class BybitClient(ExchangeClient):
@@ -318,6 +445,78 @@ class BybitClient(ExchangeClient):
         except (TypeError, ValueError):
             rate = 0.0
         return {"lastFundingRate": rate, "symbol": row.get("symbol", sym)}
+
+    async def fetch_market_tickers(self) -> list[dict[str, Any]]:
+        url = f"{self.BASE}/v5/market/tickers"
+        params = {"category": "linear"}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"Bybit tickers HTTP {resp.status}")
+            payload = await resp.json()
+        if payload.get("retCode") != 0:
+            return []
+        out: list[dict[str, Any]] = []
+        for d in payload.get("result", {}).get("list", []) or []:
+            sym = str(d.get("symbol") or "")
+            if not sym.endswith("USDT"):
+                continue
+            try:
+                last = float(d.get("lastPrice") or 0)
+                qv = float(d.get("turnover24h") or 0)
+                chg = float(d.get("price24hPcnt") or 0) * 100.0
+                fr = float(d.get("fundingRate") or 0)
+                oi = float(d.get("openInterest") or 0)
+                oi_usd = float(d.get("openInterestValue") or 0)
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "symbol": sym,
+                "last": last,
+                "price_change_pct_24h": chg,
+                "quote_volume_24h": qv,
+                "funding_rate": fr,
+                "open_interest": oi,
+                "open_interest_usd": oi_usd,
+            })
+        return out
+
+    async def fetch_liquidation_orders(
+        self, symbol: str, *, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        sym = symbol.upper().replace(".P", "")
+        url = f"{self.BASE}/v5/market/recent-trade"
+        params = {"category": "linear", "symbol": sym, "limit": min(limit, 1000)}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return []
+            payload = await resp.json()
+        if payload.get("retCode") != 0:
+            return []
+        out: list[dict[str, Any]] = []
+        for row in payload.get("result", {}).get("list", []) or []:
+            try:
+                px = float(row.get("price") or 0)
+                qty = float(row.get("size") or 0)
+            except (TypeError, ValueError):
+                continue
+            if qty * px < 10_000:
+                continue
+            out.append({
+                "symbol": sym,
+                "side": str(row.get("side") or ""),
+                "price": px,
+                "qty": qty,
+                "notional_usd": px * qty,
+                "time_ms": int(row.get("time") or 0),
+            })
+        return out[:limit]
+
+    async def fetch_agg_trades(
+        self, symbol: str, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return await self.fetch_liquidation_orders(symbol, limit=limit)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -438,6 +637,107 @@ class OkxClient(ExchangeClient):
         except (TypeError, ValueError):
             rate = 0.0
         return {"lastFundingRate": rate, "symbol": _okx_to_qmie(inst)}
+
+    async def fetch_market_tickers(self) -> list[dict[str, Any]]:
+        url = f"{self.BASE}/api/v5/market/tickers"
+        params = {"instType": "SWAP"}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"OKX tickers HTTP {resp.status}")
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            return []
+        out: list[dict[str, Any]] = []
+        for d in payload.get("data") or []:
+            inst = str(d.get("instId") or "")
+            if not inst.endswith("-USDT-SWAP"):
+                continue
+            sym = _okx_to_qmie(inst)
+            try:
+                last = float(d.get("last") or 0)
+                vol_base = float(d.get("volCcy24h") or 0)
+                qv = vol_base * last
+                open24 = float(d.get("open24h") or last)
+                if open24 > 0:
+                    chg_pct = (last - open24) / open24 * 100.0
+                else:
+                    chg_pct = 0.0
+                fr = float(d.get("fundingRate") or 0)
+                oi = float(d.get("oi") or d.get("openInterest") or 0)
+                oi_usd = float(d.get("oiCcy") or 0) * last if d.get("oiCcy") else oi * last
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "symbol": sym,
+                "last": last,
+                "price_change_pct_24h": chg_pct,
+                "quote_volume_24h": qv,
+                "funding_rate": fr,
+                "open_interest": oi,
+                "open_interest_usd": oi_usd,
+            })
+        return out
+
+    async def fetch_liquidation_orders(
+        self, symbol: str, *, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        inst = _okx_inst(symbol)
+        url = f"{self.BASE}/api/v5/public/liquidation-orders"
+        params = {"instType": "SWAP", "instId": inst, "limit": str(min(limit, 100))}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return []
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            return []
+        out: list[dict[str, Any]] = []
+        for block in payload.get("data") or []:
+            for row in block.get("details") or []:
+                try:
+                    px = float(row.get("bkPx") or row.get("px") or 0)
+                    qty = float(row.get("sz") or 0)
+                except (TypeError, ValueError):
+                    continue
+                out.append({
+                    "symbol": _okx_to_qmie(inst),
+                    "side": str(row.get("side") or block.get("side") or ""),
+                    "price": px,
+                    "qty": qty,
+                    "notional_usd": px * qty,
+                    "time_ms": int(row.get("ts") or block.get("ts") or 0),
+                })
+        return out[:limit]
+
+    async def fetch_agg_trades(
+        self, symbol: str, *, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        inst = _okx_inst(symbol)
+        url = f"{self.BASE}/api/v5/market/trades"
+        params = {"instId": inst, "limit": str(min(limit, 500))}
+        s = await self._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return []
+            payload = await resp.json()
+        if str(payload.get("code")) != "0":
+            return []
+        out: list[dict[str, Any]] = []
+        for row in payload.get("data") or []:
+            try:
+                px = float(row.get("px") or 0)
+                qty = float(row.get("sz") or 0)
+            except (TypeError, ValueError):
+                continue
+            out.append({
+                "price": px,
+                "qty": qty,
+                "notional_usd": px * qty,
+                "time_ms": int(row.get("ts") or 0),
+                "buyer_maker": str(row.get("side") or "").lower() == "sell",
+            })
+        return out
 
 
 # ═══════════════════════════════════════════════════════════════════════

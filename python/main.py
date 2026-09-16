@@ -15,6 +15,8 @@ Endpoints:
   GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
+  GET  /attention             altcoin microstructure attention rank (read-only)
+  POST /attention/once        admin: force attention / microstructure pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
@@ -55,6 +57,8 @@ from notifiers import DiscordNotifier, Notifier, TelegramNotifier
 from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher
 from scanner.exchange_clients import get_client
+from scanner.alt_selector import AttentionConfig, empty_attention_snapshot
+from scanner.microstructure import MicrostructureConfig
 from scanner.radar import RadarConfig, empty_radar_snapshot
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
@@ -231,6 +235,19 @@ async def lifespan(app: FastAPI):
             notify=s.radar_notify,
             min_coverage_pct=s.radar_min_coverage_pct,
             setup_lookback_bars=s.radar_setup_lookback_bars,
+        ),
+        attention_enabled=s.attention_enabled,
+        attention_cfg=AttentionConfig(
+            top_n=s.attention_top_n,
+            deep_scan_n=s.attention_deep_scan_n,
+            min_quote_volume=s.attention_min_quote_volume,
+            refresh_sec=s.attention_refresh_sec,
+            micro=MicrostructureConfig(
+                vol_velocity_z=s.attention_vol_velocity_z,
+                vol_turnover_threshold=s.attention_vol_turnover_min,
+                oi_influx_min_pct=s.attention_oi_influx_min_pct,
+                whale_min_usd=s.attention_whale_min_usd,
+            ),
         ),
     )
     await scheduler.start()
@@ -427,6 +444,40 @@ async def get_screens(view: str = "all") -> dict[str, Any]:
     return build_screens(
         signals=signals, radar=radar, allocation=allocation, view=v,
     )
+
+
+@app.get("/attention")
+async def get_attention() -> dict[str, Any]:
+    """Altcoin attention rank from microstructure detectors (read-only).
+
+    Funding, OI influx, volume velocity, liquidations, whale prints,
+    volatility, range breakout. Does not place orders or retune W_*."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    snap = state.scheduler.last_attention
+    if snap is None:
+        src = state.settings.scan_data_source if state.settings else "okx"
+        return empty_attention_snapshot(
+            enabled=state.scheduler.attention_enabled,
+            data_source=src,
+        ).as_dict()
+    out = snap.as_dict()
+    out.setdefault("enabled", state.scheduler.attention_enabled)
+    out["places_orders"] = False
+    out["note_overlay"] = (
+        "Watchlist only. Confirm with QMIE 4h TEMA A/A+ or daily Radar coil-UP."
+    )
+    return out
+
+
+@app.post("/attention/once")
+async def attention_once() -> dict[str, Any]:
+    """Admin: force microstructure / altcoin attention pass."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    if not state.scheduler.attention_enabled:
+        raise HTTPException(400, "attention_disabled")
+    return await state.scheduler.request_attention_once()
 
 
 @app.post("/radar/once")

@@ -147,6 +147,17 @@ class Settings(BaseSettings):
     # Replay last N closed 1D bars on each radar pass so a missed coil-UP is not lost
     radar_setup_lookback_bars: int = 7
 
+    # ─── Altcoin attention / microstructure (read-only; not TEMA W_*) ────
+    attention_enabled:            bool = True
+    attention_refresh_sec:        int = 300
+    attention_top_n:              int = 40
+    attention_deep_scan_n:        int = 25
+    attention_min_quote_volume:   float = 5_000_000.0
+    attention_vol_velocity_z:     float = 4.0
+    attention_vol_turnover_min:   float = 2.0
+    attention_oi_influx_min_pct:  float = 5.0
+    attention_whale_min_usd:      float = 100_000.0
+
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4.1-mini"
@@ -238,6 +249,23 @@ class Settings(BaseSettings):
             ).validate()
         except ValueError as e:
             warnings.append(f"Radar config invalid: {e}")
+        try:
+            from scanner.alt_selector import AttentionConfig as _AttentionConfig
+            from scanner.microstructure import MicrostructureConfig as _MicroConfig
+            _AttentionConfig(
+                top_n=self.attention_top_n,
+                deep_scan_n=self.attention_deep_scan_n,
+                min_quote_volume=self.attention_min_quote_volume,
+                refresh_sec=self.attention_refresh_sec,
+                micro=_MicroConfig(
+                    vol_velocity_z=self.attention_vol_velocity_z,
+                    vol_turnover_threshold=self.attention_vol_turnover_min,
+                    oi_influx_min_pct=self.attention_oi_influx_min_pct,
+                    whale_min_usd=self.attention_whale_min_usd,
+                ),
+            ).validate()
+        except ValueError as e:
+            warnings.append(f"Attention config invalid: {e}")
         return warnings
 
 
