@@ -21,27 +21,24 @@ Two pieces, two hosts:
 | Scanner API (`uvicorn` on `:8080`) | Docker Compose on a VPS, or a **container** host (Fly / Railway / Render). See §2. |
 | Desk UI (`web/`) | Optional: Vercel static hosting of the Vite build |
 
-### Why `qmie.vercel.app` is still `404: NOT_FOUND`
+### Vercel Production (`master`)
 
-Vercel **Production** tracks GitHub **`master`**. That commit has no `web/`
-app and no `vercel.json`, so the deploy is Ready with an empty output.
-Preview deploys of this branch are SSO-gated; they are not the apex URL.
+Vercel **Production** should track GitHub **`master`**. The repo root ships
+`vercel.json` (`framework: null`, builds `web/dist`, proxies API paths to
+Render). After each merge to `master`, Vercel redeploys the desk (ORBIT +
+sidebar OPS/Screens/Charts/Journal).
 
-The live desk is **`https://qmie.onrender.com/`** (browser `Accept: text/html`).
-`GET /health` stays JSON.
+The **scanner** (alerts, SQLite, scheduler) stays on
+**`https://qmie.onrender.com/`**. The desk UI may also be served from Render
+(`Accept: text/html` on `/`). Discord/Telegram env vars live only on Render
+(or Docker), never on Vercel.
 
-To make `qmie.vercel.app` itself serve ORBIT:
+Optional Vercel setting: **Root Directory** = `web` (uses `web/vercel.json`
+only; drop root `outputDirectory` in that mode). Default monorepo-root config
+is preferred so one `vercel.json` owns install/build.
 
-1. Vercel → Settings → Git → **Production Branch** =
-   `cursor/render-backend-a231` (or merge this stack into `master`)
-2. Optional: **Root Directory** = `web` (then `web/vercel.json` SPA rewrites
-   apply; do not keep `outputDirectory: web/dist` in that mode)
-3. Redeploy. Desk on `*.vercel.app` (and any custom domain) calls
-   `https://qmie.onrender.com`. Same-origin `/health` is **not** FastAPI —
-   that is the SPA (or a Vercel `404 NOT_FOUND`). `vercel.json` also
-   proxies `/health`, `/radar`, `/signals`, … to Render so old clients
-   recover after deploy. Do not set `VITE_QMIE_API` to a `*.vercel.app`
-   URL.
+Same-origin `/health` on `*.vercel.app` is proxied to Render via rewrites —
+not the FastAPI process. Do not set `VITE_QMIE_API` to a Vercel URL.
 
 `vercel.json` at the repo root uses `framework: null` and builds `web/dist`.
 Do not use the Vite preset at the monorepo root — it looks for
