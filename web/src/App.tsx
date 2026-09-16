@@ -233,7 +233,7 @@ export default function App() {
                 kicker="Screens"
                 title="Combo"
                 highlight="review list"
-                lede="Unique symbols from 4h A/A+, spot expansions, color-flip, coils, and ranked book. Not a new score."
+                lede="Each row shows scanner entry, SL, and TP. Chart draws those levels; paper book forward-tests alerts. Not a new score."
               />
               <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />
             </motion.div>

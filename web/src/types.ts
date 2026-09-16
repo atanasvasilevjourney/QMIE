@@ -140,6 +140,17 @@ export type JournalFill = {
   source?: string
   exit_reason?: string | null
   timeframe?: string
+  signal_price?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+}
+
+export type ChartAlertLevels = {
+  entry?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+  side?: string | null
+  label?: string
 }
 
 export type JournalStats = {

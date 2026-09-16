@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
-import type { ChartBook, ChartPrice, ChartTrade, JournalFill } from '../types'
+import type { ChartAlertLevels, ChartBook, ChartPrice, ChartTrade, JournalFill } from '../types'
+import { formatPrice } from '../lib/formatPrice'
+import { ModuleCard } from './layout/ModuleCard'
 import { Empty, PanelShell } from './RadarPanel'
 
 const TFS = ['1h', '4h', '1d'] as const
@@ -10,11 +12,15 @@ export function ChartsPanel({
   focusTimeframe,
   fills,
   compact = false,
+  alertLevels,
+  onLastClose,
 }: {
   focusSymbol?: string | null
   focusTimeframe?: string | null
   fills: JournalFill[]
   compact?: boolean
+  alertLevels?: ChartAlertLevels | null
+  onLastClose?: (close: number | null) => void
 }) {
   const [book, setBook] = useState<ChartBook | null>(null)
   const [price, setPrice] = useState<ChartPrice | null>(null)
@@ -85,7 +91,12 @@ export function ChartsPanel({
     api
       .chartsPrice(symbol, tf)
       .then((p) => {
-        if (!cancelled) setPrice(p)
+        if (!cancelled) {
+          setPrice(p)
+          const bars = p.bars ?? []
+          const last = bars.length ? bars[bars.length - 1].c : null
+          onLastClose?.(last ?? null)
+        }
       })
       .catch((e) => {
         if (!cancelled) setErr(e instanceof Error ? e.message : String(e))
@@ -96,7 +107,7 @@ export function ChartsPanel({
     return () => {
       cancelled = true
     }
-  }, [symbol, tf])
+  }, [symbol, tf, onLastClose])
 
   const pnlTone =
     (book?.sum_pnl ?? 0) > 0 ? 'text-lime' : (book?.sum_pnl ?? 0) < 0 ? 'text-magenta' : 'text-muted'
@@ -119,13 +130,38 @@ export function ChartsPanel({
       </PanelShell>
       )}
 
+      {compact ? (
+      <ModuleCard
+        title="Price + alert levels"
+        subtitle="Horizontal lines = scanner entry / SL / TP. ▲ fill · dashed = levels. Forward-test via paper book."
+      >
+        <div className="mb-4 flex flex-wrap gap-2">
+          {TFS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTf(t)}
+              className={`chip ${tf === t ? 'chip-alt' : ''}`}
+            >
+              {t.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {err && <p className="mb-3 text-sm text-magenta">{err}</p>}
+        {price?.note && (
+          <p className="mb-3 text-sm text-amber">
+            {price.note === 'klines_unavailable' || price.note === 'no_klines'
+              ? 'No closed klines — alert level lines still shown'
+              : price.note}
+          </p>
+        )}
+        <PriceSvg bars={price?.bars ?? []} trades={price?.trades ?? []} alertLevels={alertLevels} />
+        <TradeLegend trades={price?.trades ?? []} alertLevels={alertLevels} />
+      </ModuleCard>
+      ) : (
       <PanelShell
         title="Price + trade marks"
-        subtitle={
-          compact
-            ? 'Follows the combo list. Closed candles. Never an order.'
-            : 'Closed candles from the scanner data source. ▲ entry · ▼ exit · dashed SL/TP. Fetch only while this tab is open.'
-        }
+        subtitle="Closed candles from the scanner data source. ▲ entry · ▼ exit · dashed SL/TP. Fetch only while this tab is open."
       >
         {!compact && (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -158,13 +194,14 @@ export function ChartsPanel({
         {price?.note && (
           <p className="mb-3 text-sm text-amber">
             {price.note === 'klines_unavailable' || price.note === 'no_klines'
-              ? 'No closed klines — showing trade levels only'
+              ? 'No closed klines — level lines still drawn from alert'
               : price.note}
           </p>
         )}
-        <PriceSvg bars={price?.bars ?? []} trades={price?.trades ?? []} />
-        <TradeLegend trades={price?.trades ?? []} />
+        <PriceSvg bars={price?.bars ?? []} trades={price?.trades ?? []} alertLevels={alertLevels} />
+        <TradeLegend trades={price?.trades ?? []} alertLevels={alertLevels} />
       </PanelShell>
+      )}
     </div>
   )
 }
@@ -228,7 +265,34 @@ function EquitySvg({ points }: { points: ChartBook['points'] }) {
   )
 }
 
-function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTrade[] }) {
+function levelPrices(
+  bars: ChartPrice['bars'],
+  trades: ChartTrade[],
+  alertLevels?: ChartAlertLevels | null,
+): number[] {
+  const out: number[] = []
+  for (const b of bars) out.push(b.h, b.l)
+  for (const tr of trades) {
+    out.push(tr.entry.price)
+    if (tr.exit?.price != null) out.push(tr.exit.price)
+    if (tr.stop_loss != null) out.push(tr.stop_loss)
+    if (tr.take_profit != null) out.push(tr.take_profit)
+  }
+  if (alertLevels?.entry != null) out.push(alertLevels.entry)
+  if (alertLevels?.stop_loss != null) out.push(alertLevels.stop_loss)
+  if (alertLevels?.take_profit != null) out.push(alertLevels.take_profit)
+  return out
+}
+
+function PriceSvg({
+  bars,
+  trades,
+  alertLevels,
+}: {
+  bars: ChartPrice['bars']
+  trades: ChartTrade[]
+  alertLevels?: ChartAlertLevels | null
+}) {
   const W = 900
   const H = 340
   const L = 64
@@ -236,12 +300,11 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   const T = 18
   const B = 28
   const n = bars.length
-  const barPrices: number[] = []
-  for (const b of bars) barPrices.push(b.h, b.l)
-  if (!barPrices.length && !trades.length) {
+  const barPrices = levelPrices(bars, trades, alertLevels)
+  if (!barPrices.length && !trades.length && !alertLevels?.entry) {
     return (
       <div className="rounded-xl border border-line bg-surface px-4 py-8">
-        <Empty>Pick a symbol with fills to plot candles and marks</Empty>
+        <Empty>Pick a symbol to plot candles and alert levels</Empty>
       </div>
     )
   }
@@ -251,9 +314,8 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
     pMin = Math.min(...barPrices)
     pMax = Math.max(...barPrices)
   } else {
-    const fallback = trades.flatMap((t) => [t.entry.price, t.exit?.price ?? t.entry.price])
-    pMin = Math.min(...fallback)
-    pMax = Math.max(...fallback)
+    pMin = 0
+    pMax = 1
   }
   const pad = (pMax - pMin) * 0.06 || pMax * 0.01 || 1
   const yMin = pMin - pad
@@ -272,10 +334,10 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Price chart with trade marks">
       <rect x="0" y="0" width={W} height={H} fill="var(--color-surface)" rx="12" />
       <text x="8" y={T + 4} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
-        {yMax.toFixed(yMax >= 100 ? 1 : 4)}
+        {formatPrice(yMax)}
       </text>
       <text x="8" y={H - B} fill="var(--color-muted)" fontSize="12" fontFamily="IBM Plex Mono, ui-monospace, monospace">
-        {yMin.toFixed(yMin >= 100 ? 1 : 4)}
+        {formatPrice(yMin)}
       </text>
       {bars.map((b, i) => {
         const up = b.c >= b.o
@@ -291,8 +353,66 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
           </g>
         )
       })}
+      {alertLevels?.entry != null && (
+        <LevelLine
+          y={y(alertLevels.entry)}
+          x1={L}
+          x2={W - R}
+          color="var(--color-cyan)"
+          dash="6 4"
+          label={`ENTRY ${formatPrice(alertLevels.entry)}`}
+          labelY={y(alertLevels.entry) - 4}
+          W={W}
+          R={R}
+        />
+      )}
+      {alertLevels?.stop_loss != null && (
+        <LevelLine
+          y={y(alertLevels.stop_loss)}
+          x1={L}
+          x2={W - R}
+          color="var(--color-magenta)"
+          dash="5 5"
+          label={`SL ${formatPrice(alertLevels.stop_loss)}`}
+          labelY={y(alertLevels.stop_loss) + 14}
+          W={W}
+          R={R}
+        />
+      )}
+      {alertLevels?.take_profit != null && (
+        <LevelLine
+          y={y(alertLevels.take_profit)}
+          x1={L}
+          x2={W - R}
+          color="var(--color-lime)"
+          dash="5 5"
+          label={`TP ${formatPrice(alertLevels.take_profit)}`}
+          labelY={y(alertLevels.take_profit) - 4}
+          W={W}
+          R={R}
+        />
+      )}
       {trades.map((tr) => {
-        if (!tr.aligned || tr.entry.i == null || tr.on_ohlc === false) return <g key={tr.fill_id} />
+        if (!tr.aligned || tr.entry.i == null) {
+          const eY = y(tr.entry.price)
+          return (
+            <g key={tr.fill_id}>
+              <LevelLine
+                y={eY}
+                x1={L}
+                x2={W - R}
+                color="var(--color-cyan)"
+                dash="2 6"
+                label={`FILL ${formatPrice(tr.entry.price)}`}
+                labelY={eY + 12}
+                W={W}
+                R={R}
+                opacity={0.75}
+              />
+            </g>
+          )
+        }
+        if (tr.on_ohlc === false) return <g key={tr.fill_id} />
         const eBar = barAt(tr.entry.i)
         if (!eBar) return <g key={tr.fill_id} />
         const x0 = xAt(tr.entry.i)
@@ -368,19 +488,76 @@ function PriceSvg({ bars, trades }: { bars: ChartPrice['bars']; trades: ChartTra
   )
 }
 
-function TradeLegend({ trades }: { trades: ChartTrade[] }) {
-  if (!trades.length) return null
+function LevelLine({
+  y: yPos,
+  x1,
+  x2,
+  color,
+  dash,
+  label,
+  labelY,
+  W,
+  R,
+  opacity = 1,
+}: {
+  y: number
+  x1: number
+  x2: number
+  color: string
+  dash?: string
+  label: string
+  labelY: number
+  W: number
+  R: number
+  opacity?: number
+}) {
   return (
-    <div className="mt-3 max-h-48 space-y-1 overflow-auto">
+    <g opacity={opacity}>
+      <line x1={x1} y1={yPos} x2={x2} y2={yPos} stroke={color} strokeWidth="1.4" strokeDasharray={dash} />
+      <text
+        x={W - R - 6}
+        y={labelY}
+        textAnchor="end"
+        fill={color}
+        fontSize="11"
+        fontFamily="IBM Plex Mono, ui-monospace, monospace"
+      >
+        {label}
+      </text>
+    </g>
+  )
+}
+
+function TradeLegend({
+  trades,
+  alertLevels,
+}: {
+  trades: ChartTrade[]
+  alertLevels?: ChartAlertLevels | null
+}) {
+  const hasAlert =
+    alertLevels?.entry != null || alertLevels?.stop_loss != null || alertLevels?.take_profit != null
+  if (!trades.length && !hasAlert) return null
+  return (
+    <div className="chart-legend mt-4">
+      {hasAlert && (
+        <div className="chart-legend-row chart-legend-alert">
+          <span className="text-cyan">Scanner alert</span>
+          <span className="tabular">
+            E {formatPrice(alertLevels?.entry)} · SL {formatPrice(alertLevels?.stop_loss)} · TP{' '}
+            {formatPrice(alertLevels?.take_profit)}
+          </span>
+        </div>
+      )}
       {trades.map((t) => (
-        <div key={t.fill_id} className="flex flex-wrap justify-between gap-2 font-mono text-sm text-muted">
+        <div key={t.fill_id} className="chart-legend-row">
           <span>
             #{t.fill_id} {t.symbol} {t.side} {t.source === 'paper' ? 'PAPER' : 'MANUAL'} {t.outcome}
-            {t.aligned === false || t.on_ohlc === false ? ' · off-chart' : ''}
+            {t.aligned === false || t.on_ohlc === false ? ' · off-bar' : ''}
           </span>
-          <span>
-            {t.entry.price}
-            {t.exit ? ` → ${t.exit.price}` : ' → open'}
+          <span className="tabular">
+            {formatPrice(t.entry.price)}
+            {t.exit ? ` → ${formatPrice(t.exit.price)}` : ' → open'}
             {t.exit?.pnl != null ? ` · PnL ${t.exit.pnl}` : ''}
           </span>
         </div>
