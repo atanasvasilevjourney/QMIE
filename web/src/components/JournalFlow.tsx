@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { JournalFill, JournalStats, SignalRow } from '../types'
+import { formatPrice } from '../lib/formatPrice'
 import { Empty, PanelShell } from './RadarPanel'
 
 function journalStatsLine(stats: JournalStats): string {
@@ -46,6 +47,14 @@ export function JournalFlow({
     () => fills.filter((f) => !f.exit_price || f.outcome === 'OPEN'),
     [fills],
   )
+
+  useEffect(() => {
+    if (!selected?.signal_price) {
+      setFillPrice('')
+      return
+    }
+    setFillPrice(String(selected.signal_price))
+  }, [selected?.id, selected?.signal_price])
 
   async function createFill() {
     if (!selected) return
@@ -105,11 +114,27 @@ export function JournalFlow({
         }
       >
         <ol className="mb-4 space-y-2 text-sm leading-relaxed text-muted">
-          <li>1. Pick an alert from OPS strategy tables</li>
-          <li>2. Enter your real fill price. Size is coin qty for cash math — not an order</li>
-          <li>3. Optional exit → realized R (needs stop_loss on the signal)</li>
+          <li>1. OPS → strategy row → <strong className="text-ink">Journal</strong> (not Details only), or Screens → Track manually</li>
+          <li>2. Fill price pre-fills from scanner entry — edit if your fill differed</li>
+          <li>3. Optional exit → realized R (uses signal stop_loss)</li>
           <li>4. Pooled win% is not frozen OOS. Need 30 manual 4h A/A+ fills</li>
         </ol>
+        {selected && (selected.signal_price != null || selected.stop_loss != null) && (
+          <div className="alert-level-grid mb-4">
+            <div className="stat-tile stat-tile-cyan">
+              <div className="stat-tile-label">Scanner entry</div>
+              <div className="stat-tile-value">{formatPrice(selected.signal_price)}</div>
+            </div>
+            <div className="stat-tile stat-tile-magenta">
+              <div className="stat-tile-label">Stop</div>
+              <div className="stat-tile-value">{formatPrice(selected.stop_loss)}</div>
+            </div>
+            <div className="stat-tile stat-tile-lime">
+              <div className="stat-tile-label">Target</div>
+              <div className="stat-tile-value">{formatPrice(selected.take_profit)}</div>
+            </div>
+          </div>
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Fill price" value={fillPrice} onChange={setFillPrice} placeholder={String(selected?.signal_price ?? '')} />
           <Field label="Size (base coins, cash math only)" value={size} onChange={setSize} />
@@ -153,9 +178,10 @@ export function JournalFlow({
                 <span className="font-mono text-sm text-muted">{f.outcome}</span>
               </div>
               <div className="mt-1 flex items-center justify-between font-mono text-sm text-muted">
-                <span>
-                  {f.fill_price} → {f.exit_price ?? 'open'} · sz {f.size}
+                <span className="tabular">
+                  {formatPrice(f.fill_price)} → {f.exit_price != null ? formatPrice(f.exit_price) : 'open'} · sz {f.size}
                   {f.pnl != null ? ` · PnL ${f.pnl}` : ''}
+                  {f.realized_r != null ? ` · ${f.realized_r.toFixed(2)}R` : ''}
                   {f.exit_reason ? ` · ${f.exit_reason}` : ''}
                 </span>
                 <span className="flex gap-3">

@@ -140,10 +140,12 @@ export function ScreensPanel({
   lastSync,
   fills,
   onChart,
+  onTrackManual,
 }: {
   lastSync?: number | null
   fills: JournalFill[]
   onChart: (symbol: string, timeframe?: string) => void
+  onTrackManual?: (row: ScreenRow) => void
 }) {
   const [view, setView] = useState<ScreenView | 'focus'>('all')
   const [sort, setSort] = useState<SortKey>('score')
@@ -301,7 +303,21 @@ export function ScreensPanel({
       </div>
 
       <div className="screens-detail-col">
-        <ScreenAlertSetup row={selected} fills={fills} lastClose={lastClose} />
+        <ScreenAlertSetup
+          row={selected}
+          fills={fills}
+          lastClose={lastClose}
+          onViewChart={
+            selected
+              ? () => onChart(selected.symbol, screenChartTf(selected, view))
+              : undefined
+          }
+          onTrackManual={
+            selected && onTrackManual && selected.signal_id != null
+              ? () => onTrackManual(selected)
+              : undefined
+          }
+        />
         <ChartsPanel
           compact
           focusSymbol={selected?.symbol}

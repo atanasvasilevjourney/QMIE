@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQmieDesk } from './hooks/useQmieDesk'
 import { useTheme } from './hooks/useTheme'
-import type { DeskTab, SignalRow } from './types'
+import type { DeskTab, ScreenRow, SignalRow } from './types'
 import { Scene3D } from './components/Scene3D'
 import { TopBar } from './components/TopBar'
 import { RadarPanel } from './components/RadarPanel'
@@ -70,6 +70,26 @@ export default function App() {
   const goJournal = (s: SignalRow) => {
     setSelected(s)
     setTab('journal')
+  }
+
+  const goJournalFromScreen = (row: ScreenRow) => {
+    const hit = row.signal_id != null ? desk.signals.find((s) => s.id === row.signal_id) : undefined
+    if (hit) {
+      goJournal(hit)
+      return
+    }
+    if (row.signal_id == null) return
+    goJournal({
+      id: row.signal_id,
+      symbol: row.symbol,
+      side: row.side ?? undefined,
+      grade: row.grade ?? undefined,
+      score: row.score ?? undefined,
+      signal_price: row.signal_price ?? undefined,
+      stop_loss: row.stop_loss ?? undefined,
+      take_profit: row.take_profit ?? undefined,
+      timeframe: row.timeframe ?? undefined,
+    })
   }
 
   const goChart = (symbol: string, timeframe?: string) => {
@@ -235,7 +255,12 @@ export default function App() {
                 highlight="review list"
                 lede="Each row shows scanner entry, SL, and TP. Chart draws those levels; paper book forward-tests alerts. Not a new score."
               />
-              <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />
+              <ScreensPanel
+                lastSync={desk.lastSync}
+                fills={desk.fills}
+                onChart={goChart}
+                onTrackManual={goJournalFromScreen}
+              />
             </motion.div>
           )}
 

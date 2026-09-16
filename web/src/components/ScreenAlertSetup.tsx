@@ -33,10 +33,14 @@ export function ScreenAlertSetup({
   row,
   fills,
   lastClose,
+  onTrackManual,
+  onViewChart,
 }: {
   row: ScreenRow | null
   fills: JournalFill[]
   lastClose?: number | null
+  onTrackManual?: () => void
+  onViewChart?: () => void
 }) {
   const fill = useMemo(() => fillForRow(row, fills), [row, fills])
   const stats = useMemo(() => (row ? symbolTrackStats(row.symbol, fills) : null), [row, fills])
@@ -63,7 +67,19 @@ export function ScreenAlertSetup({
       title={row.symbol}
       subtitle={`${(row.grade || '—').toUpperCase()} · ${(row.timeframe || '—').toUpperCase()} · alert #${row.signal_id ?? '—'} · not an order`}
       action={
-        <span className={`alert-side-badge alert-side-${sideTone(side)}`}>{(side || '—').toUpperCase()}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`alert-side-badge alert-side-${sideTone(side)}`}>{(side || '—').toUpperCase()}</span>
+          {onViewChart && (
+            <button type="button" className="btn btn-sm" onClick={onViewChart}>
+              Charts
+            </button>
+          )}
+          {onTrackManual && row?.signal_id != null && (
+            <button type="button" className="btn btn-sm btn-ok" onClick={onTrackManual}>
+              Track manually
+            </button>
+          )}
+        </div>
       }
     >
       <div className="alert-level-grid">
