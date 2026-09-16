@@ -171,6 +171,9 @@ async def lifespan(app: FastAPI):
         tv_chart_prefix=s.tv_chart_prefix,
         max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
         paper=None,
+        chart_client=client,
+        discord_chart_image=s.discord_chart_image,
+        discord_chart_bars=s.discord_chart_bars,
     )
     paper = PaperBook(
         db,

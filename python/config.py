@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     discord_username:       str = "QMIE"
     discord_avatar_url:     str = ""
     discord_enabled:        bool = True
+    discord_chart_image:    bool = True
+    discord_chart_bars:     int = 90
 
     telegram_bot_token:     Optional[str] = None
     telegram_chat_id:       Optional[str] = None

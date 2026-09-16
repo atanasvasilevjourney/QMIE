@@ -124,6 +124,9 @@ class SignalDispatcher:
         tv_chart_prefix: str = "BINANCE",
         max_signals_per_symbol_per_day: int = 4,
         paper: object | None = None,
+        chart_client: object | None = None,
+        discord_chart_image: bool = True,
+        discord_chart_bars: int = 90,
     ):
         self.db = db
         self.notifiers = notifiers
@@ -132,6 +135,9 @@ class SignalDispatcher:
         self.tv_prefix = tv_chart_prefix
         self.max_per_day = max_signals_per_symbol_per_day
         self.paper = paper
+        self.chart_client = chart_client
+        self.discord_chart_image = discord_chart_image
+        self.discord_chart_bars = discord_chart_bars
         # (utc_date_iso, symbol) → count of alerts already dispatched that day
         self._day_counts: dict[tuple[str, str], int] = defaultdict(int)
 
@@ -219,10 +225,7 @@ class SignalDispatcher:
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)
 
-        await asyncio.gather(
-            *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
-            return_exceptions=True,
-        )
+        await self._fan_out_notifiers(notify_sig)
         if self.max_per_day > 0:
             self._day_counts[key] += 1
         logger.info(
@@ -231,6 +234,33 @@ class SignalDispatcher:
             result.score, result.price,
         )
         return True
+
+    async def _fan_out_notifiers(self, notify_sig: TVSignal) -> None:
+        chart_png: bytes | None = None
+        if self.discord_chart_image and self.chart_client is not None:
+            try:
+                from chart_visual import build_alert_chart_png
+
+                chart_png = await build_alert_chart_png(
+                    self.chart_client,
+                    notify_sig,
+                    bar_limit=self.discord_chart_bars,
+                )
+            except Exception:
+                logger.exception("alert chart png skipped (non-fatal)")
+
+        await asyncio.gather(
+            *(
+                n.send_signal(
+                    notify_sig,
+                    None,
+                    chart_png=chart_png if getattr(n, "name", "") == "discord" else None,
+                )
+                for n in self.notifiers
+                if n.enabled
+            ),
+            return_exceptions=True,
+        )
 
     async def dispatch_inbound(self, sig: TVSignal) -> bool:
         """Persist + fan-out an already-built TVSignal (Pine webhook or daily breakout).
@@ -252,10 +282,7 @@ class SignalDispatcher:
         sig_dict = sig.model_dump()
         sig_dict["chart_url"] = chart_url
         notify_sig = TVSignal.model_validate(sig_dict)
-        await asyncio.gather(
-            *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
-            return_exceptions=True,
-        )
+        await self._fan_out_notifiers(notify_sig)
         logger.info(
             "INBOUND %s %s %s %s reason=%s",
             sig.symbol, tf, sig.side.value if sig.side else "-",
