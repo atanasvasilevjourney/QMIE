@@ -19,10 +19,14 @@ loses meaningful info; showing EURUSD to 2dp is wrong.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Optional
 
 import aiohttp
+
+from chart_visual import expected_r
+from price_fmt import fmt_price as _fmt_price_shared
 
 from .base import Notifier, NotifierError
 from models import AssetClass, BrokerResponse, Side, TVSignal
@@ -46,28 +50,8 @@ GRADE_EMOJI = {
 }
 
 
-def _price_precision(asset_class: AssetClass, price: float) -> int:
-    """Pick decimals based on instrument scale."""
-    if asset_class is AssetClass.FOREX:
-        # JPY pairs use 3dp, everything else 5dp
-        return 3 if price > 10 else 5
-    if asset_class is AssetClass.METAL:
-        return 2
-    if asset_class is AssetClass.FUTURE:
-        return 2
-    if asset_class is AssetClass.EQUITY:
-        return 2
-    # Crypto: scale-aware
-    if price >= 100:    return 2
-    if price >= 1:      return 4
-    return 6
-
-
 def _fmt_price(price: Optional[float], asset_class: AssetClass) -> str:
-    if price is None:
-        return "—"
-    p = _price_precision(asset_class, price)
-    return f"{price:,.{p}f}"
+    return _fmt_price_shared(price, asset_class)
 
 
 # ─── Notifier ────────────────────────────────────────────────────────────
@@ -187,6 +171,16 @@ class DiscordNotifier(Notifier):
         if sig.take_profit is not None:
             fields.append({"name": "Target", "value": _fmt_price(sig.take_profit, ac), "inline": True})
 
+        side_s = side.value if hasattr(side, "value") else str(side)
+        rr = expected_r(
+            side_s,
+            sig.signal_price or sig.price,
+            sig.stop_loss,
+            sig.take_profit,
+        )
+        if rr is not None:
+            fields.append({"name": "Expected R", "value": f"{rr:.2f}R", "inline": True})
+
         # ADX / ATR
         if sig.adx is not None:
             fields.append({"name": "ADX", "value": f"{sig.adx:.1f}", "inline": True})
@@ -235,9 +229,16 @@ class DiscordNotifier(Notifier):
         return embed
 
     # ─── Send ────────────────────────────────────────────────────────────
-    async def send_signal(self, sig: TVSignal,
-                          broker_resp: BrokerResponse | None = None) -> None:
+    async def send_signal(
+        self,
+        sig: TVSignal,
+        broker_resp: BrokerResponse | None = None,
+        *,
+        chart_png: bytes | None = None,
+    ) -> None:
         embed = self._build_embed(sig, broker_resp)
+        if chart_png:
+            embed["image"] = {"url": "attachment://qmie-trade.png"}
         body: dict[str, Any] = {
             "username": self.username,
             "embeds": [embed],
@@ -247,7 +248,23 @@ class DiscordNotifier(Notifier):
 
         try:
             session = await self._get_session()
-            async with session.post(self.webhook_url, json=body) as resp:
+            if chart_png:
+                form = aiohttp.FormData()
+                form.add_field(
+                    "payload_json",
+                    json.dumps(body),
+                    content_type="application/json",
+                )
+                form.add_field(
+                    "files[0]",
+                    chart_png,
+                    filename="qmie-trade.png",
+                    content_type="image/png",
+                )
+                req = session.post(self.webhook_url, data=form)
+            else:
+                req = session.post(self.webhook_url, json=body)
+            async with req as resp:
                 if resp.status >= 400:
                     text = await resp.text()
                     raise NotifierError(

@@ -68,7 +68,7 @@ class _MockNotifier:
         self.fail = fail
         self.sent: list = []
 
-    async def send_signal(self, sig, broker_resp):
+    async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
         if self.fail:
             raise RuntimeError("notifier down")
         self.sent.append(sig)
@@ -240,7 +240,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         idem = _InMemIdem()
@@ -285,7 +285,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = ScanResult(
@@ -324,7 +324,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = _make_result()
@@ -350,7 +350,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = _make_result(grade="REJECT")
@@ -451,7 +451,7 @@ class TestDailyBreakoutInbound:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         db = _DummyDB()

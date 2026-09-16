@@ -265,23 +265,48 @@ function EquitySvg({ points }: { points: ChartBook['points'] }) {
   )
 }
 
-function levelPrices(
+function candleRange(bars: ChartPrice['bars']): { lo: number; hi: number; span: number } {
+  if (!bars.length) {
+    return { lo: 0, hi: 1, span: 1 }
+  }
+  let lo = bars[0].l
+  let hi = bars[0].h
+  for (const b of bars) {
+    lo = Math.min(lo, b.l)
+    hi = Math.max(hi, b.h)
+  }
+  const span = hi - lo || hi * 0.02 || 1
+  return { lo, hi, span }
+}
+
+/** Zoom Y on candles; pull SL/TP in only partly so bodies stay visible. */
+function chartYRange(
   bars: ChartPrice['bars'],
   trades: ChartTrade[],
   alertLevels?: ChartAlertLevels | null,
-): number[] {
-  const out: number[] = []
-  for (const b of bars) out.push(b.h, b.l)
+): { yMin: number; yMax: number } {
+  const { lo: cLo, hi: cHi, span } = candleRange(bars)
+  let yLo = cLo
+  let yHi = cHi
+  const extras: number[] = []
   for (const tr of trades) {
-    out.push(tr.entry.price)
-    if (tr.exit?.price != null) out.push(tr.exit.price)
-    if (tr.stop_loss != null) out.push(tr.stop_loss)
-    if (tr.take_profit != null) out.push(tr.take_profit)
+    extras.push(tr.entry.price)
+    if (tr.exit?.price != null) extras.push(tr.exit.price)
+    if (tr.stop_loss != null) extras.push(tr.stop_loss)
+    if (tr.take_profit != null) extras.push(tr.take_profit)
   }
-  if (alertLevels?.entry != null) out.push(alertLevels.entry)
-  if (alertLevels?.stop_loss != null) out.push(alertLevels.stop_loss)
-  if (alertLevels?.take_profit != null) out.push(alertLevels.take_profit)
-  return out
+  if (alertLevels?.entry != null) extras.push(alertLevels.entry)
+  if (alertLevels?.stop_loss != null) extras.push(alertLevels.stop_loss)
+  if (alertLevels?.take_profit != null) extras.push(alertLevels.take_profit)
+  for (const p of extras) {
+    yLo = Math.min(yLo, p)
+    yHi = Math.max(yHi, p)
+  }
+  const maxPull = span * 0.55
+  if (yLo < cLo) yLo = Math.max(yLo, cLo - maxPull)
+  if (yHi > cHi) yHi = Math.min(yHi, cHi + maxPull)
+  const pad = (yHi - yLo) * 0.06 || span * 0.06 || 1
+  return { yMin: yLo - pad, yMax: yHi + pad }
 }
 
 function PriceSvg({
@@ -300,26 +325,27 @@ function PriceSvg({
   const T = 18
   const B = 28
   const n = bars.length
-  const barPrices = levelPrices(bars, trades, alertLevels)
-  if (!barPrices.length && !trades.length && !alertLevels?.entry) {
+  if (!n && !trades.length && !alertLevels?.entry) {
     return (
       <div className="rounded-xl border border-line bg-surface px-4 py-8">
         <Empty>Pick a symbol to plot candles and alert levels</Empty>
       </div>
     )
   }
-  let pMin: number
-  let pMax: number
-  if (barPrices.length) {
-    pMin = Math.min(...barPrices)
-    pMax = Math.max(...barPrices)
-  } else {
-    pMin = 0
-    pMax = 1
-  }
-  const pad = (pMax - pMin) * 0.06 || pMax * 0.01 || 1
-  const yMin = pMin - pad
-  const yMax = pMax + pad
+  const { yMin, yMax } = n
+    ? chartYRange(bars, trades, alertLevels)
+    : (() => {
+        const ps = [
+          alertLevels?.entry,
+          alertLevels?.stop_loss,
+          alertLevels?.take_profit,
+          ...trades.map((t) => t.entry.price),
+        ].filter((x): x is number => x != null)
+        const pMin = ps.length ? Math.min(...ps) : 0
+        const pMax = ps.length ? Math.max(...ps) : 1
+        const pad = (pMax - pMin) * 0.06 || 1
+        return { yMin: pMin - pad, yMax: pMax + pad }
+      })()
   const span = yMax - yMin || 1
   const inner = W - L - R
   const xAt = (i: number) => (n <= 0 ? L : L + ((i + 0.5) / n) * inner)
