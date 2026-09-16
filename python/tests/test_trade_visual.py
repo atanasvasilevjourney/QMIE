@@ -1,7 +1,9 @@
 """Trade chart PNG for Discord alerts."""
 from __future__ import annotations
 
-from chart_visual import expected_r, render_trade_png
+from chart_visual import expected_r, render_trade_png, slice_bars_for_signal
+from price_fmt import fmt_price
+from models import AssetClass
 
 
 def _bars(n: int = 40, start: float = 100.0):
@@ -15,6 +17,18 @@ def _bars(n: int = 40, start: float = 100.0):
         out.append({"o": o, "h": h, "l": l, "c": c, "t": i})
         p = c
     return out
+
+
+def test_fmt_price_micro_cap_eight_decimals():
+    s = fmt_price(0.00000253, AssetClass.CRYPTO)
+    assert s == "0.00000253"
+
+
+def test_slice_bars_for_signal_bar_time():
+    bars = [{"t": 1000, "o": 1, "h": 1, "l": 1, "c": 1}, {"t": 2000, "o": 2, "h": 2, "l": 2, "c": 2}]
+    win, idx = slice_bars_for_signal(bars, bar_time_ms=1000, limit=50)
+    assert len(win) == 1
+    assert idx == 0
 
 
 def test_expected_r_buy():

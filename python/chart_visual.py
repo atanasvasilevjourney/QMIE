@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Rectangle
+from matplotlib.ticker import FuncFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +35,10 @@ def expected_r(
 
 
 def _fmt_price(price: float) -> str:
-    a = abs(price)
-    if a >= 100:
-        return f"{price:,.2f}"
-    if a >= 1:
-        return f"{price:,.4f}"
-    if a >= 0.0001:
-        return f"{price:.6f}"
-    return f"{price:.8f}"
+    from price_fmt import crypto_decimals
+
+    p = crypto_decimals(price)
+    return f"{price:,.{p}f}"
 
 
 def render_trade_png(
@@ -55,6 +52,7 @@ def render_trade_png(
     take_profit: Optional[float] = None,
     grade: Optional[str] = None,
     score: Optional[float] = None,
+    entry_bar_index: Optional[int] = None,
     width: int = 960,
     height: int = 540,
 ) -> bytes:
@@ -119,7 +117,9 @@ def render_trade_png(
     if take_profit is not None:
         ax.axhline(take_profit, color="#2ecc71", linewidth=1.2, linestyle="--", label=f"TP {_fmt_price(take_profit)}")
 
-    ax.scatter([n - 1], [entry], marker="^" if buy else "v", s=120, color="#00bcd4", zorder=5, edgecolors="white", linewidths=0.6)
+    e_idx = entry_bar_index if entry_bar_index is not None else n - 1
+    e_idx = max(0, min(n - 1, int(e_idx)))
+    ax.scatter([e_idx], [entry], marker="^" if buy else "v", s=120, color="#00bcd4", zorder=5, edgecolors="white", linewidths=0.6)
 
     side_label = "LONG" if buy else "SHORT"
     grade_txt = f" · {grade}" if grade else ""
@@ -136,6 +136,7 @@ def render_trade_png(
     ax.set_ylabel("Price", color="#8b949e")
     ax.set_xlim(-0.8, n - 0.2)
     ax.set_ylim(y_min, y_max)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: _fmt_price(v)))
     ax.tick_params(colors="#8b949e", labelsize=8)
     ax.grid(True, color="#21262d", linewidth=0.6, alpha=0.9)
     for spine in ax.spines.values():
@@ -164,6 +165,34 @@ async def fetch_bars_for_alert(
     return charts_mod.bars_payload(df)
 
 
+def slice_bars_for_signal(
+    bars: list[dict[str, Any]],
+    *,
+    bar_time_ms: Optional[int],
+    limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Window bars ending on the signal candle; return (bars, entry_bar_index)."""
+    if not bars:
+        return [], 0
+    lim = max(10, min(200, limit))
+    if bar_time_ms is None:
+        window = bars[-lim:]
+        return window, len(window) - 1
+    target = int(bar_time_ms)
+    idx = next((i for i, b in enumerate(bars) if int(b["t"]) == target), None)
+    if idx is None:
+        idx = min(
+            range(len(bars)),
+            key=lambda i: abs(int(bars[i]["t"]) - target),
+        )
+        if abs(int(bars[idx]["t"]) - target) > 86_400_000 * 2:
+            window = bars[-lim:]
+            return window, len(window) - 1
+    start = max(0, idx - lim + 1)
+    window = bars[start : idx + 1]
+    return window, len(window) - 1
+
+
 async def build_alert_chart_png(
     client: Any,
     sig: Any,
@@ -180,7 +209,14 @@ async def build_alert_chart_png(
         entry_f = float(entry)
     except (TypeError, ValueError):
         return None
-    bars = await fetch_bars_for_alert(client, symbol, tf, limit=bar_limit)
+    bars_raw = await fetch_bars_for_alert(client, symbol, tf, limit=bar_limit + 30)
+    bar_ms = getattr(sig, "bar_time", None)
+    if bar_ms is not None:
+        try:
+            bar_ms = int(bar_ms)
+        except (TypeError, ValueError):
+            bar_ms = None
+    bars, entry_i = slice_bars_for_signal(bars_raw, bar_time_ms=bar_ms, limit=bar_limit)
     if len(bars) < 5:
         return None
     sl = getattr(sig, "stop_loss", None)
@@ -201,6 +237,7 @@ async def build_alert_chart_png(
             take_profit=float(tp) if tp is not None else None,
             grade=grade_s,
             score=float(score) if score is not None else None,
+            entry_bar_index=entry_i,
         )
     except Exception:
         logger.exception("render_trade_png failed for %s", symbol)
