@@ -41,6 +41,46 @@ def _fmt_price(price: float) -> str:
     return f"{price:,.{p}f}"
 
 
+def price_y_limits(
+    highs: Sequence[float],
+    lows: Sequence[float],
+    entry: float,
+    stop_loss: Optional[float] = None,
+    take_profit: Optional[float] = None,
+    *,
+    level_extend_frac: float = 0.55,
+) -> tuple[float, float, float]:
+    """
+    Y-axis for alert charts: zoom on closed candles, soft-include SL/TP.
+
+    Including full ATR stop/target in ylim squashes wicks into flat dashes.
+    ``level_extend_frac`` caps how far beyond the candle range we pull SL/TP in.
+    Returns (y_min, y_max, candle_span) after padding.
+    """
+    candle_lo = min(lows)
+    candle_hi = max(highs)
+    candle_span = candle_hi - candle_lo
+    if candle_span <= 0:
+        candle_span = max(abs(entry) * 0.02, entry * 1e-6, 1e-12)
+
+    core_lo = min(candle_lo, entry)
+    core_hi = max(candle_hi, entry)
+    max_pull = candle_span * level_extend_frac
+
+    y_lo, y_hi = core_lo, core_hi
+    for p in (stop_loss, take_profit):
+        if p is None:
+            continue
+        pf = float(p)
+        if pf < y_lo:
+            y_lo = max(pf, y_lo - max_pull)
+        elif pf > y_hi:
+            y_hi = min(pf, y_hi + max_pull)
+
+    pad = (y_hi - y_lo) * 0.10 or candle_span * 0.10 or abs(entry) * 0.01 or 1.0
+    return y_lo - pad, y_hi + pad, candle_span
+
+
 def render_trade_png(
     bars: Sequence[dict[str, Any]],
     *,
@@ -65,14 +105,10 @@ def render_trade_png(
     opens = [float(b["o"]) for b in bars]
     closes = [float(b["c"]) for b in bars]
 
-    y_lo = min(lows + [entry])
-    y_hi = max(highs + [entry])
-    for p in (stop_loss, take_profit):
-        if p is not None:
-            y_lo = min(y_lo, float(p))
-            y_hi = max(y_hi, float(p))
-    pad = (y_hi - y_lo) * 0.08 or entry * 0.02 or 1.0
-    y_min, y_max = y_lo - pad, y_hi + pad
+    y_min, y_max, candle_span = price_y_limits(
+        highs, lows, entry, stop_loss, take_profit
+    )
+    min_body = max(candle_span * 0.012, abs(entry) * 1e-8, 1e-12)
 
     buy = (side or "BUY").upper() != "SELL"
     rr = expected_r(side, entry, stop_loss, take_profit)
@@ -99,7 +135,7 @@ def render_trade_png(
         color = "#2ecc71" if up else "#e74c3c"
         ax.plot([i, i], [l, h], color=color, linewidth=0.8, solid_capstyle="round")
         bottom = min(o, c)
-        height_bar = max(abs(c - o), (y_max - y_min) * 0.002)
+        height_bar = max(abs(c - o), min_body)
         ax.add_patch(
             Rectangle(
                 (i - cw / 2, bottom),

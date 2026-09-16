@@ -1,7 +1,7 @@
 """Trade chart PNG for Discord alerts."""
 from __future__ import annotations
 
-from chart_visual import expected_r, render_trade_png, slice_bars_for_signal
+from chart_visual import expected_r, price_y_limits, render_trade_png, slice_bars_for_signal
 from price_fmt import fmt_price
 from models import AssetClass
 
@@ -33,6 +33,21 @@ def test_slice_bars_for_signal_bar_time():
 
 def test_expected_r_buy():
     assert expected_r("BUY", 100.0, 95.0, 110.0) == 2.0
+
+
+def test_price_y_limits_does_not_flatten_candles_with_wide_sl_tp():
+    """Wide SL/TP must not dominate y-axis vs the visible candle range."""
+    bars = _bars(50, start=100.0)
+    highs = [float(b["h"]) for b in bars]
+    lows = [float(b["l"]) for b in bars]
+    entry = 102.0
+    y_min, y_max, candle_span = price_y_limits(
+        highs, lows, entry, stop_loss=70.0, take_profit=150.0
+    )
+    axis_span = y_max - y_min
+    # Uncapped SL/TP would span ~80 on this fixture; candles are ~12.5.
+    assert axis_span < 35
+    assert axis_span > candle_span * 0.8
 
 
 def test_render_trade_png_bytes():
