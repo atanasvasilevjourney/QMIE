@@ -127,6 +127,8 @@ class SignalDispatcher:
         chart_client: object | None = None,
         discord_chart_image: bool = True,
         discord_chart_bars: int = 90,
+        discord_chart_htf: bool = True,
+        scan_htf_map: dict[str, str] | None = None,
     ):
         self.db = db
         self.notifiers = notifiers
@@ -138,6 +140,8 @@ class SignalDispatcher:
         self.chart_client = chart_client
         self.discord_chart_image = discord_chart_image
         self.discord_chart_bars = discord_chart_bars
+        self.discord_chart_htf = discord_chart_htf
+        self.scan_htf_map = scan_htf_map or {}
         # (utc_date_iso, symbol) → count of alerts already dispatched that day
         self._day_counts: dict[tuple[str, str], int] = defaultdict(int)
 
@@ -245,6 +249,8 @@ class SignalDispatcher:
                     self.chart_client,
                     notify_sig,
                     bar_limit=self.discord_chart_bars,
+                    htf_map=self.scan_htf_map if self.discord_chart_htf else None,
+                    include_htf=self.discord_chart_htf,
                 )
             except Exception:
                 logger.exception("alert chart png skipped (non-fatal)")

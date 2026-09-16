@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     discord_enabled:        bool = True
     discord_chart_image:    bool = True
     discord_chart_bars:     int = 90
+    discord_chart_htf:      bool = True
 
     telegram_bot_token:     Optional[str] = None
     telegram_chat_id:       Optional[str] = None

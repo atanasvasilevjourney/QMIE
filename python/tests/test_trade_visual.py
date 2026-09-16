@@ -1,7 +1,14 @@
 """Trade chart PNG for Discord alerts."""
 from __future__ import annotations
 
-from chart_visual import expected_r, price_y_limits, render_trade_png, slice_bars_for_signal
+from chart_visual import (
+    expected_r,
+    ltf_bar_to_htf_open_ms,
+    price_y_limits,
+    render_dual_htf_landscape_png,
+    render_trade_png,
+    slice_bars_for_signal,
+)
 from price_fmt import fmt_price
 from models import AssetClass
 
@@ -48,6 +55,36 @@ def test_price_y_limits_does_not_flatten_candles_with_wide_sl_tp():
     # Uncapped SL/TP would span ~80 on this fixture; candles are ~12.5.
     assert axis_span < 35
     assert axis_span > candle_span * 0.8
+
+
+def test_ltf_bar_to_htf_open_ms_4h_to_1d():
+    from datetime import datetime, timezone
+
+    noon = int(datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    day_open = int(datetime(2026, 9, 16, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert ltf_bar_to_htf_open_ms(noon, "1d") == day_open
+
+
+def test_render_dual_htf_landscape_png_bytes():
+    ltf = _bars(45, start=100.0)
+    htf = _bars(30, start=95.0)
+    png = render_dual_htf_landscape_png(
+        ltf,
+        htf,
+        symbol="BTCUSDT",
+        ltf="4h",
+        htf="1d",
+        side="BUY",
+        entry=102.0,
+        stop_loss=98.0,
+        take_profit=110.0,
+        grade="A",
+        score=88.0,
+        ltf_entry_index=len(ltf) - 1,
+        htf_entry_index=len(htf) - 1,
+    )
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(png) > 12_000
 
 
 def test_render_trade_png_bytes():

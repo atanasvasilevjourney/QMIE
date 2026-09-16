@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
+from charts import TF_MS
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,24 +83,33 @@ def price_y_limits(
     return y_lo - pad, y_hi + pad, candle_span
 
 
-def render_trade_png(
+def ltf_bar_to_htf_open_ms(ltf_bar_open_ms: int, htf: str) -> int:
+    """Map a signal-timeframe bar open (ms) to its HTF candle open."""
+    step = TF_MS.get(htf.lower())
+    if not step:
+        return int(ltf_bar_open_ms)
+    t = int(ltf_bar_open_ms)
+    return (t // step) * step
+
+
+def _time_tolerance_ms(timeframe: str) -> int:
+    step = TF_MS.get(timeframe.lower(), 86_400_000)
+    return step * 2
+
+
+def _draw_trade_panel(
+    ax: Any,
     bars: Sequence[dict[str, Any]],
     *,
-    symbol: str,
-    timeframe: str,
+    panel_title: str,
     side: str,
     entry: float,
-    stop_loss: Optional[float] = None,
-    take_profit: Optional[float] = None,
-    grade: Optional[str] = None,
-    score: Optional[float] = None,
-    entry_bar_index: Optional[int] = None,
-    width: int = 960,
-    height: int = 540,
-) -> bytes:
-    """Render dark-theme candle chart with risk/reward zones."""
-    if not bars:
-        raise ValueError("bars_required")
+    stop_loss: Optional[float],
+    take_profit: Optional[float],
+    entry_bar_index: Optional[int],
+    show_legend: bool,
+    anchor_rr_on_entry_bar: bool,
+) -> None:
     n = len(bars)
     highs = [float(b["h"]) for b in bars]
     lows = [float(b["l"]) for b in bars]
@@ -109,15 +120,18 @@ def render_trade_png(
         highs, lows, entry, stop_loss, take_profit
     )
     min_body = max(candle_span * 0.012, abs(entry) * 1e-8, 1e-12)
-
     buy = (side or "BUY").upper() != "SELL"
-    rr = expected_r(side, entry, stop_loss, take_profit)
 
-    fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
-    fig.patch.set_facecolor("#0d1117")
-    ax.set_facecolor("#0d1117")
+    e_idx = entry_bar_index if entry_bar_index is not None else n - 1
+    e_idx = max(0, min(n - 1, int(e_idx)))
 
-    x0, x1 = max(0, n - 35), n - 0.5
+    if anchor_rr_on_entry_bar:
+        x0 = float(e_idx) - 0.15
+        x1 = float(n) - 0.5
+    else:
+        x0 = max(0.0, float(n - 35))
+        x1 = float(n) - 0.5
+
     if stop_loss is not None:
         if buy:
             ax.fill_between([x0, x1], entry, stop_loss, color="#e74c3c", alpha=0.18)
@@ -153,35 +167,148 @@ def render_trade_png(
     if take_profit is not None:
         ax.axhline(take_profit, color="#2ecc71", linewidth=1.2, linestyle="--", label=f"TP {_fmt_price(take_profit)}")
 
-    e_idx = entry_bar_index if entry_bar_index is not None else n - 1
-    e_idx = max(0, min(n - 1, int(e_idx)))
-    ax.scatter([e_idx], [entry], marker="^" if buy else "v", s=120, color="#00bcd4", zorder=5, edgecolors="white", linewidths=0.6)
+    ax.axvline(e_idx, color="#00bcd4", alpha=0.45, linewidth=1.0, zorder=4)
+    ax.scatter(
+        [e_idx],
+        [entry],
+        marker="^" if buy else "v",
+        s=100 if show_legend else 80,
+        color="#00bcd4",
+        zorder=5,
+        edgecolors="white",
+        linewidths=0.6,
+    )
 
+    ax.set_title(panel_title, color="#e6edf3", fontsize=11, fontweight="bold", loc="left", pad=8)
+    ax.set_ylabel("Price", color="#8b949e", fontsize=8)
+    ax.set_xlim(-0.8, n - 0.2)
+    ax.set_ylim(y_min, y_max)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: _fmt_price(v)))
+    ax.tick_params(colors="#8b949e", labelsize=7)
+    ax.grid(True, color="#21262d", linewidth=0.6, alpha=0.9)
+    for spine in ax.spines.values():
+        spine.set_color("#30363d")
+    if show_legend:
+        ax.legend(loc="upper left", fontsize=7, facecolor="#161b22", edgecolor="#30363d", labelcolor="#e6edf3")
+
+
+def render_trade_png(
+    bars: Sequence[dict[str, Any]],
+    *,
+    symbol: str,
+    timeframe: str,
+    side: str,
+    entry: float,
+    stop_loss: Optional[float] = None,
+    take_profit: Optional[float] = None,
+    grade: Optional[str] = None,
+    score: Optional[float] = None,
+    entry_bar_index: Optional[int] = None,
+    width: int = 960,
+    height: int = 540,
+    anchor_rr_on_entry_bar: bool = True,
+) -> bytes:
+    """Render dark-theme candle chart with risk/reward zones."""
+    if not bars:
+        raise ValueError("bars_required")
+    buy = (side or "BUY").upper() != "SELL"
+    rr = expected_r(side, entry, stop_loss, take_profit)
     side_label = "LONG" if buy else "SHORT"
     grade_txt = f" · {grade}" if grade else ""
     score_txt = f" · {score:.0f}/100" if score is not None else ""
     rr_txt = f" · {rr:.2f}R" if rr is not None else ""
-    ax.set_title(
-        f"{symbol} · {timeframe.upper()} · {side_label}{grade_txt}{score_txt}{rr_txt}",
-        color="#e6edf3",
-        fontsize=13,
-        fontweight="bold",
-        loc="left",
-        pad=12,
-    )
-    ax.set_ylabel("Price", color="#8b949e")
-    ax.set_xlim(-0.8, n - 0.2)
-    ax.set_ylim(y_min, y_max)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: _fmt_price(v)))
-    ax.tick_params(colors="#8b949e", labelsize=8)
-    ax.grid(True, color="#21262d", linewidth=0.6, alpha=0.9)
-    for spine in ax.spines.values():
-        spine.set_color("#30363d")
-    ax.legend(loc="upper left", fontsize=8, facecolor="#161b22", edgecolor="#30363d", labelcolor="#e6edf3")
+    title = f"{symbol} · {timeframe.upper()} · {side_label}{grade_txt}{score_txt}{rr_txt}"
 
+    fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
+    fig.patch.set_facecolor("#0d1117")
+    ax.set_facecolor("#0d1117")
+    _draw_trade_panel(
+        ax,
+        bars,
+        panel_title=title,
+        side=side,
+        entry=entry,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        entry_bar_index=entry_bar_index,
+        show_legend=True,
+        anchor_rr_on_entry_bar=anchor_rr_on_entry_bar,
+    )
     fig.text(0.99, 0.02, "QMIE · signal only", ha="right", va="bottom", color="#484f58", fontsize=8)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", facecolor=fig.get_facecolor(), bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def render_dual_htf_landscape_png(
+    ltf_bars: Sequence[dict[str, Any]],
+    htf_bars: Sequence[dict[str, Any]],
+    *,
+    symbol: str,
+    ltf: str,
+    htf: str,
+    side: str,
+    entry: float,
+    stop_loss: Optional[float] = None,
+    take_profit: Optional[float] = None,
+    grade: Optional[str] = None,
+    score: Optional[float] = None,
+    ltf_entry_index: Optional[int] = None,
+    htf_entry_index: Optional[int] = None,
+    width: int = 1280,
+    height: int = 520,
+) -> bytes:
+    """Landscape card: HTF context (left) + signal TF entry (right)."""
+    if not ltf_bars or not htf_bars:
+        raise ValueError("bars_required")
+    buy = (side or "BUY").upper() != "SELL"
+    rr = expected_r(side, entry, stop_loss, take_profit)
+    side_label = "LONG" if buy else "SHORT"
+    grade_txt = f" · {grade}" if grade else ""
+    score_txt = f" · {score:.0f}/100" if score is not None else ""
+    rr_txt = f" · {rr:.2f}R" if rr is not None else ""
+    ltf_title = f"{symbol} · {ltf.upper()} · {side_label}{grade_txt}{score_txt}{rr_txt}"
+    htf_title = f"{symbol} · {htf.upper()} · HTF context"
+
+    fig, (ax_htf, ax_ltf) = plt.subplots(
+        1,
+        2,
+        figsize=(width / 100, height / 100),
+        dpi=100,
+        gridspec_kw={"width_ratios": [1.0, 1.12], "wspace": 0.22},
+    )
+    fig.patch.set_facecolor("#0d1117")
+    for ax in (ax_htf, ax_ltf):
+        ax.set_facecolor("#0d1117")
+
+    _draw_trade_panel(
+        ax_htf,
+        htf_bars,
+        panel_title=htf_title,
+        side=side,
+        entry=entry,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        entry_bar_index=htf_entry_index,
+        show_legend=False,
+        anchor_rr_on_entry_bar=True,
+    )
+    _draw_trade_panel(
+        ax_ltf,
+        ltf_bars,
+        panel_title=ltf_title,
+        side=side,
+        entry=entry,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        entry_bar_index=ltf_entry_index,
+        show_legend=True,
+        anchor_rr_on_entry_bar=True,
+    )
+    fig.text(0.99, 0.02, "QMIE · signal only", ha="right", va="bottom", color="#484f58", fontsize=8)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", facecolor=fig.get_facecolor(), bbox_inches="tight", pad_inches=0.12)
     plt.close(fig)
     return buf.getvalue()
 
@@ -206,11 +333,13 @@ def slice_bars_for_signal(
     *,
     bar_time_ms: Optional[int],
     limit: int,
+    timeframe: str = "4h",
 ) -> tuple[list[dict[str, Any]], int]:
     """Window bars ending on the signal candle; return (bars, entry_bar_index)."""
     if not bars:
         return [], 0
     lim = max(10, min(200, limit))
+    tol = _time_tolerance_ms(timeframe)
     if bar_time_ms is None:
         window = bars[-lim:]
         return window, len(window) - 1
@@ -221,7 +350,7 @@ def slice_bars_for_signal(
             range(len(bars)),
             key=lambda i: abs(int(bars[i]["t"]) - target),
         )
-        if abs(int(bars[idx]["t"]) - target) > 86_400_000 * 2:
+        if abs(int(bars[idx]["t"]) - target) > tol:
             window = bars[-lim:]
             return window, len(window) - 1
     start = max(0, idx - lim + 1)
@@ -234,6 +363,8 @@ async def build_alert_chart_png(
     sig: Any,
     *,
     bar_limit: int = 90,
+    htf_map: Optional[dict[str, str]] = None,
+    include_htf: bool = True,
 ) -> Optional[bytes]:
     """Best-effort PNG for a TVSignal. Returns None if klines unavailable."""
     symbol = getattr(sig, "symbol", None) or ""
@@ -252,7 +383,9 @@ async def build_alert_chart_png(
             bar_ms = int(bar_ms)
         except (TypeError, ValueError):
             bar_ms = None
-    bars, entry_i = slice_bars_for_signal(bars_raw, bar_time_ms=bar_ms, limit=bar_limit)
+    bars, entry_i = slice_bars_for_signal(
+        bars_raw, bar_time_ms=bar_ms, limit=bar_limit, timeframe=tf
+    )
     if len(bars) < 5:
         return None
     sl = getattr(sig, "stop_loss", None)
@@ -262,18 +395,56 @@ async def build_alert_chart_png(
     grade = getattr(sig, "grade", None)
     grade_s = grade.value if hasattr(grade, "value") else (str(grade) if grade else None)
     score = getattr(sig, "score", None)
+    sl_f = float(sl) if sl is not None else None
+    tp_f = float(tp) if tp is not None else None
+    score_f = float(score) if score is not None else None
+
+    htf_tf: Optional[str] = None
+    if include_htf and htf_map:
+        htf_tf = htf_map.get(tf)
+    if htf_tf and htf_tf.lower() != tf:
+        try:
+            htf_limit = min(120, max(40, bar_limit // 2))
+            htf_raw = await fetch_bars_for_alert(client, symbol, htf_tf, limit=htf_limit + 20)
+            htf_ms = ltf_bar_to_htf_open_ms(bar_ms, htf_tf) if bar_ms is not None else None
+            htf_bars, htf_i = slice_bars_for_signal(
+                htf_raw,
+                bar_time_ms=htf_ms,
+                limit=htf_limit,
+                timeframe=htf_tf,
+            )
+            if len(htf_bars) >= 5:
+                return render_dual_htf_landscape_png(
+                    bars,
+                    htf_bars,
+                    symbol=symbol,
+                    ltf=tf,
+                    htf=htf_tf,
+                    side=side,
+                    entry=entry_f,
+                    stop_loss=sl_f,
+                    take_profit=tp_f,
+                    grade=grade_s,
+                    score=score_f,
+                    ltf_entry_index=entry_i,
+                    htf_entry_index=htf_i,
+                )
+        except Exception:
+            logger.exception("HTF alert chart panel skipped for %s", symbol)
+
     try:
         return render_trade_png(
             bars,
             symbol=symbol,
             timeframe=tf,
-            side=side,
             entry=entry_f,
-            stop_loss=float(sl) if sl is not None else None,
-            take_profit=float(tp) if tp is not None else None,
+            side=side,
+            stop_loss=sl_f,
+            take_profit=tp_f,
             grade=grade_s,
-            score=float(score) if score is not None else None,
+            score=score_f,
             entry_bar_index=entry_i,
+            anchor_rr_on_entry_bar=True,
         )
     except Exception:
         logger.exception("render_trade_png failed for %s", symbol)

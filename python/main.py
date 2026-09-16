@@ -174,6 +174,8 @@ async def lifespan(app: FastAPI):
         chart_client=client,
         discord_chart_image=s.discord_chart_image,
         discord_chart_bars=s.discord_chart_bars,
+        discord_chart_htf=s.discord_chart_htf,
+        scan_htf_map=s.htf_map,
     )
     paper = PaperBook(
         db,
