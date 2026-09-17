@@ -6,6 +6,7 @@ import type {
   Health,
   JournalFill,
   JournalStats,
+  RadarBreadthHistory,
   RadarSnapshot,
   SignalRow,
   AnalysisCard,
@@ -88,6 +89,8 @@ async function sendJson<T>(
 export const api = {
   health: () => getJson<Health>('/health'),
   radar: () => getJson<RadarSnapshot>('/radar'),
+  radarHistory: (range: '3m' | '6m' | '1y' | '5y' = '3m') =>
+    getJson<RadarBreadthHistory>(`/radar/history?range=${range}`),
   radarOnce: (notify = false) =>
     sendJson<{ ok: boolean; queued?: boolean; already_running?: boolean }>(
       `/radar/once?notify=${notify}`,

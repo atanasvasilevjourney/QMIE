@@ -87,6 +87,16 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
     trade_count    INTEGER NOT NULL DEFAULT 0,
     halted         INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS radar_breadth_history (
+    as_of_date     TEXT PRIMARY KEY,
+    green          INTEGER NOT NULL,
+    grey           INTEGER NOT NULL,
+    red            INTEGER NOT NULL,
+    total          INTEGER NOT NULL,
+    recorded_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_radar_breadth_date ON radar_breadth_history(as_of_date DESC);
 """
 
 
@@ -446,6 +456,52 @@ class Database:
             await db.commit()
             return {"date": today, "starting_eq": starting_eq,
                     "realized_pnl": 0.0, "trade_count": 0, "halted": 0}
+
+    async def upsert_radar_breadth(
+        self,
+        *,
+        as_of_date: str,
+        green: int,
+        grey: int,
+        red: int,
+        total: int,
+    ) -> None:
+        """One row per closed daily radar bar (market breadth % inputs)."""
+        now = _now()
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO radar_breadth_history
+                (as_of_date, green, grey, red, total, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(as_of_date) DO UPDATE SET
+                    green = excluded.green,
+                    grey = excluded.grey,
+                    red = excluded.red,
+                    total = excluded.total,
+                    recorded_at = excluded.recorded_at
+                """,
+                (as_of_date, int(green), int(grey), int(red), int(total), now),
+            )
+            await db.commit()
+
+    async def radar_breadth_history(self, *, days: int) -> list[dict[str, Any]]:
+        """Daily green/grey/red counts, oldest first, capped at `days` rows."""
+        limit = max(1, min(int(days), 3650))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT as_of_date, green, grey, red, total, recorded_at
+                  FROM radar_breadth_history
+                 ORDER BY as_of_date DESC
+                 LIMIT ?
+                """,
+                (limit,),
+            ) as cur:
+                rows = [dict(r) for r in await cur.fetchall()]
+        rows.reverse()
+        return rows
 
     async def update_today(self, *, pnl_delta: float = 0.0,
                            trade_inc: int = 0, halt: bool | None = None) -> None:

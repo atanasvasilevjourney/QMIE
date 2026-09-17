@@ -115,6 +115,7 @@ class RadarRow:
     is_fresh_flip: bool
     is_tight_coil: bool
     is_late_stage: bool
+    flip_from: Optional[str] = None  # prior RGG color at regime change
     is_early_long: bool = False   # GREY tight coil pressing the box high
     is_early_short: bool = False  # GREY tight coil pressing the box low
 
@@ -357,10 +358,13 @@ def _row_at(
     flip_idx = len(colors_i) - days
     state_censored = flip_idx == 0
     flipped_at: Optional[str] = None
+    flip_from: Optional[str] = None
     pct_since: Optional[float] = None
     price = float(sub["close"].iloc[-1])
     if not state_censored:
         flipped_at = pd.Timestamp(sub.index[flip_idx]).isoformat()
+        if flip_idx > 0:
+            flip_from = str(colors_i.iloc[flip_idx - 1])
         entry = float(sub["close"].iloc[flip_idx])
         if entry > 0:
             pct_since = round((price - entry) / entry * 100.0, 2)
@@ -437,6 +441,7 @@ def _row_at(
         is_fresh_flip=is_fresh,
         is_tight_coil=bool(is_tight),
         is_late_stage=bool(is_late),
+        flip_from=flip_from,
         is_early_long=bool(is_early_long),
         is_early_short=bool(is_early_short),
     )

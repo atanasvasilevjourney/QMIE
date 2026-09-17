@@ -88,6 +88,7 @@ class ScannerScheduler:
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
         radar_dispatch_trend_start: bool = True,
+        db: Optional[Any] = None,
     ):
         self.client = client
         self.universe = universe
@@ -108,6 +109,7 @@ class ScannerScheduler:
         # Daily Trend Radar (independent of SCAN_TIMEFRAMES)
         self.radar_enabled = radar_enabled
         self.radar_dispatch_trend_start = radar_dispatch_trend_start
+        self.db = db
         self.radar_cfg = radar_cfg or RadarConfig()
         try:
             self.radar_cfg.validate()
@@ -495,6 +497,19 @@ class ScannerScheduler:
             self.stats["last_radar_at"] = int(time.time())
             if mark_seen:
                 self._last_radar_seen = _last_close_ts(time.time(), _tf_seconds("1d"))
+
+            if self.db is not None and snap.as_of:
+                as_of_date = str(snap.as_of)[:10]
+                try:
+                    await self.db.upsert_radar_breadth(
+                        as_of_date=as_of_date,
+                        green=snap.green,
+                        grey=snap.grey,
+                        red=snap.red,
+                        total=snap.succeeded,
+                    )
+                except Exception:
+                    logger.exception("radar breadth history persist failed (non-fatal)")
 
             logger.info(
                 "Trend Radar done in %.2fs: n=%d/%d G=%d Gy=%d R=%d "

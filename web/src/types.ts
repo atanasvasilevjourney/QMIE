@@ -21,6 +21,24 @@ export type RadarRow = {
   is_late_stage: boolean
   is_early_long?: boolean
   is_early_short?: boolean
+  flip_from?: 'GREEN' | 'GREY' | 'RED' | string | null
+}
+
+export type RadarBreadthPoint = {
+  date: string
+  green: number
+  red: number
+  grey: number
+  total: number
+  green_pct: number
+  red_pct: number
+}
+
+export type RadarBreadthHistory = {
+  range: string
+  days: number
+  count: number
+  points: RadarBreadthPoint[]
 }
 
 export type RadarSnapshot = {

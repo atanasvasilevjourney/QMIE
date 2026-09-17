@@ -14,6 +14,7 @@ Endpoints:
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
+  GET  /radar/history         daily breadth series (3m/6m/1y/5y)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
@@ -223,6 +224,7 @@ async def lifespan(app: FastAPI):
         ),
         radar_enabled=s.radar_enabled,
         radar_dispatch_trend_start=s.radar_dispatch_trend_start,
+        db=db,
         radar_cfg=RadarConfig(
             adx_length=s.radar_adx_length,
             enter_adx=s.radar_enter_adx,
@@ -409,6 +411,81 @@ async def get_radar() -> dict[str, Any]:
     out = snap.as_dict()
     out.setdefault("enabled", state.scheduler.radar_enabled)
     return out
+
+
+_RADAR_HISTORY_DAYS = {
+    "3m": 90,
+    "6m": 180,
+    "1y": 365,
+    "5y": 1825,
+}
+
+
+@app.get("/radar/history")
+async def get_radar_history(range: str = "3m", days: int | None = None) -> dict[str, Any]:
+    """Daily market breadth (% of universe in GREEN vs RED). Oldest-first series."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    if days is not None:
+        span = max(7, min(int(days), 3650))
+    else:
+        key = (range or "3m").strip().lower()
+        span = _RADAR_HISTORY_DAYS.get(key)
+        if span is None:
+            raise HTTPException(
+                400,
+                f"range must be one of {list(_RADAR_HISTORY_DAYS)} or pass days=",
+            )
+    rows = await state.db.radar_breadth_history(days=span)
+    snap = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        snap = state.scheduler.last_radar
+    if snap is not None and snap.as_of:
+        as_of_date = str(snap.as_of)[:10]
+        if not rows or rows[-1].get("as_of_date") != as_of_date:
+            rows = [
+                *rows,
+                {
+                    "as_of_date": as_of_date,
+                    "green": snap.green,
+                    "grey": snap.grey,
+                    "red": snap.red,
+                    "total": snap.succeeded,
+                    "recorded_at": None,
+                },
+            ]
+        elif rows:
+            rows[-1] = {
+                "as_of_date": as_of_date,
+                "green": snap.green,
+                "grey": snap.grey,
+                "red": snap.red,
+                "total": snap.succeeded,
+                "recorded_at": rows[-1].get("recorded_at"),
+            }
+    points = []
+    for r in rows:
+        total = int(r.get("total") or 0)
+        g, rd = int(r.get("green") or 0), int(r.get("red") or 0)
+        if total <= 0:
+            continue
+        points.append(
+            {
+                "date": r["as_of_date"],
+                "green": g,
+                "red": rd,
+                "grey": int(r.get("grey") or 0),
+                "total": total,
+                "green_pct": round(100.0 * g / total, 2),
+                "red_pct": round(100.0 * rd / total, 2),
+            }
+        )
+    return {
+        "range": range if days is None else f"{span}d",
+        "days": span,
+        "count": len(points),
+        "points": points,
+    }
 
 
 @app.get("/screens")

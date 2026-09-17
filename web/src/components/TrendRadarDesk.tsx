@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ChartAlertLevels, JournalFill, RadarRow, RadarSnapshot } from '../types'
 import { formatPrice } from '../lib/formatPrice'
 import { ChartsPanel } from './ChartsPanel'
+import { TrendHistoryChart } from './TrendHistoryChart'
 import { EmptyNote, ModuleCard, StatTile } from './layout/ModuleCard'
 
 type ScanId =
   | 'all'
+  | 'flips_breakouts'
   | 'regime_shift'
   | 'fresh'
   | 'fresh_green'
@@ -15,9 +17,10 @@ type ScanId =
   | 'early'
   | 'late'
 
-type SortKey = 'days_in_state' | 'pct_since_flip' | 'adx' | 'symbol' | 'price'
+type SortKey = 'days_in_state' | 'pct_since_flip' | 'adx' | 'symbol' | 'price' | 'flipped_at'
 
 const SCANS: { id: ScanId; label: string; hint: string }[] = [
+  { id: 'flips_breakouts', label: 'Flips & breakouts', hint: 'Trend changes' },
   { id: 'regime_shift', label: 'Regime shift', hint: 'Day 1 in color' },
   { id: 'fresh', label: 'Fresh flips', hint: '≤3d in trend' },
   { id: 'fresh_green', label: 'Fresh GREEN', hint: 'New uptrend' },
@@ -47,10 +50,30 @@ function rowTags(r: RadarRow): string[] {
   return t
 }
 
+function colorWord(c: string): string {
+  if (c === 'GREEN') return 'Green'
+  if (c === 'RED') return 'Red'
+  if (c === 'GREY') return 'Grey'
+  return c
+}
+
+function flipDirection(r: RadarRow): string {
+  if (r.state_censored || !r.flip_from) return '—'
+  return `${colorWord(r.flip_from)} → ${colorWord(r.color)}`
+}
+
+function trendWord(c: RadarRow['color']): string {
+  if (c === 'GREEN') return 'UPTREND'
+  if (c === 'RED') return 'DOWNTREND'
+  return 'NEUTRAL'
+}
+
 function matchesScan(r: RadarRow, scan: ScanId): boolean {
   switch (scan) {
     case 'all':
       return true
+    case 'flips_breakouts':
+      return (r.color === 'GREEN' || r.color === 'RED') && !r.state_censored && !!r.flipped_at
     case 'regime_shift':
       return r.days_in_state === 1 && !r.state_censored
     case 'fresh':
@@ -110,9 +133,10 @@ export function TrendRadarDesk({
   radar: RadarSnapshot | null
   fills: JournalFill[]
 }) {
-  const [scan, setScan] = useState<ScanId>('regime_shift')
-  const [sortKey, setSortKey] = useState<SortKey>('days_in_state')
-  const [sortAsc, setSortAsc] = useState(true)
+  const [scan, setScan] = useState<ScanId>('flips_breakouts')
+  const [sortKey, setSortKey] = useState<SortKey>('flipped_at')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [chartOpen, setChartOpen] = useState(true)
   const [selected, setSelected] = useState<RadarRow | null>(null)
   const [colorFilter, setColorFilter] = useState<'ALL' | 'GREEN' | 'GREY' | 'RED'>('ALL')
 
@@ -126,6 +150,11 @@ export function TrendRadarDesk({
       if (sortKey === 'days_in_state') return dir * (a.days_in_state - b.days_in_state)
       if (sortKey === 'adx') return dir * (a.adx - b.adx)
       if (sortKey === 'price') return dir * (a.price - b.price)
+      if (sortKey === 'flipped_at') {
+        const fa = a.flipped_at ?? ''
+        const fb = b.flipped_at ?? ''
+        return dir * fa.localeCompare(fb)
+      }
       const pa = a.pct_since_flip ?? -999
       const pb = b.pct_since_flip ?? -999
       return dir * (pa - pb)
@@ -176,8 +205,11 @@ export function TrendRadarDesk({
     else {
       setSortKey(key)
       setSortAsc(key === 'days_in_state' || key === 'symbol')
+      if (key === 'flipped_at') setSortAsc(false)
     }
   }
+
+  const flipsMode = scan === 'flips_breakouts'
 
   return (
     <div className="trend-desk">
@@ -196,6 +228,14 @@ export function TrendRadarDesk({
           <StatTile label="Results" value={filtered.length} tone="cyan" />
         </div>
       </header>
+
+      <div className="trend-playbook" role="note">
+        <strong>Strategy:</strong> Trend Radar = spot 1D context (watchlist, not auto-size).{' '}
+        <strong>Trade tier</strong> = closed 4h TEMA A/A+ perps only. Fresh GREEN/RED flips = early watch; LATE
+        tag = chase risk. Long-only edge dominates short overlays on crypto — use RED for hedges, not hero shorts.
+      </div>
+
+      <TrendHistoryChart />
 
       <div className="trend-desk-body">
         <aside className="trend-desk-scans" aria-label="Trend scans">
@@ -236,29 +276,43 @@ export function TrendRadarDesk({
                 <tr>
                   <th>#</th>
                   <th>Ticker</th>
-                  <th>Regime</th>
+                  {flipsMode && <th>Flip</th>}
+                  <th>{flipsMode ? 'Trend' : 'Regime'}</th>
+                  {!flipsMode && (
+                    <th>
+                      <button type="button" className="trend-th-btn" onClick={() => toggleSort('days_in_state')}>
+                        Days {sortKey === 'days_in_state' ? (sortAsc ? '↑' : '↓') : ''}
+                      </button>
+                    </th>
+                  )}
                   <th>
-                    <button type="button" className="trend-th-btn" onClick={() => toggleSort('days_in_state')}>
-                      Days {sortKey === 'days_in_state' ? (sortAsc ? '↑' : '↓') : ''}
+                    <button type="button" className="trend-th-btn" onClick={() => toggleSort('flipped_at')}>
+                      {flipsMode ? 'Last flip' : 'Flipped'}{' '}
+                      {sortKey === 'flipped_at' ? (sortAsc ? '↑' : '↓') : ''}
                     </button>
                   </th>
-                  <th>Flipped</th>
                   <th>
                     <button type="button" className="trend-th-btn" onClick={() => toggleSort('pct_since_flip')}>
-                      % move {sortKey === 'pct_since_flip' ? (sortAsc ? '↑' : '↓') : ''}
+                      {flipsMode ? 'Since trend start' : '% move'}{' '}
+                      {sortKey === 'pct_since_flip' ? (sortAsc ? '↑' : '↓') : ''}
                     </button>
                   </th>
-                  <th>
-                    <button type="button" className="trend-th-btn" onClick={() => toggleSort('price')}>
-                      Price {sortKey === 'price' ? (sortAsc ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>
-                    <button type="button" className="trend-th-btn" onClick={() => toggleSort('adx')}>
-                      ADX {sortKey === 'adx' ? (sortAsc ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>Tags</th>
+                  {!flipsMode && (
+                    <>
+                      <th>
+                        <button type="button" className="trend-th-btn" onClick={() => toggleSort('price')}>
+                          Price {sortKey === 'price' ? (sortAsc ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="trend-th-btn" onClick={() => toggleSort('adx')}>
+                          ADX {sortKey === 'adx' ? (sortAsc ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
+                      <th>Tags</th>
+                    </>
+                  )}
+                  {flipsMode && <th>Breakout</th>}
                 </tr>
               </thead>
               <tbody>
@@ -276,15 +330,31 @@ export function TrendRadarDesk({
                     >
                       <td className="tabular text-muted">{i + 1}</td>
                       <td className="font-mono font-medium tabular text-ink">{r.symbol.replace('USDT', '')}</td>
+                      {flipsMode && (
+                        <td>
+                          <span className="trend-flip-pill">{flipDirection(r)}</span>
+                        </td>
+                      )}
                       <td>
-                        <span className={`trend-regime-pill ${colorClass(r.color)}`}>{r.color}</span>
+                        <span className={`trend-regime-pill ${colorClass(r.color)}`}>
+                          {flipsMode ? trendWord(r.color) : r.color}
+                        </span>
                       </td>
-                      <td className="tabular">{r.days_in_state}</td>
+                      {!flipsMode && <td className="tabular">{r.days_in_state}</td>}
                       <td className="tabular text-sm text-muted">{fmtFlip(r.flipped_at)}</td>
                       <td className={`tabular font-medium ${pctTone}`}>{fmtPct(pct)}</td>
-                      <td className="tabular text-sm">{formatPrice(r.price)}</td>
-                      <td className="tabular text-muted">{r.adx.toFixed(1)}</td>
-                      <td className="trend-tags">{rowTags(r).join(' ')}</td>
+                      {!flipsMode && (
+                        <>
+                          <td className="tabular text-sm">{formatPrice(r.price)}</td>
+                          <td className="tabular text-muted">{r.adx.toFixed(1)}</td>
+                          <td className="trend-tags">{rowTags(r).join(' ')}</td>
+                        </>
+                      )}
+                      {flipsMode && (
+                        <td className="text-xs text-muted">
+                          {r.breakout ? `${r.breakout} today` : '—'}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -296,7 +366,15 @@ export function TrendRadarDesk({
         </section>
 
         <aside className="trend-desk-detail">
-          <div className="trend-desk-chart">
+          <button
+            type="button"
+            className="trend-chart-toggle btn btn-sm"
+            onClick={() => setChartOpen((v) => !v)}
+            aria-expanded={chartOpen}
+          >
+            {chartOpen ? 'Hide chart' : 'Show chart'}
+          </button>
+          <div className={`trend-desk-chart ${chartOpen ? '' : 'trend-desk-chart-collapsed'}`}>
             <ChartsPanel
               compact
               focusSymbol={selected?.symbol}
@@ -324,6 +402,7 @@ export function TrendRadarDesk({
                 <Detail k="Regime" v={selected.color} />
                 <Detail k="Days in state" v={String(selected.days_in_state)} />
                 <Detail k="Regime shift?" v={selected.days_in_state === 1 && !selected.state_censored ? 'Yes — day 1' : 'No'} />
+                <Detail k="Flip" v={flipDirection(selected)} />
                 <Detail k="Flipped at" v={fmtFlip(selected.flipped_at)} />
                 <Detail k="Closed bar" v={fmtFlip(selected.bar_time)} />
                 <Detail k="% since flip" v={fmtPct(selected.pct_since_flip)} />
