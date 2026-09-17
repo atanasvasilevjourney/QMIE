@@ -6,6 +6,7 @@ import type { DeskTab, ScreenRow, SignalRow } from './types'
 import { Scene3D } from './components/Scene3D'
 import { TopBar } from './components/TopBar'
 import { RadarPanel } from './components/RadarPanel'
+import { TrendRadarDesk } from './components/TrendRadarDesk'
 import { SignalsPanel } from './components/SignalsPanel'
 import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
@@ -238,6 +239,24 @@ export default function App() {
                 onSelect={goJournal}
                 onChart={goChart}
               />
+            </motion.div>
+          )}
+
+          {tab === 'trend' && (
+            <motion.div
+              key="trend"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <PageHeader
+                kicker="Daily trend"
+                title="Regime"
+                highlight="scanner"
+                lede="SCANZ-style table: filter regime shifts, sort by days since flip, chart on select. Spot 1D only — not TEMA leverage."
+              />
+              <TrendRadarDesk radar={desk.radar} fills={desk.fills} />
             </motion.div>
           )}
 

@@ -3,6 +3,7 @@ import type { DeskTab } from '../../types'
 const NAV: { id: DeskTab; label: string; hint: string }[] = [
   { id: 'orbit', label: 'Orbit', hint: '3D universe' },
   { id: 'ops', label: 'Ops', hint: 'Radar + tables' },
+  { id: 'trend', label: 'Trend', hint: 'Daily RGG desk' },
   { id: 'screens', label: 'Screens', hint: 'Combo list' },
   { id: 'charts', label: 'Charts', hint: 'Equity + price' },
   { id: 'guide', label: 'Guide', hint: 'Playbook' },

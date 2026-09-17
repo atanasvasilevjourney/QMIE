@@ -853,3 +853,227 @@ html[data-theme="light"] .module-card {
   margin-bottom: 0.25rem;
   border-bottom: 1px dashed var(--color-line);
 }
+
+/* Daily Trend desk (SCANZ-style scanner + chart) */
+.trend-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.trend-desk-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trend-desk-body {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 32rem;
+  grid-template-columns: 11rem minmax(0, 1.15fr) minmax(18rem, 0.95fr);
+}
+
+@media (max-width: 1200px) {
+  .trend-desk-body {
+    grid-template-columns: 1fr;
+  }
+  .trend-desk-scans {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+  }
+}
+
+.trend-desk-scans {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  max-height: 42rem;
+  overflow: auto;
+}
+
+.trend-desk-scans-kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.35rem;
+}
+
+.trend-scan-btn {
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.trend-scan-btn:hover {
+  background: var(--color-surface-2, rgba(255, 255, 255, 0.04));
+}
+
+.trend-scan-btn-on {
+  border-color: var(--color-cyan);
+  background: color-mix(in srgb, var(--color-cyan) 12%, transparent);
+}
+
+.trend-scan-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.trend-scan-hint {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+}
+
+.trend-desk-table-wrap {
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.trend-desk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.trend-table-scroll {
+  overflow: auto;
+  flex: 1;
+  max-height: 42rem;
+}
+
+.trend-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.trend-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+}
+
+.trend-th-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.trend-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
+  vertical-align: middle;
+}
+
+.trend-row {
+  cursor: pointer;
+}
+
+.trend-row:hover {
+  background: color-mix(in srgb, var(--color-cyan) 6%, transparent);
+}
+
+.trend-row-on {
+  background: color-mix(in srgb, var(--color-cyan) 14%, transparent);
+}
+
+.trend-row-shift {
+  box-shadow: inset 3px 0 0 var(--color-lime);
+}
+
+.trend-regime-pill {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.trend-cell-green {
+  background: color-mix(in srgb, var(--color-lime) 35%, transparent);
+  color: var(--color-ink);
+}
+
+.trend-cell-red {
+  background: color-mix(in srgb, var(--color-magenta) 35%, transparent);
+  color: var(--color-ink);
+}
+
+.trend-cell-grey {
+  background: color-mix(in srgb, var(--color-muted) 25%, transparent);
+  color: var(--color-muted);
+}
+
+.trend-pct-up {
+  color: var(--color-lime);
+  background: color-mix(in srgb, var(--color-lime) 18%, transparent);
+}
+
+.trend-pct-down {
+  color: var(--color-magenta);
+  background: color-mix(in srgb, var(--color-magenta) 18%, transparent);
+}
+
+.trend-tags {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--color-cyan);
+  white-space: nowrap;
+}
+
+.trend-desk-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  max-height: 42rem;
+  overflow: auto;
+}
+
+.trend-desk-chart {
+  flex-shrink: 0;
+}
+
+.trend-detail-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1fr 1fr;
+  font-size: 0.8125rem;
+}
+
+.chip-sm {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.6875rem;
+}

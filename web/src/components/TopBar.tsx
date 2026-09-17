@@ -3,6 +3,7 @@ import type { DeskTab, DeskTheme } from '../types'
 const TABS: { id: DeskTab; label: string }[] = [
   { id: 'orbit', label: 'Orbit' },
   { id: 'ops', label: 'Ops' },
+  { id: 'trend', label: 'Trend' },
   { id: 'screens', label: 'Screens' },
   { id: 'charts', label: 'Charts' },
   { id: 'guide', label: 'Guide' },

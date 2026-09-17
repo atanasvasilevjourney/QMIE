@@ -171,6 +171,7 @@ export type JournalStats = {
 export type DeskTab =
   | 'orbit'
   | 'ops'
+  | 'trend'
   | 'screens'
   | 'charts'
   | 'book'
