@@ -12,8 +12,20 @@ function isExit(s: SignalRow) {
   )
 }
 
-function isBreakout(s: SignalRow) {
+function isExpansion(s: SignalRow) {
   if (isExit(s)) return false
+  const strat = s.strategy || ''
+  const reason = s.reason || ''
+  const setup = (s.setup_type || '').toLowerCase()
+  return (
+    strat.includes('DailyExpansion') ||
+    setup === 'expansion' ||
+    reason.includes('coil_breakout')
+  )
+}
+
+function isBreakout(s: SignalRow) {
+  if (isExit(s) || isExpansion(s)) return false
   return (
     (s.strategy || '').includes('DailyBreakout') ||
     s.setup_type === 'breakout' ||
@@ -21,8 +33,50 @@ function isBreakout(s: SignalRow) {
   )
 }
 
+function breakoutKind(s: SignalRow): 'coil' | 'flip' | 'both' | null {
+  if (!isBreakout(s)) return null
+  const r = s.reason || ''
+  const coil = r.includes('coil_breakout')
+  const flip = r.includes('trend_start')
+  if (coil && flip) return 'both'
+  if (coil) return 'coil'
+  if (flip) return 'flip'
+  return 'flip'
+}
+
+function fmtWhen(v?: string | null): string {
+  if (!v) return '—'
+  return v
+    .replace('T', ' ')
+    .replace(/\.\d+/, '')
+    .replace(/\+00:00$/, ' UTC')
+    .replace(/Z$/, ' UTC')
+}
+
+function plannedR(s: SignalRow): string {
+  const entry = s.signal_price
+  const sl = s.stop_loss
+  const tp = s.take_profit
+  if (entry == null || sl == null || tp == null) return '—'
+  const risk = Math.abs(entry - sl)
+  if (risk <= 0) return '—'
+  return (Math.abs(tp - entry) / risk).toFixed(2)
+}
+
+function chartTimeframe(s: SignalRow): string | undefined {
+  if (isExpansion(s) || isBreakout(s)) return '1d'
+  if ((s.timeframe || '').toLowerCase() === '4h') return '4h'
+  return s.timeframe
+}
+
+function isTemaBuy(s: SignalRow) {
+  if (isBreakout(s) || isExpansion(s) || isExit(s)) return false
+  const grade = s.grade || ''
+  return (s.side || '').toUpperCase() === 'BUY' && (grade === 'A' || grade === 'A+')
+}
+
 function isTema(s: SignalRow) {
-  if (isBreakout(s) || isExit(s)) return false
+  if (isBreakout(s) || isExpansion(s) || isExit(s) || isTemaBuy(s)) return false
   const strat = (s.strategy || '').toLowerCase()
   return strat.includes('scanner') || strat.includes('qmie') || Boolean(s.grade)
 }
@@ -38,50 +92,86 @@ export function SignalsPanel({
   onSelect: (s: SignalRow) => void
   onChart?: (symbol: string, timeframe?: string) => void
 }) {
-  const { tema, breakout, exits, other } = useMemo(() => {
+  const { temaBuy, tema, expansion, breakout, exits, other } = useMemo(() => {
+    const temaBuy: SignalRow[] = []
     const tema: SignalRow[] = []
+    const expansion: SignalRow[] = []
     const breakout: SignalRow[] = []
     const exits: SignalRow[] = []
     const other: SignalRow[] = []
     for (const s of signals) {
       if (isExit(s)) exits.push(s)
+      else if (isExpansion(s)) expansion.push(s)
       else if (isBreakout(s)) breakout.push(s)
+      else if (isTemaBuy(s)) temaBuy.push(s)
       else if (isTema(s)) tema.push(s)
       else other.push(s)
     }
-    return { tema, breakout, exits, other }
+    temaBuy.sort((a, b) => {
+      const tf = (t: SignalRow) => (t.timeframe || '').toLowerCase() === '4h' ? 1 : 0
+      return tf(b) - tf(a)
+    })
+    return { temaBuy, tema, expansion, breakout, exits, other }
   }, [signals])
+  const expansionSyms = useMemo(
+    () => new Set(expansion.filter((s) => (s.side || '').toUpperCase() === 'BUY').map((s) => s.symbol)),
+    [expansion],
+  )
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-8 xl:grid-cols-2">
+      <StrategyTable
+        title="Daily expansion"
+        subtitle="Spot book · 1D coil-UP long / coil-DOWN short · prior-box SL · no leverage · no TEMA TP. Chart opens spot 1D."
+        rows={expansion}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onChart={onChart}
+        empty="No 1D coil expansions yet"
+        accent="amber"
+        expansionSyms={expansionSyms}
+      />
+      <StrategyTable
+        title="TEMA BUY"
+        subtitle="Leverage book · A/A+ BUY on USDT-perp · prefer 4h printed 1.5/2.5 ATR. Badge if the same symbol already expanded on spot."
+        rows={temaBuy}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onChart={onChart}
+        empty="No TEMA A/A+ BUY alerts yet"
+        expansionSyms={expansionSyms}
+      />
       <StrategyTable
         title="TEMA scanner"
-        subtitle="TMA 9/90/199 · closed 1h/4h A/A+ · not a tick stream. A 67–68k higher-low only lands here if that bar graded A/A+."
+        subtitle="Leverage book · TMA 9/90/199 · remaining A/A+ (mostly SELL) and other grades · not a tick stream."
         rows={tema}
         selectedId={selectedId}
         onSelect={onSelect}
         onChart={onChart}
-        empty="No TEMA A/A+ alerts yet"
+        empty="No other TEMA alerts"
+        expansionSyms={expansionSyms}
       />
       <StrategyTable
-        title="Daily breakout"
-        subtitle="1D GREY→GREEN/RED · coil-UP/DOWN · unranked · not an A/A+ grade"
+        title="Daily color-flip"
+        subtitle="Spot context · unranked 1D GREY→GREEN/RED · not a coil expansion · not leverage. Chart opens spot 1D."
         rows={breakout}
         selectedId={selectedId}
         onSelect={onSelect}
         onChart={onChart}
-        empty="No daily trend-start longs or shorts yet"
+        empty="No daily color-flips yet"
         accent="amber"
+        expansionSyms={expansionSyms}
       />
       <StrategyTable
         title="Exit"
-        subtitle="Paper close · SL first if same bar as TP · cash PnL on the row"
+        subtitle="Paper close · SL first if same bar as TP · cash PnL + R · not a broker fill"
         rows={exits}
         selectedId={selectedId}
         onSelect={onSelect}
         onChart={onChart}
         empty="No paper exits yet — PAPER SYNC marks SL/TP on closed bars"
         accent="lime"
+        expansionSyms={expansionSyms}
       />
       {other.length > 0 && (
         <StrategyTable
@@ -92,6 +182,7 @@ export function SignalsPanel({
           onSelect={onSelect}
           onChart={onChart}
           empty="—"
+          expansionSyms={expansionSyms}
         />
       )}
     </div>
@@ -107,6 +198,7 @@ function StrategyTable({
   empty,
   accent = 'cyan',
   onChart,
+  expansionSyms,
 }: {
   title: string
   subtitle: string
@@ -116,11 +208,12 @@ function StrategyTable({
   empty: string
   accent?: 'cyan' | 'amber' | 'lime'
   onChart?: (symbol: string, timeframe?: string) => void
+  expansionSyms?: Set<string>
 }) {
   const [openId, setOpenId] = useState<number | null>(null)
   return (
     <PanelShell title={title} subtitle={`${subtitle} · ${rows.length} row${rows.length === 1 ? '' : 's'}`}>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {rows.map((s) => (
           <SignalCard
             key={s.id}
@@ -128,9 +221,10 @@ function StrategyTable({
             active={selectedId === s.id}
             open={openId === s.id}
             accent={accent}
+            afterExpansion={Boolean(expansionSyms?.has(s.symbol) && isTemaBuy(s))}
             onToggle={() => setOpenId((id) => (id === s.id ? null : s.id))}
             onJournal={() => onSelect(s)}
-            onChart={onChart ? () => onChart(s.symbol, s.timeframe) : undefined}
+            onChart={onChart ? () => onChart(s.symbol, chartTimeframe(s)) : undefined}
           />
         ))}
         {!rows.length && <Empty>{empty}</Empty>}
@@ -144,6 +238,7 @@ function SignalCard({
   active,
   open,
   accent,
+  afterExpansion,
   onToggle,
   onJournal,
   onChart,
@@ -152,92 +247,129 @@ function SignalCard({
   active: boolean
   open: boolean
   accent: 'cyan' | 'amber' | 'lime'
+  afterExpansion?: boolean
   onToggle: () => void
   onJournal: () => void
   onChart?: () => void
 }) {
+  const kind = breakoutKind(s)
+  const rToTp = plannedR(s)
   const buy = (s.side || '').toUpperCase() === 'BUY'
-  const breakout = isBreakout(s)
+  const expansion = isExpansion(s)
+  const breakout = isBreakout(s) || expansion
   const exit = isExit(s)
   const pnl = s.pnl
-  const pnlTone = pnl == null ? 'text-chrome/70' : pnl > 0 ? 'text-lime' : 'text-magenta'
+  const pnlTone = pnl == null ? 'text-muted' : pnl > 0 ? 'text-lime' : 'text-magenta'
+  const breakoutLabel =
+    expansion
+      ? buy ? 'Expansion long (coil-UP)' : 'Expansion short (coil-DOWN)'
+    : kind === 'coil' ? (buy ? 'Coil-UP long' : 'Coil-DOWN short')
+    : kind === 'both' ? (buy ? 'Flip + coil long' : 'Flip + coil short')
+    : buy ? 'Color-flip long' : 'Color-flip short'
   return (
     <div
-      className={`rounded-2xl border text-left transition ${
+      className={`rounded-xl border text-left ${
         active
           ? 'border-cyan/50 bg-cyan/10'
           : exit || accent === 'lime'
-            ? 'border-lime/35 bg-lime/5'
+            ? 'border-lime/40 bg-lime/10'
             : breakout || accent === 'amber'
-              ? 'border-amber/35 bg-amber/5'
-              : 'border-line/15 bg-surface/70'
+              ? 'border-amber/40 bg-amber/10'
+              : 'border-line bg-panel'
       }`}
     >
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-4">
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-4 px-5 py-5" aria-expanded={open}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-display text-base tracking-wider text-ink">{s.symbol}</span>
+            <span className="font-mono text-base font-medium tabular text-ink">{s.symbol}</span>
             <span className={`font-mono text-sm ${exit ? pnlTone : buy ? 'text-lime' : 'text-magenta'}`}>
               {exit
-                ? `EXIT · PnL ${pnl ?? '—'}`
+                ? `Exit · PnL ${pnl ?? '—'}${s.realized_r != null ? ` · R ${s.realized_r}` : ''}`
                 : breakout
-                  ? buy
-                    ? 'LONG TREND START'
-                    : 'SHORT TREND START'
+                  ? breakoutLabel
                   : `${s.side || '—'} · ${s.grade || '—'}`}
             </span>
-            {breakout && (
-              <span className="font-mono text-[11px] tracking-widest text-amber">BREAKOUT</span>
+            {expansion && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">expansion</span>
+            )}
+            {(expansion || (breakout && !exit)) && (
+              <span className="rounded-md border border-line px-2 py-0.5 font-mono text-sm text-muted">spot</span>
+            )}
+            {afterExpansion && (
+              <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">after expansion</span>
+            )}
+            {!exit && !expansion && !isBreakout(s) && (isTemaBuy(s) || isTema(s)) && (
+              <span className="rounded-md border border-cyan/40 bg-cyan/10 px-2 py-0.5 font-mono text-sm text-cyan">leverage</span>
+            )}
+            {breakout && !expansion && kind === 'coil' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">coil</span>
+            )}
+            {breakout && kind === 'flip' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">color flip</span>
+            )}
+            {breakout && kind === 'both' && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">flip + coil</span>
+            )}
+            {s.lookback_catchup && (
+              <span className="rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 font-mono text-sm text-amber">lookback</span>
             )}
             {exit && (
-              <span className="font-mono text-[11px] tracking-widest text-lime">PAPER CLOSE</span>
+              <span className="rounded-md border border-lime/40 bg-lime/10 px-2 py-0.5 font-mono text-sm text-lime">Paper close</span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm text-chrome/70">
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-sm tabular text-muted">
             <span>#{s.id}</span>
             <span>{(s.timeframe || '—').toUpperCase()}</span>
             {s.score != null && <span>score {s.score}</span>}
             <span>{exit ? 'exit' : 'px'} {s.signal_price ?? '—'}</span>
+            {s.closed_bar_at && <span>bar {fmtWhen(s.closed_bar_at)}</span>}
             {exit && s.entry_price != null && <span>entry {s.entry_price}</span>}
             <span>SL {s.stop_loss ?? '—'}</span>
             <span>TP {s.take_profit ?? '—'}</span>
+            {!exit && <span>R to TP {rToTp}</span>}
           </div>
         </div>
-        <span className="shrink-0 font-display text-[11px] tracking-[0.2em] text-cyan">
-          {open ? 'HIDE' : 'DETAILS'}
-        </span>
+        <span className="btn btn-sm btn-accent shrink-0">{open ? 'Hide' : 'Details'}</span>
       </button>
       {open && (
-        <div className="border-t border-line/10 px-5 py-4">
+        <div className="border-t border-line px-5 py-4">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact k="Strategy" v={s.strategy || '—'} />
             <Fact k="Reason" v={s.reason || '—'} />
+            <Fact k="Side" v={s.side || '—'} />
+            <Fact k="Entry" v={s.signal_price == null ? '—' : String(s.signal_price)} />
+            <Fact k="Stop" v={s.stop_loss == null ? '—' : String(s.stop_loss)} />
+            <Fact k="TP" v={s.take_profit == null ? '—' : String(s.take_profit)} />
+            <Fact k="R to TP" v={rToTp} />
             <Fact k="Daily trend" v={s.daily_trend || '—'} />
-            <Fact k="Received" v={s.received_at ? s.received_at.replace('T', ' ').slice(0, 19) : '—'} />
+            <Fact k="Closed bar" v={fmtWhen(s.closed_bar_at || s.timestamp)} />
+            <Fact k="Received" v={fmtWhen(s.received_at)} />
+            {breakout && !s.stop_loss && (
+              <Fact k="R" v="— no stop on this color-flip; not a measured book" />
+            )}
+            {(expansion || isBreakout(s)) && <Fact k="Book" v="spot — no leverage" />}
+            {!exit && !expansion && !isBreakout(s) && (isTemaBuy(s) || isTema(s)) && (
+              <Fact k="Book" v="leverage — USDT-perp; you set size" />
+            )}
             {exit && <Fact k="PnL" v={pnl == null ? '—' : String(pnl)} />}
-            {exit && <Fact k="R" v={s.realized_r == null ? '—' : String(s.realized_r)} />}
+            {exit && <Fact k="R" v={s.realized_r == null ? 'n/a — no stop on signal' : String(s.realized_r)} />}
             {exit && <Fact k="Fill id" v={s.fill_id == null ? '—' : String(s.fill_id)} />}
           </dl>
-          <p className="mt-3 font-mono text-xs text-chrome/50">
-            Signal-only. Confirm on quant_visualizer.pine. DETAILS does not place an order.
+          <p className="mt-3 text-sm text-muted">
+            Signal-only. QMIE does not place orders. Confirm on quant_visualizer.pine. Plan card only.
+            {s.lookback_catchup
+              ? ' Entry price is the close of that 1D bar, not the live print at Received. Radar replays the last 7 closed days after downtime.'
+              : ''}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {!exit && (
-              <button
-                type="button"
-                onClick={onJournal}
-                className="rounded-2xl border border-cyan/40 bg-cyan/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-cyan"
-              >
-                LOG FILL IN JOURNAL
+              <button type="button" onClick={onJournal} className="btn btn-accent">
+                Log fill in journal
               </button>
             )}
             {onChart && s.symbol && (
-              <button
-                type="button"
-                onClick={onChart}
-                className="rounded-2xl border border-lime/40 bg-lime/10 px-5 py-3 font-display text-xs tracking-[0.22em] text-lime"
-              >
-                VIEW CHART
+              <button type="button" onClick={onChart} className="btn btn-ok">
+                View chart
               </button>
             )}
           </div>
@@ -250,8 +382,8 @@ function SignalCard({
 function Fact({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="font-display text-[10px] tracking-[0.22em] text-chrome/45">{k}</dt>
-      <dd className="mt-1 break-all font-mono text-sm text-chrome/85">{v}</dd>
+      <dt className="fact-k">{k}</dt>
+      <dd className="fact-v">{v}</dd>
     </div>
   )
 }

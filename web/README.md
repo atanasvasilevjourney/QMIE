@@ -14,6 +14,10 @@ npm run dev
 
 Open `http://localhost:5173`. API calls go to `/qmie/*` and are proxied to `http://127.0.0.1:8080`.
 
+Production desk (Vercel static hosting) is **not** the scanner. Set
+`VITE_QMIE_API` to the public FastAPI origin (see `docs/deployment.md`).
+Copy `web/.env.example` → `web/.env` only for local production-build previews.
+
 Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light mode is a white desk chrome; the Orbis WebGL canvas stays dark.
 
 ## Scripts
@@ -28,7 +32,8 @@ Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light m
 | Tab | Purpose |
 |---|---|
 | ORBIT | Landing page: Orbis Universe 3D (RGG nebula + orbit tokens) |
-| OPS | Trend Radar + TEMA / Daily breakout / Exit tables |
+| OPS | Trend Radar summary + TEMA / Daily breakout / Exit tables |
+| TREND | SCANZ-style daily RGG desk: scans, sortable table, 1D chart + regime detail |
 | CHARTS | SVG equity curve + closed candles with entry/exit/SL/TP |
 | GUIDE | Trading guide (paper fills, SL/TP exits, PnL) |
 | AGENTS | Briefing + desk DAG (quantity always 0) |

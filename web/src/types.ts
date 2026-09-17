@@ -11,12 +11,34 @@ export type RadarRow = {
   plus_di: number
   minus_di: number
   coil_width_pct?: number | null
+  coil_high?: number | null
+  coil_low?: number | null
   breakout?: 'UP' | 'DOWN' | null
   breakout_level?: number | null
   breakout_excess_pct?: number | null
   is_fresh_flip: boolean
   is_tight_coil: boolean
   is_late_stage: boolean
+  is_early_long?: boolean
+  is_early_short?: boolean
+  flip_from?: 'GREEN' | 'GREY' | 'RED' | string | null
+}
+
+export type RadarBreadthPoint = {
+  date: string
+  green: number
+  red: number
+  grey: number
+  total: number
+  green_pct: number
+  red_pct: number
+}
+
+export type RadarBreadthHistory = {
+  range: string
+  days: number
+  count: number
+  points: RadarBreadthPoint[]
 }
 
 export type RadarSnapshot = {
@@ -36,11 +58,18 @@ export type RadarSnapshot = {
   breakouts: RadarRow[]
   late_stage_green: RadarRow[]
   late_stage_red?: RadarRow[]
+  early_longs?: RadarRow[]
+  early_shorts?: RadarRow[]
+  expansions?: RadarRow[]
+  expansion_shorts?: RadarRow[]
   rows: RadarRow[]
   failed_symbols?: string[]
   note?: string | null
   enabled?: boolean
   has_actionable?: boolean
+  bias?: 'LONG' | 'SHORT' | 'MIXED' | 'UNKNOWN' | string
+  btc_color?: string | null
+  coverage_pct?: number | null
 }
 
 export type SignalRow = {
@@ -54,6 +83,10 @@ export type SignalRow = {
   take_profit?: number
   timeframe?: string
   received_at?: string
+  closed_bar_at?: string | null
+  lookback_catchup?: boolean
+  timestamp?: string | null
+  bar_time?: number | string | null
   daily_trend?: string
   strategy?: string
   reason?: string
@@ -125,6 +158,17 @@ export type JournalFill = {
   source?: string
   exit_reason?: string | null
   timeframe?: string
+  signal_price?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+}
+
+export type ChartAlertLevels = {
+  entry?: number | null
+  stop_loss?: number | null
+  take_profit?: number | null
+  side?: string | null
+  label?: string
 }
 
 export type JournalStats = {
@@ -135,11 +179,17 @@ export type JournalStats = {
   win_pct: number
   avg_realized_r?: number | null
   sum_pnl?: number | null
+  by_source?: { paper?: number; manual?: number }
+  by_timeframe?: Record<string, number>
+  manual_4h_closed?: number
+  pooled?: boolean
+  oos_edge?: string
 }
 
 export type DeskTab =
   | 'orbit'
   | 'ops'
+  | 'trend'
   | 'screens'
   | 'charts'
   | 'book'
@@ -357,7 +407,7 @@ export type PaperSnapshot = {
   closed_pnl: number
 }
 
-export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'book'
+export type ScreenView = 'all' | 'leaders' | 'coils' | 'breakouts' | 'expansions' | 'book'
 
 export type ScreenRow = {
   symbol: string
@@ -378,6 +428,9 @@ export type ScreenRow = {
   pct_since_flip?: number | null
   is_tight_coil?: boolean
   is_fresh_flip?: boolean
+  is_early_long?: boolean
+  is_early_short?: boolean
+  is_expansion?: boolean
   breakout?: string | null
   weight_pct?: number | null
   book_rank?: number | null

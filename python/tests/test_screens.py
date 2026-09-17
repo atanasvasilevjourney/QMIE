@@ -83,29 +83,60 @@ def test_combo_or_dedupes_breakout_and_tema():
     assert set(out["rows"][0]["sources"]) == {"breakouts", "leaders"}
 
 
-def test_radar_down_breakout_is_short():
+def test_radar_down_breakout_is_expansion_short():
     radar = {
         "rows": [{"symbol": "SOLUSDT", "color": "RED", "adx": 32.0, "breakout": "DOWN"}],
         "tight_coils": [],
         "breakouts": [
-            {"symbol": "SOLUSDT", "price": 145.0, "adx": 32.0, "breakout": "DOWN"}
+            {"symbol": "SOLUSDT", "price": 145.0, "adx": 32.0, "breakout": "DOWN", "coil_high": 160.0}
         ],
     }
-    out = build_screens(signals=[], radar=radar, view="breakouts")
+    out = build_screens(signals=[], radar=radar, view="expansions")
     assert out["count"] == 1
     row = out["rows"][0]
     assert row["symbol"] == "SOLUSDT"
     assert row["side"] == "SELL"
     assert row["breakout"] == "DOWN"
-    assert "breakouts" in row["sources"]
+    assert row["is_expansion"] is True
+    assert "expansions" in row["sources"]
+    assert row["stop_loss"] == 160.0
     assert row["quantity"] == 0
+
+
+def test_daily_expansion_signal_is_expansions_source():
+    rows = [
+        _sig(
+            id=3,
+            symbol="SOLUSDT",
+            strategy="QMIE-DailyExpansion",
+            grade="",
+            side="BUY",
+            timeframe="1d",
+            reason="coil_breakout_up",
+            setup_type="expansion",
+        ),
+    ]
+    out = build_screens(signals=rows, view="expansions")
+    assert out["count"] == 1
+    row = out["rows"][0]
+    assert row["symbol"] == "SOLUSDT"
+    assert row["is_expansion"] is True
+    assert row["sources"] == ["expansions"]
+    assert "leaders" not in row["sources"]
 
 
 def test_coil_only_symbol_included():
     radar = {
         "rows": [{"symbol": "ADAUSDT", "color": "GREY", "adx": 18.0, "is_tight_coil": True, "coil_width_pct": 2.4}],
         "tight_coils": [
-            {"symbol": "ADAUSDT", "price": 0.4, "adx": 18.0, "coil_width_pct": 2.4, "is_tight_coil": True}
+            {
+                "symbol": "ADAUSDT",
+                "price": 0.4,
+                "adx": 18.0,
+                "coil_width_pct": 2.4,
+                "is_tight_coil": True,
+                "is_early_long": True,
+            }
         ],
         "breakouts": [],
     }
@@ -114,6 +145,7 @@ def test_coil_only_symbol_included():
     row = out["rows"][0]
     assert row["symbol"] == "ADAUSDT"
     assert row["is_tight_coil"] is True
+    assert row["is_early_long"] is True
     assert row["coil_width_pct"] == 2.4
     assert "coils" in row["sources"]
     assert row["grade"] is None

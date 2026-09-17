@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQmieDesk } from './hooks/useQmieDesk'
 import { useTheme } from './hooks/useTheme'
-import type { DeskTab, SignalRow } from './types'
+import type { DeskTab, ScreenRow, SignalRow } from './types'
 import { Scene3D } from './components/Scene3D'
 import { TopBar } from './components/TopBar'
 import { RadarPanel } from './components/RadarPanel'
+import { TrendRadarDesk } from './components/TrendRadarDesk'
 import { SignalsPanel } from './components/SignalsPanel'
 import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
@@ -14,6 +15,8 @@ import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
 import { ChartsPanel } from './components/ChartsPanel'
 import { ScreensPanel } from './components/ScreensPanel'
+import { DeskShell, DeskSidebar } from './components/layout/DeskShell'
+import { PageHeader } from './components/layout/ModuleCard'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
@@ -70,6 +73,26 @@ export default function App() {
     setTab('journal')
   }
 
+  const goJournalFromScreen = (row: ScreenRow) => {
+    const hit = row.signal_id != null ? desk.signals.find((s) => s.id === row.signal_id) : undefined
+    if (hit) {
+      goJournal(hit)
+      return
+    }
+    if (row.signal_id == null) return
+    goJournal({
+      id: row.signal_id,
+      symbol: row.symbol,
+      side: row.side ?? undefined,
+      grade: row.grade ?? undefined,
+      score: row.score ?? undefined,
+      signal_price: row.signal_price ?? undefined,
+      stop_loss: row.stop_loss ?? undefined,
+      take_profit: row.take_profit ?? undefined,
+      timeframe: row.timeframe ?? undefined,
+    })
+  }
+
   const goChart = (symbol: string, timeframe?: string) => {
     setChartFocus({ symbol, timeframe })
     setTab('charts')
@@ -77,9 +100,10 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
-      <div className="pointer-events-none fixed inset-0 grid-floor opacity-40" />
-      <div className="pointer-events-none fixed -left-24 top-10 h-80 w-80 rounded-full bg-magenta/20 blur-3xl theme-blob" />
-      <div className="pointer-events-none fixed right-0 top-32 h-96 w-96 rounded-full bg-cyan/15 blur-3xl theme-blob" />
+      <a href="#desk-main" className="skip-link">Skip to desk</a>
+      <div className="pointer-events-none fixed inset-0 grid-floor opacity-30" />
+      <div className="pointer-events-none fixed -left-24 top-10 h-64 w-64 rounded-full bg-cyan/10 blur-3xl theme-blob" />
+      <div className="pointer-events-none fixed right-0 top-32 h-72 w-72 rounded-full bg-lime/10 blur-3xl theme-blob" />
 
       <TopBar
         tab={tab}
@@ -96,10 +120,13 @@ export default function App() {
         onTheme={toggleTheme}
       />
 
-      <main className="relative z-10 mx-auto max-w-[1920px] px-4 py-6 sm:px-6">
+      <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-8 sm:px-8 lg:py-10">
+        <DeskShell sidebar={<DeskSidebar tab={tab} onTab={setTab} />}>
         {(desk.error || radarMsg) && (
           <div
-            className={`mb-5 rounded-2xl border px-5 py-4 font-mono text-sm ${
+            role="status"
+            aria-live="polite"
+            className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
               desk.error || radarFailed
                 ? 'border-magenta/40 bg-magenta/10 text-magenta'
                 : 'border-cyan/40 bg-cyan/10 text-cyan'
@@ -120,36 +147,28 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Landing</p>
-                  <h2 className="font-display text-3xl tracking-wide text-ink md:text-4xl">
-                    Orbis <span className="text-cyan">Universe</span>
-                  </h2>
-                  <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
-                    RGG nebula + orbit tokens. Operations (radar + TEMA / daily-breakout tables) live on OPS.
-                    Signal-only — never orders.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setTab('ops')}
-                  className="rounded-2xl border border-cyan/40 bg-cyan/10 px-6 py-4 font-display text-sm tracking-[0.22em] text-cyan"
-                >
-                  OPEN OPS
-                </button>
-              </div>
+              <PageHeader
+                kicker="Landing"
+                title="Orbis"
+                highlight="Universe"
+                lede="Glass core and crypto logos on the rails. Radar and strategy tables live on Ops. Signal-only — never orders."
+                actions={
+                  <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">
+                    Open Ops
+                  </button>
+                }
+              />
               <div className="h-[min(78vh,860px)] min-h-[520px]">
                 <Scene3D radar={desk.radar} signalCount={desk.signals.length} allowZoom />
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
                 <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
                 <MiniStat label="Signals" value={desk.signals.length} tone="text-cyan" />
                 <MiniStat label="Universe" value={desk.universeCount} tone="text-lime" />
                 <MiniStat
                   label="Synced"
                   value={desk.lastSync ? new Date(desk.lastSync).toLocaleTimeString() : '—'}
-                  tone="text-chrome/70"
+                  tone="text-muted"
                   mono={false}
                 />
               </div>
@@ -163,30 +182,81 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
-              className="grid gap-5"
+              className="module-grid"
             >
-              <div>
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Operations</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
-                  Radar + <span className="text-cyan">strategy tables</span>
-                </h2>
-              </div>
-              <RadarPanel radar={desk.radar} />
-              {desk.paper && (
-                <div className="card rounded-2xl px-5 py-4 font-mono text-sm text-chrome/80">
-                  Paper book · {desk.paper.open} open · {desk.paper.closed} closed · PnL{' '}
-                  <span className={desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}>
-                    {desk.paper.closed_pnl}
-                  </span>{' '}
-                  USDT · never orders
+              <PageHeader
+                kicker="Operations"
+                title="Radar +"
+                highlight="strategy tables"
+                lede="Trend Radar is the spot book (1D coil-UP). TEMA BUY is the leveraged USDT-perp add. Never orders."
+              />
+              <div className="grid gap-8 xl:grid-cols-12">
+                <div className="xl:col-span-8">
+                  <RadarPanel radar={desk.radar} />
                 </div>
-              )}
+                <aside className="module-grid xl:col-span-4">
+                  {desk.paper && (
+                    <div className="module-card">
+                      <header className="module-card-header">
+                        <h2 className="module-card-title">Paper book</h2>
+                      </header>
+                      <div className="module-card-body grid gap-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <MiniStat label="Open" value={desk.paper.open} tone="text-cyan" />
+                          <MiniStat label="Closed" value={desk.paper.closed} tone="text-muted" />
+                        </div>
+                        <p className="text-sm text-muted">
+                          PnL{' '}
+                          <span className={`font-mono tabular ${desk.paper.closed_pnl >= 0 ? 'text-lime' : 'text-magenta'}`}>
+                            {desk.paper.closed_pnl} USDT
+                          </span>
+                          · never orders
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="module-card">
+                    <header className="module-card-header">
+                      <h2 className="module-card-title">Quick read</h2>
+                    </header>
+                    <div className="module-card-body space-y-3 text-sm text-muted">
+                      <p>
+                        <span className="font-semibold text-ink">Spot:</span> Radar expansions &amp; daily flip
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink">Leverage:</span> TEMA A/A+ on 4h
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink">Alerts:</span> Discord / Telegram on the API host
+                      </p>
+                    </div>
+                  </div>
+                </aside>
+              </div>
               <SignalsPanel
                 signals={desk.signals}
                 selectedId={selected?.id}
                 onSelect={goJournal}
                 onChart={goChart}
               />
+            </motion.div>
+          )}
+
+          {tab === 'trend' && (
+            <motion.div
+              key="trend"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <PageHeader
+                kicker="Daily trend"
+                title="Regime"
+                highlight="scanner"
+                lede="SCANZ-style table: filter regime shifts, sort by days since flip, chart on select. Spot 1D only — not TEMA leverage."
+              />
+              <TrendRadarDesk radar={desk.radar} fills={desk.fills} />
             </motion.div>
           )}
 
@@ -198,17 +268,18 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-5">
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Screens</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
-                  Combo <span className="text-cyan">review list</span>
-                </h2>
-                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
-                  Unique symbols from 4h A/A+, daily breakout, coils, and the ranked book. Not a new
-                  score. Never orders.
-                </p>
-              </div>
-              <ScreensPanel lastSync={desk.lastSync} fills={desk.fills} onChart={goChart} />
+              <PageHeader
+                kicker="Screens"
+                title="Combo"
+                highlight="review list"
+                lede="Each row shows scanner entry, SL, and TP. Chart draws those levels; paper book forward-tests alerts. Not a new score."
+              />
+              <ScreensPanel
+                lastSync={desk.lastSync}
+                fills={desk.fills}
+                onChart={goChart}
+                onTrackManual={goJournalFromScreen}
+              />
             </motion.div>
           )}
 
@@ -220,15 +291,12 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <div className="mb-5">
-                <p className="font-display text-xs tracking-[0.4em] text-magenta uppercase">Charts</p>
-                <h2 className="font-display text-2xl tracking-wide text-ink md:text-3xl">
-                  Equity + <span className="text-cyan">visualised trades</span>
-                </h2>
-                <p className="mt-2 max-w-3xl font-mono text-sm text-chrome/60">
-                  SVG from closed fills and closed klines. Not TradingView. Not an order ticket.
-                </p>
-              </div>
+              <PageHeader
+                kicker="Charts"
+                title="Equity +"
+                highlight="visualised trades"
+                lede="SVG from closed fills and closed klines. Not TradingView. Not an order ticket."
+              />
               <ChartsPanel
                 focusSymbol={chartFocus?.symbol}
                 focusTimeframe={chartFocus?.timeframe}
@@ -303,10 +371,11 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        </DeskShell>
       </main>
 
-      <footer className="relative z-10 border-t border-line/10 px-4 py-4 text-center font-mono text-xs text-chrome/50">
-        QMIE Desk · Orbis landing · OPS strategy tables · never places orders
+      <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-sm text-muted">
+        QMIE Desk · Orbit landing · Ops strategy tables · never places orders
       </footer>
     </div>
   )
@@ -324,9 +393,9 @@ function MiniStat({
   mono?: boolean
 }) {
   return (
-    <div className="card rounded-2xl px-5 py-4">
-      <div className="font-display text-[10px] tracking-widest text-chrome/50 uppercase">{label}</div>
-      <div className={`mt-1 ${mono ? 'font-mono text-xl' : 'font-mono text-base'} ${tone}`}>{value}</div>
+    <div className="stat-tile">
+      <div className="text-sm font-semibold text-muted">{label}</div>
+      <div className={`mt-1 ${mono ? 'font-mono text-xl tabular' : 'font-mono text-base tabular'} ${tone}`}>{value}</div>
     </div>
   )
 }

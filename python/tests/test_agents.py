@@ -49,6 +49,33 @@ def test_flatten_prefers_column_over_raw():
     assert "raw" not in flat
 
 
+def test_flatten_stamps_closed_bar_not_received():
+    row = _row()
+    row["received_at"] = "2026-09-08T12:10:57"
+    row["raw"] = json.dumps({
+        "timeframe": "1d",
+        "strategy": "QMIE-DailyBreakout",
+        "timestamp": "2026-09-02T16:00:00+00:00",
+        "bar_time": 1788364800000,
+        "reason": "trend_start_long",
+    })
+    row["signal_price"] = 1.986
+    flat = flatten_signal(row)
+    assert flat["closed_bar_at"].startswith("2026-09-02T16:00:00")
+    assert flat["lookback_catchup"] is True
+    assert flat["received_at"].startswith("2026-09-08")
+    assert flat["signal_price"] == 1.986
+
+
+def test_flatten_no_catchup_when_received_near_bar():
+    row = _row()
+    row["received_at"] = "2026-09-02T16:00:08+00:00"
+    row["raw"] = json.dumps({"timestamp": "2026-09-02T16:00:00+00:00"})
+    flat = flatten_signal(row)
+    assert flat.get("lookback_catchup") is not True
+    assert flat["closed_bar_at"].startswith("2026-09-02T16:00:00")
+
+
 def test_atr_pct_from_atr_and_price():
     assert atr_pct_of({"atr": 2.0, "signal_price": 200.0}) == pytest.approx(1.0)
 
@@ -177,7 +204,14 @@ def test_book_agent_clusters():
     assert "not an order" in out["note"]
 
 
-def test_checklist_agent_limits_and_mix():
+def test_daily_expansion_does_not_need_aa_grade():
+    v = evaluate_native(
+        _row(strategy="QMIE-DailyExpansion", grade="", side="BUY", timeframe="1d"),
+        radar={"rows": [{"symbol": "BTCUSDT", "color": "GREEN"}]},
+    )
+    alert = next(i for i in v.items if i.id == "qmie_alert")
+    assert alert.passed is True
+    assert "DailyExpansion" in alert.detail
     rows = [_row(id=i, symbol=f"S{i}USDT") for i in range(10)]
     out = checklist_agent(rows, {"rows": []}, limit=3)
     assert out["count"] == 3
