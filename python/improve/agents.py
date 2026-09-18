@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from improve.analysis import openai_configured
+from scanner.radar import breadth_bias
 from improve.checklist import evaluate_native, flatten_signal
 from improve.review import (
     DEFAULT_BASELINE,
@@ -109,14 +110,7 @@ def radar_agent(radar: Optional[dict[str, Any]]) -> dict[str, Any]:
     total = g + y + r
     def pct(n: int) -> float:
         return round(100.0 * n / total, 1) if total else 0.0
-    if g > r * 1.2 and g > 0:
-        bias = "LONG"
-    elif r > g * 1.2 and r > 0:
-        bias = "SHORT"
-    elif total == 0:
-        bias = "UNKNOWN"
-    else:
-        bias = "MIXED"
+    bias = breadth_bias(g, r, grey=y)
     btc = None
     for row in radar.get("rows") or []:
         if str(row.get("symbol") or "").upper() == "BTCUSDT":
@@ -177,7 +171,7 @@ def checklist_agent(
         g = str(flat.get("grade") or "")
         strat = str(flat.get("strategy") or "")
         is_aa = g in ("A", "A+")
-        is_bo = "DailyBreakout" in strat
+        is_bo = "DailyBreakout" in strat or "DailyExpansion" in strat
         if not (is_aa or is_bo):
             continue
         card = evaluate_native(row, radar=radar)

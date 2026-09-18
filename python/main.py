@@ -6,7 +6,7 @@ and dispatches A/A+ signals to Discord and/or Telegram. It does NOT
 execute trades.
 
 Endpoints:
-  GET  /                      version
+  GET  /                      desk HTML (if built) or JSON version
   GET  /health                operational status (DB, scanner, notifiers)
   GET  /signals               last N dispatched alerts
   GET  /universe              the symbol set the next pass will scan
@@ -14,6 +14,7 @@ Endpoints:
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
+  GET  /radar/history         daily breadth series (3m/6m/1y/5y)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
@@ -28,6 +29,7 @@ Endpoints:
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
   GET  /journal/stats         win rate / R from fills (optional grade filter)
+  GET  /journal/developments  repeat alerts + price move + radar validity
   POST /webhook               OPTIONAL: receive Pine alerts (HMAC) and
                               re-broadcast through the same notifiers.
 """
@@ -43,8 +45,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
+
+from desk_static import desk_file, find_desk_dist, wants_html
 
 from config import Settings, get_settings
 from db import Database
@@ -63,6 +67,7 @@ from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
+from signal_development import build_signal_developments
 from paper import PaperBook
 from guide import trading_guide
 from screens import VIEWS, build_screens
@@ -169,6 +174,11 @@ async def lifespan(app: FastAPI):
         tv_chart_prefix=s.tv_chart_prefix,
         max_signals_per_symbol_per_day=s.sig_max_signals_per_symbol_per_day,
         paper=None,
+        chart_client=client,
+        discord_chart_image=s.discord_chart_image,
+        discord_chart_bars=s.discord_chart_bars,
+        discord_chart_htf=s.discord_chart_htf,
+        scan_htf_map=s.htf_map,
     )
     paper = PaperBook(
         db,
@@ -216,6 +226,7 @@ async def lifespan(app: FastAPI):
         ),
         radar_enabled=s.radar_enabled,
         radar_dispatch_trend_start=s.radar_dispatch_trend_start,
+        db=db,
         radar_cfg=RadarConfig(
             adx_length=s.radar_adx_length,
             enter_adx=s.radar_enter_adx,
@@ -228,6 +239,7 @@ async def lifespan(app: FastAPI):
             kline_limit=s.radar_kline_limit,
             notify=s.radar_notify,
             min_coverage_pct=s.radar_min_coverage_pct,
+            setup_lookback_bars=s.radar_setup_lookback_bars,
         ),
     )
     await scheduler.start()
@@ -296,8 +308,21 @@ async def ip_allowlist(request: Request, call_next):
 
 # ─── Endpoints ───────────────────────────────────────────────────────────
 @app.get("/")
-async def root() -> dict[str, Any]:
+async def root(request: Request) -> Any:
+    dist = find_desk_dist()
+    if dist is not None and wants_html(request):
+        return FileResponse(dist / "index.html", media_type="text/html")
     return {"name": "QMIE Scanner", "version": "2.0.0", "ok": True}
+
+
+@app.get("/favicon.svg")
+async def desk_favicon() -> FileResponse:
+    return desk_file("favicon.svg")
+
+
+@app.get("/assets/{path:path}")
+async def desk_assets(path: str) -> FileResponse:
+    return desk_file(f"assets/{path}")
 
 
 @app.get("/health")
@@ -388,6 +413,81 @@ async def get_radar() -> dict[str, Any]:
     out = snap.as_dict()
     out.setdefault("enabled", state.scheduler.radar_enabled)
     return out
+
+
+_RADAR_HISTORY_DAYS = {
+    "3m": 90,
+    "6m": 180,
+    "1y": 365,
+    "5y": 1825,
+}
+
+
+@app.get("/radar/history")
+async def get_radar_history(range: str = "3m", days: int | None = None) -> dict[str, Any]:
+    """Daily market breadth (% of universe in GREEN vs RED). Oldest-first series."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    if days is not None:
+        span = max(7, min(int(days), 3650))
+    else:
+        key = (range or "3m").strip().lower()
+        span = _RADAR_HISTORY_DAYS.get(key)
+        if span is None:
+            raise HTTPException(
+                400,
+                f"range must be one of {list(_RADAR_HISTORY_DAYS)} or pass days=",
+            )
+    rows = await state.db.radar_breadth_history(days=span)
+    snap = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        snap = state.scheduler.last_radar
+    if snap is not None and snap.as_of:
+        as_of_date = str(snap.as_of)[:10]
+        if not rows or rows[-1].get("as_of_date") != as_of_date:
+            rows = [
+                *rows,
+                {
+                    "as_of_date": as_of_date,
+                    "green": snap.green,
+                    "grey": snap.grey,
+                    "red": snap.red,
+                    "total": snap.succeeded,
+                    "recorded_at": None,
+                },
+            ]
+        elif rows:
+            rows[-1] = {
+                "as_of_date": as_of_date,
+                "green": snap.green,
+                "grey": snap.grey,
+                "red": snap.red,
+                "total": snap.succeeded,
+                "recorded_at": rows[-1].get("recorded_at"),
+            }
+    points = []
+    for r in rows:
+        total = int(r.get("total") or 0)
+        g, rd = int(r.get("green") or 0), int(r.get("red") or 0)
+        if total <= 0:
+            continue
+        points.append(
+            {
+                "date": r["as_of_date"],
+                "green": g,
+                "red": rd,
+                "grey": int(r.get("grey") or 0),
+                "total": total,
+                "green_pct": round(100.0 * g / total, 2),
+                "red_pct": round(100.0 * rd / total, 2),
+            }
+        )
+    return {
+        "range": range if days is None else f"{span}d",
+        "days": span,
+        "count": len(points),
+        "points": points,
+    }
 
 
 @app.get("/screens")
@@ -639,6 +739,43 @@ async def get_journal_stats(grades: str = "A+,A") -> dict[str, Any]:
         raise HTTPException(503, "db_not_ready")
     parsed = tuple(g.strip() for g in grades.split(",") if g.strip()) or None
     return await state.db.journal_stats(grades=parsed)
+
+
+@app.get("/journal/developments")
+async def get_journal_developments(
+    limit: int = 400,
+    min_alerts: int = 2,
+) -> dict[str, Any]:
+    """Repeat-alert threads: how price moved and whether daily radar still aligns.
+
+    For Discord/Journal review when the same symbol fires again — not orders.
+    """
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    min_alerts = max(1, min(int(min_alerts), 10))
+    signals = await state.db.recent_entry_signals(limit=max(50, min(limit, 2000)))
+    open_fills = await state.db.open_fills()
+    open_syms = {str(f.get("symbol") or "").upper() for f in open_fills if f.get("symbol")}
+
+    radar_rows: list[dict[str, Any]] = []
+    radar_as_of: str | None = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        snap = state.scheduler.last_radar
+        radar_rows = list(snap.rows or [])
+        radar_as_of = str(snap.as_of)[:10] if snap.as_of else None
+
+    threads = build_signal_developments(
+        signals,
+        radar_rows=radar_rows,
+        min_alerts=min_alerts,
+        include_open_fill_symbols=open_syms,
+    )
+    return {
+        "radar_as_of": radar_as_of,
+        "min_alerts": min_alerts,
+        "count": len(threads),
+        "threads": threads,
+    }
 
 
 @app.patch("/journal/{fill_id}")

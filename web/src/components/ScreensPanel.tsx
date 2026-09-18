@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { useFocusList } from '../hooks/useFocusList'
-import type { JournalFill, ScreenRow, ScreenView } from '../types'
+import type { ChartAlertLevels, JournalFill, ScreenRow, ScreenView } from '../types'
+import { formatPrice } from '../lib/formatPrice'
 import { ChartsPanel } from './ChartsPanel'
-import { Empty, PanelShell } from './RadarPanel'
+import { ScreenAlertSetup } from './ScreenAlertSetup'
+import { EmptyNote, ModuleCard } from './layout/ModuleCard'
 
 const VIEWS: { id: ScreenView | 'focus'; label: string }[] = [
-  { id: 'all', label: 'COMBO' },
-  { id: 'leaders', label: '4H A/A+' },
-  { id: 'coils', label: 'COILS' },
-  { id: 'breakouts', label: 'BREAKOUTS' },
-  { id: 'book', label: 'BOOK' },
-  { id: 'focus', label: 'FOCUS' },
+  { id: 'all', label: 'Combo' },
+  { id: 'leaders', label: '4h A/A+' },
+  { id: 'expansions', label: 'Expansions (spot)' },
+  { id: 'coils', label: 'Coils' },
+  { id: 'breakouts', label: 'Breakouts' },
+  { id: 'book', label: 'Book' },
+  { id: 'focus', label: 'Focus' },
 ]
 
 type SortKey =
@@ -25,28 +28,124 @@ type SortKey =
   | 'symbol'
 
 const SORTS: { id: SortKey; label: string }[] = [
-  { id: 'score', label: 'SCORE' },
-  { id: 'cluster', label: 'CLUSTER' },
+  { id: 'score', label: 'Score' },
+  { id: 'cluster', label: 'Cluster' },
   { id: 'atr_pct', label: 'ATR%' },
   { id: 'adx', label: 'ADX' },
-  { id: 'coil_width_pct', label: 'COIL' },
-  { id: 'pct_since_flip', label: '%FLIP' },
+  { id: 'coil_width_pct', label: 'Coil' },
+  { id: 'pct_since_flip', label: '% flip' },
   { id: 'timeframe', label: 'TF' },
-  { id: 'symbol', label: 'SYM' },
+  { id: 'symbol', label: 'Symbol' },
 ]
+
+function screenChartTf(r: { timeframe?: string | null; sources?: string[] }, view: string): string {
+  if (view === 'breakouts' || view === 'coils' || view === 'expansions') return '1d'
+  if (r.sources?.includes('expansions') && !r.sources?.includes('leaders')) return '1d'
+  if (r.sources?.includes('breakouts') && !r.sources?.includes('leaders')) return '1d'
+  return r.timeframe || '1h'
+}
 
 function num(v: number | null | undefined): number {
   return v == null || Number.isNaN(v) ? Number.NEGATIVE_INFINITY : v
+}
+
+function ScreenRowCard({
+  row,
+  active,
+  flagged,
+  modalHit,
+  onSelect,
+  onToggleFocus,
+}: {
+  row: ScreenRow
+  active: boolean
+  flagged: boolean
+  modalHit: boolean
+  onSelect: () => void
+  onToggleFocus: () => void
+}) {
+  const side = (row.side || '').toUpperCase()
+  const sideClass = side === 'BUY' ? 'screen-row-buy' : side === 'SELL' ? 'screen-row-sell' : ''
+  const scorePct = row.score != null ? Math.min(100, Math.max(0, row.score)) : null
+
+  return (
+    <div
+      role="option"
+      aria-selected={active}
+      tabIndex={active ? 0 : -1}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={`screen-row ${active ? 'screen-row-active' : ''} ${modalHit ? 'screen-row-modal' : ''} ${sideClass}`}
+    >
+      <div className="screen-row-main">
+        <div className="screen-row-head">
+          <span className="screen-row-symbol">{row.symbol}</span>
+          <span className={`screen-row-side screen-row-side-${side === 'BUY' ? 'buy' : side === 'SELL' ? 'sell' : 'neutral'}`}>
+            {side || '—'}
+          </span>
+          <span className="screen-row-grade">{row.grade || '—'}</span>
+          <span className="screen-row-tf">{(row.timeframe || '—').toUpperCase()}</span>
+          {flagged && <span className="meta-chip meta-chip-lime">Focus</span>}
+        </div>
+        <div className="screen-row-levels">
+          <span className="screen-row-entry">
+            <span className="screen-row-level-label">Entry</span>
+            <span className="tabular text-ink">{formatPrice(row.signal_price)}</span>
+          </span>
+          <span>
+            <span className="screen-row-level-label">SL</span>
+            <span className="tabular text-magenta">{formatPrice(row.stop_loss)}</span>
+          </span>
+          <span>
+            <span className="screen-row-level-label">TP</span>
+            <span className="tabular text-lime">{formatPrice(row.take_profit)}</span>
+          </span>
+        </div>
+        <div className="screen-row-meta">
+          {row.cluster && <span className={modalHit ? 'text-cyan' : ''}>{row.cluster}</span>}
+          {row.atr_pct != null && <span>ATR {row.atr_pct.toFixed(2)}%</span>}
+          {row.adx != null && <span>ADX {row.adx.toFixed(0)}</span>}
+          {row.sources.map((s) => (
+            <span key={s} className="meta-chip">
+              {s}
+            </span>
+          ))}
+        </div>
+        {scorePct != null && (
+          <div className="screen-row-score" aria-hidden>
+            <div className="screen-row-score-bar" style={{ width: `${scorePct}%` }} />
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        className="btn btn-sm shrink-0"
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleFocus()
+        }}
+      >
+        {flagged ? 'Unflag' : 'Flag'}
+      </button>
+    </div>
+  )
 }
 
 export function ScreensPanel({
   lastSync,
   fills,
   onChart,
+  onTrackManual,
 }: {
   lastSync?: number | null
   fills: JournalFill[]
   onChart: (symbol: string, timeframe?: string) => void
+  onTrackManual?: (row: ScreenRow) => void
 }) {
   const [view, setView] = useState<ScreenView | 'focus'>('all')
   const [sort, setSort] = useState<SortKey>('score')
@@ -56,6 +155,7 @@ export function ScreensPanel({
   const [rows, setRows] = useState<ScreenRow[]>([])
   const [modal, setModal] = useState<string | null>(null)
   const [note, setNote] = useState<string>('')
+  const [lastClose, setLastClose] = useState<number | null>(null)
   const focus = useFocusList()
 
   const apiView: ScreenView = view === 'focus' ? 'all' : view
@@ -104,6 +204,16 @@ export function ScreensPanel({
 
   const selected = visible[cursor] || null
 
+  const alertLevels: ChartAlertLevels | null = selected
+    ? {
+        entry: selected.signal_price,
+        stop_loss: selected.stop_loss,
+        take_profit: selected.take_profit,
+        side: selected.side,
+        label: selected.symbol,
+      }
+    : null
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
@@ -121,12 +231,12 @@ export function ScreensPanel({
         setCursor((c) => Math.max(0, c - 1))
       } else if (e.key === 'Enter' && selected) {
         e.preventDefault()
-        onChart(selected.symbol, selected.timeframe || undefined)
+        onChart(selected.symbol, screenChartTf(selected, view))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [visible.length, selected, focus, onChart])
+  }, [visible.length, selected, focus, onChart, view])
 
   const clickSort = (k: SortKey) => {
     if (sort === k) setAsc((a) => !a)
@@ -137,119 +247,86 @@ export function ScreensPanel({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <PanelShell
-        title="Combo screens"
-        subtitle={`${visible.length} unique · ${note || 'never orders'} · Space next · Shift+Space flag · Enter chart`}
-      >
-        <div className="mb-3 flex flex-wrap gap-2">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setView(v.id)}
-              className={`rounded-2xl px-4 py-2 font-display text-[10px] tracking-[0.22em] ${
-                view === v.id
-                  ? 'border border-cyan/50 bg-cyan/10 text-cyan'
-                  : 'border border-line/15 text-chrome/70 hover:border-cyan/30'
-              }`}
-            >
-              {v.label}
-              {v.id === 'focus' ? ` ${focus.symbols.length}` : ''}
-            </button>
-          ))}
-        </div>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {SORTS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => clickSort(s.id)}
-              className={`rounded-xl px-3 py-1.5 font-mono text-[10px] tracking-wider ${
-                sort === s.id
-                  ? 'border border-magenta/40 bg-magenta/10 text-magenta'
-                  : 'border border-line/15 text-chrome/55'
-              }`}
-            >
-              {s.label}
-              {sort === s.id ? (asc ? ' ↑' : ' ↓') : ''}
-            </button>
-          ))}
-        </div>
-        {modal && (
-          <p className="mb-3 font-mono text-[11px] text-cyan">
-            Modal cluster {modal} (most common in this view)
-          </p>
-        )}
-        {err && <p className="mb-3 font-mono text-[11px] text-magenta">{err}</p>}
-        <div className="max-h-[min(62vh,720px)] space-y-2 overflow-auto" role="listbox">
-          {visible.map((r, i) => {
-            const active = i === cursor
-            const flagged = focus.has(r.symbol)
-            const modalHit = Boolean(modal && r.cluster === modal)
-            return (
-              <div
-                key={r.symbol}
-                role="option"
-                aria-selected={active}
-                tabIndex={active ? 0 : -1}
-                onClick={() => setCursor(i)}
-                onDoubleClick={() => onChart(r.symbol, r.timeframe || undefined)}
-                className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left ${
-                  active
-                    ? 'border-cyan/50 bg-cyan/10'
-                    : modalHit
-                      ? 'border-cyan/25 bg-cyan/5'
-                      : 'border-line/15 bg-surface/60'
-                }`}
+    <div className="screens-layout">
+      <div className="screens-list-col">
+        <ModuleCard
+          title="Combo screens"
+          subtitle={`${visible.length} symbols · ${note || 'never orders'} · ↑↓ select · Shift+Space focus`}
+        >
+          <div className="mb-4 flex flex-wrap gap-2">
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setView(v.id)}
+                className={`chip ${view === v.id ? 'chip-on' : ''}`}
               >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-display text-sm tracking-wider text-ink">{r.symbol}</span>
-                    <span className="font-mono text-[11px] text-chrome/60">
-                      {(r.side || '—')} · {r.grade || 'coil'} · {(r.timeframe || '—').toUpperCase()}
-                    </span>
-                    {flagged && <span className="font-mono text-[10px] tracking-widest text-lime">FOCUS</span>}
-                    {r.sources.map((s) => (
-                      <span key={s} className="font-mono text-[10px] uppercase text-magenta/80">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-chrome/60">
-                    <span className={modalHit ? 'text-cyan' : ''}>{r.cluster || '—'}</span>
-                    {r.score != null && <span>score {r.score}</span>}
-                    {r.atr_pct != null && <span>ATR {r.atr_pct.toFixed(2)}%</span>}
-                    {r.adx != null && <span>ADX {r.adx.toFixed(0)}</span>}
-                    {r.coil_width_pct != null && <span>coil {r.coil_width_pct.toFixed(1)}%</span>}
-                    {r.pct_since_flip != null && <span>flip {r.pct_since_flip.toFixed(1)}%</span>}
-                    {r.radar_color && <span>{r.radar_color}</span>}
-                    {r.weight_pct != null && <span>book {r.weight_pct.toFixed(1)}%</span>}
-                    <span>qty {r.quantity}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-xl border border-line/20 px-3 py-2 font-display text-[10px] tracking-widest text-chrome/70"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    focus.toggle(r.symbol)
-                  }}
-                >
-                  {flagged ? 'UNFLAG' : 'FLAG'}
-                </button>
-              </div>
-            )
-          })}
-          {!visible.length && <Empty>{view === 'focus' ? 'Shift+Space to flag names' : 'No rows in this view'}</Empty>}
-        </div>
-      </PanelShell>
-      <ChartsPanel
-        compact
-        focusSymbol={selected?.symbol}
-        focusTimeframe={selected?.timeframe || '1h'}
-        fills={fills}
-      />
+                {v.label}
+                {v.id === 'focus' ? ` ${focus.symbols.length}` : ''}
+              </button>
+            ))}
+          </div>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {SORTS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => clickSort(s.id)}
+                className={`chip ${sort === s.id ? 'chip-alt' : ''}`}
+              >
+                {s.label}
+                {sort === s.id ? (asc ? ' ↑' : ' ↓') : ''}
+              </button>
+            ))}
+          </div>
+          {modal && (
+            <p className="mb-3 font-mono text-sm text-cyan">Modal cluster {modal} (most common in this view)</p>
+          )}
+          {err && <p className="mb-3 text-sm text-magenta">{err}</p>}
+          <div className="screen-list" role="listbox">
+            {visible.map((r, i) => (
+              <ScreenRowCard
+                key={r.symbol}
+                row={r}
+                active={i === cursor}
+                flagged={focus.has(r.symbol)}
+                modalHit={Boolean(modal && r.cluster === modal)}
+                onSelect={() => setCursor(i)}
+                onToggleFocus={() => focus.toggle(r.symbol)}
+              />
+            ))}
+            {!visible.length && (
+              <EmptyNote>{view === 'focus' ? 'Shift+Space to flag names' : 'No rows in this view'}</EmptyNote>
+            )}
+          </div>
+        </ModuleCard>
+      </div>
+
+      <div className="screens-detail-col">
+        <ScreenAlertSetup
+          row={selected}
+          fills={fills}
+          lastClose={lastClose}
+          onViewChart={
+            selected
+              ? () => onChart(selected.symbol, screenChartTf(selected, view))
+              : undefined
+          }
+          onTrackManual={
+            selected && onTrackManual && selected.signal_id != null
+              ? () => onTrackManual(selected)
+              : undefined
+          }
+        />
+        <ChartsPanel
+          compact
+          focusSymbol={selected?.symbol}
+          focusTimeframe={selected ? screenChartTf(selected, view) : '1h'}
+          fills={fills}
+          alertLevels={alertLevels}
+          onLastClose={setLastClose}
+        />
+      </div>
     </div>
   )
 }

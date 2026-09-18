@@ -11,7 +11,7 @@ from typing import Any, Optional
 import pandas as pd
 
 ALLOWED_CHART_TFS = frozenset({"1h", "4h", "1d"})
-TF_MS = {"1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
+TF_MS = {"1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000, "1w": 604_800_000}
 
 
 def ts_ms(value: Any) -> Optional[int]:

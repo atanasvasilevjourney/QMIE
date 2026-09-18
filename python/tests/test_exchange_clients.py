@@ -16,7 +16,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from scanner.exchange_clients import BinanceClient, BybitClient, OkxClient, get_client
+from scanner.exchange_clients import (
+    BinanceClient, BybitClient, OkxClient, _okx_inst, get_client,
+)
 
 
 # ────── Helpers to fake aiohttp responses ───────────────────────────────
@@ -264,6 +266,36 @@ class TestOkx:
         assert df.index.tz is not None
         assert fake.calls[0][1]["instId"] == "BTC-USDT-SWAP"
         assert fake.calls[0][1]["bar"] == "1H"
+
+    async def test_rebrand_aliases_matic_and_rndr(self, candle_payload):
+        c = OkxClient()
+        fake = _FakeSession([
+            _FakeResp(200, candle_payload),
+            _FakeResp(200, candle_payload),
+        ])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            await c.fetch_klines("MATICUSDT", "1h", limit=10)
+            await c.fetch_klines("RNDRUSDT", "4h", limit=10)
+        assert fake.calls[0][1]["instId"] == "POL-USDT-SWAP"
+        assert fake.calls[1][1]["instId"] == "RENDER-USDT-SWAP"
+
+    async def test_pol_and_render_native_ids(self, candle_payload):
+        c = OkxClient()
+        fake = _FakeSession([
+            _FakeResp(200, candle_payload),
+            _FakeResp(200, candle_payload),
+        ])
+        with patch.object(c, "_s", AsyncMock(return_value=fake)):
+            await c.fetch_klines("POLUSDT", "1h", limit=10)
+            await c.fetch_klines("RENDERUSDT", "1h", limit=10)
+        assert fake.calls[0][1]["instId"] == "POL-USDT-SWAP"
+        assert fake.calls[1][1]["instId"] == "RENDER-USDT-SWAP"
+
+    def test_1000pepe_not_aliased_to_pepe(self):
+        # Different contract scale — never map onto OKX PEPE-USDT-SWAP.
+        assert _okx_inst("1000PEPEUSDT") == "1000PEPE-USDT-SWAP"
+        assert _okx_inst("PEPEUSDT") == "PEPE-USDT-SWAP"
+        assert _okx_inst("FETUSDT") == "FET-USDT-SWAP"
 
     async def test_4xx_raises(self):
         c = OkxClient()

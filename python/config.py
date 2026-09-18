@@ -42,18 +42,22 @@ class Settings(BaseSettings):
     discord_username:       str = "QMIE"
     discord_avatar_url:     str = ""
     discord_enabled:        bool = True
+    discord_chart_image:    bool = True
+    discord_chart_bars:     int = 90
+    discord_chart_htf:      bool = True
 
     telegram_bot_token:     Optional[str] = None
     telegram_chat_id:       Optional[str] = None
     telegram_enabled:       bool = False
 
     # ─── Scanner ─────────────────────────────────────────────────────────
-    # Comma-separated. Defaults to Binance USDT perps top set. Overridable.
+    # Comma-separated USDT perps. OKX uses POL/RENDER; Binance still has
+    # MATIC/RNDR on some books. 1000PEPE and FET are omitted (no OKX SWAP).
     scan_symbols: str = (
         "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,"
-        "LINKUSDT,MATICUSDT,DOTUSDT,LTCUSDT,TRXUSDT,ATOMUSDT,NEARUSDT,APTUSDT,"
-        "ARBUSDT,OPUSDT,SUIUSDT,INJUSDT,FILUSDT,RNDRUSDT,TIAUSDT,SEIUSDT,"
-        "ORDIUSDT,WLDUSDT,FETUSDT,PEPEUSDT,1000PEPEUSDT,BONKUSDT"
+        "LINKUSDT,POLUSDT,DOTUSDT,LTCUSDT,TRXUSDT,ATOMUSDT,NEARUSDT,APTUSDT,"
+        "ARBUSDT,OPUSDT,SUIUSDT,INJUSDT,FILUSDT,RENDERUSDT,TIAUSDT,SEIUSDT,"
+        "ORDIUSDT,WLDUSDT,PEPEUSDT,BONKUSDT"
     )
     # Auto-discover top-N by 24h quote volume in addition to the static list
     scan_auto_universe_top_n:  int = 0     # 0 = static list only
@@ -143,6 +147,8 @@ class Settings(BaseSettings):
     radar_min_coverage_pct:   float = 50.0
     # Persist + notify 1D GREEN/RED flip and coil-UP/DOWN as breakout setups (manual only)
     radar_dispatch_trend_start: bool = True
+    # Replay last N closed 1D bars on each radar pass so a missed coil-UP is not lost
+    radar_setup_lookback_bars: int = 7
 
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
     openai_api_key: Optional[str] = None
@@ -231,6 +237,7 @@ class Settings(BaseSettings):
                 kline_limit=self.radar_kline_limit,
                 notify=self.radar_notify,
                 min_coverage_pct=self.radar_min_coverage_pct,
+                setup_lookback_bars=self.radar_setup_lookback_bars,
             ).validate()
         except ValueError as e:
             warnings.append(f"Radar config invalid: {e}")

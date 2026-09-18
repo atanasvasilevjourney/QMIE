@@ -87,6 +87,16 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
     trade_count    INTEGER NOT NULL DEFAULT 0,
     halted         INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS radar_breadth_history (
+    as_of_date     TEXT PRIMARY KEY,
+    green          INTEGER NOT NULL,
+    grey           INTEGER NOT NULL,
+    red            INTEGER NOT NULL,
+    total          INTEGER NOT NULL,
+    recorded_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_radar_breadth_date ON radar_breadth_history(as_of_date DESC);
 """
 
 
@@ -182,6 +192,23 @@ class Database:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 "SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,)
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
+    async def recent_entry_signals(self, limit: int = 400) -> list[dict]:
+        """ENTRY events only, newest first — for repeat-alert thread grouping."""
+        limit = max(1, min(int(limit), 2000))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM signals
+                 WHERE lower(event) = 'entry'
+                 ORDER BY id DESC
+                 LIMIT ?
+                """,
+                (limit,),
             ) as cur:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
@@ -343,7 +370,9 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             sql = """
-                SELECT f.outcome, f.realized_r, f.pnl, s.grade
+                SELECT f.outcome, f.realized_r, f.pnl, s.grade,
+                       ifnull(f.source, 'manual') AS source,
+                       json_extract(s.raw, '$.timeframe') AS timeframe
                 FROM fills f
                 JOIN signals s ON s.id = f.signal_id
                 """
@@ -362,6 +391,23 @@ class Database:
         avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
         pnls = [float(r["pnl"]) for r in closed if r.get("pnl") is not None]
         sum_pnl = round(sum(pnls), 4) if pnls else None
+
+        def _norm_tf(raw: Any) -> str:
+            t = str(raw or "").strip().lower()
+            return t if t else "unknown"
+
+        paper_closed = [r for r in closed if str(r.get("source") or "manual") == "paper"]
+        manual_closed = [r for r in closed if str(r.get("source") or "manual") != "paper"]
+        by_source = {"paper": len(paper_closed), "manual": len(manual_closed)}
+        by_timeframe: dict[str, int] = {}
+        for r in closed:
+            tf = _norm_tf(r.get("timeframe"))
+            by_timeframe[tf] = by_timeframe.get(tf, 0) + 1
+        manual_4h = sum(
+            1
+            for r in manual_closed
+            if _norm_tf(r.get("timeframe")) in ("4h", "4hour", "240")
+        )
         return {
             "fills": len(rows),
             "closed": len(closed),
@@ -371,6 +417,11 @@ class Database:
             "avg_realized_r": avg_r,
             "sum_pnl": sum_pnl,
             "grades": list(grades) if grades else "all",
+            "by_source": by_source,
+            "by_timeframe": by_timeframe,
+            "manual_4h_closed": manual_4h,
+            "pooled": True,
+            "oos_edge": "4h A/A+ OOS 49.1% / E[R] +0.309 — not this mix",
         }
 
     # ─── Orders (unused in scanner edition; kept for schema compatibility) ─
@@ -422,6 +473,52 @@ class Database:
             await db.commit()
             return {"date": today, "starting_eq": starting_eq,
                     "realized_pnl": 0.0, "trade_count": 0, "halted": 0}
+
+    async def upsert_radar_breadth(
+        self,
+        *,
+        as_of_date: str,
+        green: int,
+        grey: int,
+        red: int,
+        total: int,
+    ) -> None:
+        """One row per closed daily radar bar (market breadth % inputs)."""
+        now = _now()
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO radar_breadth_history
+                (as_of_date, green, grey, red, total, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(as_of_date) DO UPDATE SET
+                    green = excluded.green,
+                    grey = excluded.grey,
+                    red = excluded.red,
+                    total = excluded.total,
+                    recorded_at = excluded.recorded_at
+                """,
+                (as_of_date, int(green), int(grey), int(red), int(total), now),
+            )
+            await db.commit()
+
+    async def radar_breadth_history(self, *, days: int) -> list[dict[str, Any]]:
+        """Daily green/grey/red counts, oldest first, capped at `days` rows."""
+        limit = max(1, min(int(days), 3650))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT as_of_date, green, grey, red, total, recorded_at
+                  FROM radar_breadth_history
+                 ORDER BY as_of_date DESC
+                 LIMIT ?
+                """,
+                (limit,),
+            ) as cur:
+                rows = [dict(r) for r in await cur.fetchall()]
+        rows.reverse()
+        return rows
 
     async def update_today(self, *, pnl_delta: float = 0.0,
                            trade_inc: int = 0, halt: bool | None = None) -> None:

@@ -27,8 +27,13 @@ class Notifier(ABC):
     enabled: bool = True
 
     @abstractmethod
-    async def send_signal(self, sig: TVSignal,
-                          broker_resp: BrokerResponse | None = None) -> None: ...
+    async def send_signal(
+        self,
+        sig: TVSignal,
+        broker_resp: BrokerResponse | None = None,
+        *,
+        chart_png: bytes | None = None,
+    ) -> None: ...
 
     async def send_text(self, message: str) -> None:
         """Optional admin/heartbeat channel. Default: log only."""

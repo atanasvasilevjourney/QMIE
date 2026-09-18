@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 _GRADE_RANK = {Grade.A_PLUS: 4, Grade.A: 3, Grade.B: 2, Grade.C: 1, Grade.REJECT: 0}
 
 
+def _is_radar_spot(sig: TVSignal) -> bool:
+    """1D radar expansions / color-flips are the spot book; TEMA is leveraged."""
+    setup = getattr(sig, "setup_type", None)
+    if setup in ("expansion", "breakout"):
+        return True
+    strat = (sig.strategy or "").lower()
+    return "dailyexpansion" in strat or "dailybreakout" in strat
+
+
 def _to_grade(s: str) -> Grade:
     try:    return Grade(s)
     except: return Grade.REJECT
@@ -62,8 +71,10 @@ def trend_start_to_tvsignal(item: dict) -> TVSignal:
         except (TypeError, ValueError):
             sl = None
     short = side is Side.SELL
+    reason = str(item.get("reason") or ("trend_start_short" if short else "trend_start_long"))
+    is_expansion = "coil_breakout" in reason or item.get("breakout") in ("UP", "DOWN")
     return TVSignal(
-        strategy="QMIE-DailyBreakout",
+        strategy="QMIE-DailyExpansion" if is_expansion else "QMIE-DailyBreakout",
         event=EventType.ENTRY,
         symbol=str(item.get("symbol") or ""),
         asset_class=AssetClass.CRYPTO,
@@ -74,16 +85,19 @@ def trend_start_to_tvsignal(item: dict) -> TVSignal:
         adx=item.get("adx"),
         timestamp=str(bar_time) if bar_time else None,
         bar_time=bar_ms,
-        reason=item.get("reason") or ("trend_start_short" if short else "trend_start_long"),
+        reason=reason,
         trend="bearish" if short else "bullish",
         daily_trend="bearish" if short else "bullish",
-        setup_type="breakout",
+        setup_type="expansion" if is_expansion else "breakout",
         action="sell" if short else "buy",
     )
 
 
-def tv_chart_url(symbol: str, timeframe: str, prefix: str = "BINANCE") -> str:
+def tv_chart_url(symbol: str, timeframe: str, prefix: str = "BINANCE", *, perp: bool = True) -> str:
     """Build a TradingView chart deep-link.
+
+    TEMA (leveraged) uses the Binance perp feed (``.P``).
+    Trend Radar / DailyExpansion is the spot book — no ``.P``.
     e.g. https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT.P&interval=240
     """
     interval_map = {"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30",
@@ -91,8 +105,11 @@ def tv_chart_url(symbol: str, timeframe: str, prefix: str = "BINANCE") -> str:
                     "1d":"D","d":"D","1w":"W","w":"W"}
     interval = interval_map.get(timeframe.lower(), "240")
     sym = symbol.upper()
-    if not sym.endswith(".P") and prefix.upper() == "BINANCE":
-        sym += ".P"      # default to perp on Binance feed
+    if perp and not sym.endswith(".P") and prefix.upper() == "BINANCE":
+        sym += ".P"
+    elif not perp:
+        if sym.endswith(".P"):
+            sym = sym[:-2]
     return f"https://www.tradingview.com/chart/?symbol={prefix.upper()}:{sym}&interval={interval}"
 
 
@@ -107,6 +124,11 @@ class SignalDispatcher:
         tv_chart_prefix: str = "BINANCE",
         max_signals_per_symbol_per_day: int = 4,
         paper: object | None = None,
+        chart_client: object | None = None,
+        discord_chart_image: bool = True,
+        discord_chart_bars: int = 90,
+        discord_chart_htf: bool = True,
+        scan_htf_map: dict[str, str] | None = None,
     ):
         self.db = db
         self.notifiers = notifiers
@@ -115,6 +137,11 @@ class SignalDispatcher:
         self.tv_prefix = tv_chart_prefix
         self.max_per_day = max_signals_per_symbol_per_day
         self.paper = paper
+        self.chart_client = chart_client
+        self.discord_chart_image = discord_chart_image
+        self.discord_chart_bars = discord_chart_bars
+        self.discord_chart_htf = discord_chart_htf
+        self.scan_htf_map = scan_htf_map or {}
         # (utc_date_iso, symbol) → count of alerts already dispatched that day
         self._day_counts: dict[tuple[str, str], int] = defaultdict(int)
 
@@ -202,10 +229,7 @@ class SignalDispatcher:
         # Fan out (fire-and-forget). Wrap in a re-built TVSignal w/ extra fields.
         notify_sig = TVSignal.model_validate(sig_dict)
 
-        await asyncio.gather(
-            *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
-            return_exceptions=True,
-        )
+        await self._fan_out_notifiers(notify_sig)
         if self.max_per_day > 0:
             self._day_counts[key] += 1
         logger.info(
@@ -214,6 +238,35 @@ class SignalDispatcher:
             result.score, result.price,
         )
         return True
+
+    async def _fan_out_notifiers(self, notify_sig: TVSignal) -> None:
+        chart_png: bytes | None = None
+        if self.discord_chart_image and self.chart_client is not None:
+            try:
+                from chart_visual import build_alert_chart_png
+
+                chart_png = await build_alert_chart_png(
+                    self.chart_client,
+                    notify_sig,
+                    bar_limit=self.discord_chart_bars,
+                    htf_map=self.scan_htf_map if self.discord_chart_htf else None,
+                    include_htf=self.discord_chart_htf,
+                )
+            except Exception:
+                logger.exception("alert chart png skipped (non-fatal)")
+
+        await asyncio.gather(
+            *(
+                n.send_signal(
+                    notify_sig,
+                    None,
+                    chart_png=chart_png if getattr(n, "name", "") == "discord" else None,
+                )
+                for n in self.notifiers
+                if n.enabled
+            ),
+            return_exceptions=True,
+        )
 
     async def dispatch_inbound(self, sig: TVSignal) -> bool:
         """Persist + fan-out an already-built TVSignal (Pine webhook or daily breakout).
@@ -231,14 +284,11 @@ class SignalDispatcher:
         await self._maybe_paper(sig, sig_id)
 
         tf = sig.timeframe or "1d"
-        chart_url = tv_chart_url(sig.symbol, tf, self.tv_prefix)
+        chart_url = tv_chart_url(sig.symbol, tf, self.tv_prefix, perp=not _is_radar_spot(sig))
         sig_dict = sig.model_dump()
         sig_dict["chart_url"] = chart_url
         notify_sig = TVSignal.model_validate(sig_dict)
-        await asyncio.gather(
-            *(n.send_signal(notify_sig, None) for n in self.notifiers if n.enabled),
-            return_exceptions=True,
-        )
+        await self._fan_out_notifiers(notify_sig)
         logger.info(
             "INBOUND %s %s %s %s reason=%s",
             sig.symbol, tf, sig.side.value if sig.side else "-",

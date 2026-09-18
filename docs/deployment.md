@@ -2,6 +2,85 @@
 
 Scanner edition. Alert-only. No broker keys.
 
+## Vercel (desk UI only — not the scanner)
+
+Connecting this GitHub repo to Vercel and deploying **master** as-is produces
+`404: NOT_FOUND` with status **Ready**. Vercel built nothing useful: the repo
+root is Python + Docker, not a Next.js app, and there was no `index.html` to
+serve.
+
+Vercel **cannot** run QMIE. The product is a long-lived FastAPI process
+(bar-close scheduler, SQLite, optional Redis, exchange REST). Serverless
+functions time out and have no persistent loop. Discord/Telegram alerts do
+**not** need Vercel.
+
+Two pieces, two hosts:
+
+| Piece | Where |
+|---|---|
+| Scanner API (`uvicorn` on `:8080`) | Docker Compose on a VPS, or a **container** host (Fly / Railway / Render). See §2. |
+| Desk UI (`web/`) | Optional: Vercel static hosting of the Vite build |
+
+### Vercel Production (`master`)
+
+Vercel **Production** should track GitHub **`master`**. The repo root ships
+`vercel.json` (`framework: null`, builds `web/dist`, proxies API paths to
+Render). After each merge to `master`, Vercel redeploys the desk (ORBIT +
+sidebar OPS/Screens/Charts/Journal).
+
+The **scanner** (alerts, SQLite, scheduler) stays on
+**`https://qmie.onrender.com/`**. The desk UI may also be served from Render
+(`Accept: text/html` on `/`). Discord/Telegram env vars live only on Render
+(or Docker), never on Vercel.
+
+Optional Vercel setting: **Root Directory** = `web` (uses `web/vercel.json`
+only; drop root `outputDirectory` in that mode). Default monorepo-root config
+is preferred so one `vercel.json` owns install/build.
+
+Same-origin `/health` on `*.vercel.app` is proxied to Render via rewrites —
+not the FastAPI process. Do not set `VITE_QMIE_API` to a Vercel URL.
+
+`vercel.json` at the repo root uses `framework: null` and builds `web/dist`.
+Do not use the Vite preset at the monorepo root — it looks for
+`vite.config` next to `vercel.json`, finds none, and ships a 404.
+
+CORS on FastAPI is already `allow_origins=["*"]` for the public scanner
+routes. Do not put `WEBHOOK_SECRET` or Discord URLs in Vercel — those belong
+in `python/.env` on the scanner host.
+
+## Render (scanner API)
+
+Yes: a **Web Service** with Docker. No: static site, cron, or the free
+spin-down plan.
+
+`https://mcp.render.com/mcp` can list deploys and logs after OAuth or
+`RENDER_API_KEY`. That URL is a **shadow MCP** (not Runlayer). Prefer a
+Runlayer-managed Render server if your org has one.
+
+The image used to bind **8080** only. Render health-checks **`$PORT`**
+(often `10000`), so the old `CMD` never passed the probe. `docker/start.sh`
+now honors `PORT` (Compose still defaults to 8080).
+
+### Dashboard (existing service)
+
+1. Runtime **Docker**, Dockerfile `docker/Dockerfile`, context **repo root**
+   (not `docker/` — `COPY python/` would fail).
+2. Start command empty (image `CMD`) **or**
+   `uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers`
+3. Health check `/health`
+4. **1** instance + a disk at `/app/data`
+5. Env: `SCAN_DATA_SOURCE=okx`, `WORKERS=1`, `DISCORD_WEBHOOK_URL`,
+   `WEBHOOK_SECRET`, optional `REDIS_URL`
+6. Redeploy. Then `curl -sS https://<service>.onrender.com/health`
+7. Browser: `https://<service>.onrender.com/` (desk). JSON: `curl` `/` still.
+
+### Blueprint
+
+`render.yaml` at the repo root. Connect the repo in Render → Blueprint.
+Fill `sync: false` secrets in the dashboard. Plan is `starter` (always-on).
+
+---
+
 ## 1. Configure
 
 ```bash

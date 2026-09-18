@@ -133,8 +133,13 @@ class TelegramNotifier(Notifier):
         return "\n".join(lines)
 
     # ─── Send ────────────────────────────────────────────────────────────
-    async def send_signal(self, sig: TVSignal,
-                          broker_resp: BrokerResponse | None = None) -> None:
+    async def send_signal(
+        self,
+        sig: TVSignal,
+        broker_resp: BrokerResponse | None = None,
+        *,
+        chart_png: bytes | None = None,
+    ) -> None:
         text = self._format(sig, broker_resp)
         url = f"{self.API}/bot{self.bot_token}/sendMessage"
         body = {

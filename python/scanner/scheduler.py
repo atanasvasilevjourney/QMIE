@@ -34,10 +34,12 @@ from .radar import (
     RadarSnapshot,
     RadarRow,
     build_snapshot,
-    classify_symbol,
+    classify_with_recent_setups,
     empty_radar_snapshot,
     format_radar_digest,
     iter_trend_starts,
+    unique_trend_starts,
+    overlay_recent_expansions,
 )
 from .signal_engine import ScanResult, Weights, compute_signal
 from .symbol_universe import SymbolUniverse
@@ -86,6 +88,7 @@ class ScannerScheduler:
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
         radar_dispatch_trend_start: bool = True,
+        db: Optional[Any] = None,
     ):
         self.client = client
         self.universe = universe
@@ -106,6 +109,7 @@ class ScannerScheduler:
         # Daily Trend Radar (independent of SCAN_TIMEFRAMES)
         self.radar_enabled = radar_enabled
         self.radar_dispatch_trend_start = radar_dispatch_trend_start
+        self.db = db
         self.radar_cfg = radar_cfg or RadarConfig()
         try:
             self.radar_cfg.validate()
@@ -436,23 +440,24 @@ class ScannerScheduler:
             )
             t0 = time.time()
 
-            async def one(sym: str) -> tuple[str, Optional[RadarRow], Optional[str]]:
+            async def one(sym: str) -> tuple[str, Optional[RadarRow], list[dict[str, Any]], Optional[str]]:
                 async with self.sem:
                     try:
                         df = await self.client.fetch_klines(
                             sym, "1d", limit=cfg.kline_limit,
                         )
-                        row = classify_symbol(df, sym, cfg=cfg)
+                        row, setups = classify_with_recent_setups(df, sym, cfg=cfg)
                         if row is None:
-                            return sym, None, "too_short_or_empty"
-                        return sym, row, None
+                            return sym, None, [], "too_short_or_empty"
+                        return sym, row, setups, None
                     except Exception as e:
-                        return sym, None, str(e)
+                        return sym, None, [], str(e)
 
             gathered = await asyncio.gather(
                 *(one(s) for s in symbols), return_exceptions=True,
             )
             rows: list[RadarRow] = []
+            replay: list[dict[str, Any]] = []
             failed: list[str] = []
             for item in gathered:
                 if isinstance(item, Exception):
@@ -460,9 +465,10 @@ class ScannerScheduler:
                     self.stats["radar_errors"] += 1
                     self.stats["errors"] += 1
                     continue
-                sym, row, err = item
+                sym, row, setups, err = item
                 if row is not None:
                     rows.append(row)
+                    replay.extend(setups)
                 else:
                     failed.append(sym)
                     self.stats["radar_errors"] += 1
@@ -485,23 +491,37 @@ class ScannerScheduler:
                 failed_symbols=failed,
                 enabled=True,
             )
+            overlay_recent_expansions(snap, replay)
             self.last_radar = snap
             self.stats["radar_passes"] += 1
             self.stats["last_radar_at"] = int(time.time())
             if mark_seen:
                 self._last_radar_seen = _last_close_ts(time.time(), _tf_seconds("1d"))
 
+            if self.db is not None and snap.as_of:
+                as_of_date = str(snap.as_of)[:10]
+                try:
+                    await self.db.upsert_radar_breadth(
+                        as_of_date=as_of_date,
+                        green=snap.green,
+                        grey=snap.grey,
+                        red=snap.red,
+                        total=snap.succeeded,
+                    )
+                except Exception:
+                    logger.exception("radar breadth history persist failed (non-fatal)")
+
             logger.info(
                 "Trend Radar done in %.2fs: n=%d/%d G=%d Gy=%d R=%d "
-                "flips_g=%d coils=%d brk=%d status=%s",
+                "flips_g=%d coils=%d brk=%d exp=%d status=%s",
                 time.time() - t0, snap.succeeded, snap.requested,
                 snap.green, snap.grey, snap.red,
                 len(snap.fresh_green), len(snap.tight_coils),
-                len(snap.breakouts), snap.status,
+                len(snap.breakouts), len(snap.expansions), snap.status,
             )
 
             if self.radar_dispatch_trend_start:
-                await self._dispatch_trend_starts(snap)
+                await self._dispatch_trend_starts(snap, replay=replay)
 
             coverage = (
                 100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
@@ -530,9 +550,18 @@ class ScannerScheduler:
                 )
             return True
 
-    async def _dispatch_trend_starts(self, snap: RadarSnapshot) -> int:
-        """Fan out closed-1D GREY→GREEN/RED and coil UP/DOWN as inbound signals."""
-        items = iter_trend_starts(snap.rows)
+    async def _dispatch_trend_starts(
+        self,
+        snap: RadarSnapshot,
+        *,
+        replay: Optional[list[dict[str, Any]]] = None,
+    ) -> int:
+        """Fan out closed-1D GREY→GREEN/RED and coil UP/DOWN as inbound signals.
+
+        `replay` is trend-starts from the last N closed 1D bars (missed coil-UP).
+        Dedup is by symbol+side+bar_time here and again in the dispatcher.
+        """
+        items = unique_trend_starts(iter_trend_starts(snap.rows) + list(replay or []))
         n = 0
         n_long = 0
         n_short = 0

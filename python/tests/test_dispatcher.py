@@ -68,7 +68,7 @@ class _MockNotifier:
         self.fail = fail
         self.sent: list = []
 
-    async def send_signal(self, sig, broker_resp):
+    async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
         if self.fail:
             raise RuntimeError("notifier down")
         self.sent.append(sig)
@@ -84,7 +84,11 @@ class TestTVChartUrl:
         assert "BINANCE:BTCUSDT.P" in url
         assert "interval=240" in url
 
-    def test_1d_uses_D(self):
+    def test_spot_skips_perp_suffix(self):
+        url = tv_chart_url("BTCUSDT", "1d", "BINANCE", perp=False)
+        assert "BINANCE:BTCUSDT&" in url or url.endswith("BINANCE:BTCUSDT")
+        assert "BTCUSDT.P" not in url
+        assert "interval=D" in url
         url = tv_chart_url("BTCUSDT", "1d", "BINANCE")
         assert "interval=D" in url
 
@@ -236,7 +240,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         idem = _InMemIdem()
@@ -281,7 +285,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = ScanResult(
@@ -320,7 +324,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = _make_result()
@@ -346,7 +350,7 @@ class TestDailyTrendPropagation:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         result = _make_result(grade="REJECT")
@@ -380,8 +384,47 @@ class TestDailyBreakoutInbound:
         assert sig.timeframe == "1d"
         assert sig.setup_type == "breakout"
         assert sig.reason == "trend_start_long"
+        assert sig.timestamp == "2026-08-16T00:00:00+00:00"
+        assert sig.signal_price == 3000.0
+
+    def test_coil_up_maps_to_daily_expansion(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "SOLUSDT",
+            "price": 107.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-18T00:00:00+00:00",
+            "reason": "coil_breakout_up",
+            "breakout": "UP",
+            "coil_low": 98.0,
+        })
+        assert sig.strategy == "QMIE-DailyExpansion"
+        assert sig.side.value == "BUY"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "expansion"
+        assert sig.stop_loss == 98.0
+        assert sig.reason == "coil_breakout_up"
 
     def test_trend_start_maps_to_sell_1d(self):
+        sig = trend_start_to_tvsignal({
+            "symbol": "ETHUSDT",
+            "price": 3000.0,
+            "adx": 27.5,
+            "bar_time": "2026-08-16T00:00:00+00:00",
+            "reason": "trend_start_short",
+            "breakout": None,
+            "side": "SELL",
+        })
+        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.side.value == "SELL"
+        assert sig.timeframe == "1d"
+        assert sig.setup_type == "breakout"
+        assert sig.action == "sell"
+        assert sig.trend == "bearish"
+        assert sig.daily_trend == "bearish"
+        assert sig.stop_loss is None
+        assert sig.reason == "trend_start_short"
+
+    def test_coil_down_maps_to_daily_expansion(self):
         sig = trend_start_to_tvsignal({
             "symbol": "ETHUSDT",
             "price": 3000.0,
@@ -392,10 +435,10 @@ class TestDailyBreakoutInbound:
             "coil_high": 3120.0,
             "side": "SELL",
         })
-        assert sig.strategy == "QMIE-DailyBreakout"
+        assert sig.strategy == "QMIE-DailyExpansion"
         assert sig.side.value == "SELL"
         assert sig.timeframe == "1d"
-        assert sig.setup_type == "breakout"
+        assert sig.setup_type == "expansion"
         assert sig.action == "sell"
         assert sig.trend == "bearish"
         assert sig.daily_trend == "bearish"
@@ -408,7 +451,7 @@ class TestDailyBreakoutInbound:
 
         class _CapturingNotifier:
             enabled = True
-            async def send_signal(self, sig, broker_resp=None):
+            async def send_signal(self, sig, broker_resp=None, *, chart_png=None):
                 received.append(sig)
 
         db = _DummyDB()
@@ -432,5 +475,7 @@ class TestDailyBreakoutInbound:
         assert len(received) == 1
         assert received[0].chart_url
         assert "interval=D" in received[0].chart_url
+        assert "ETHUSDT.P" not in received[0].chart_url
+        assert "BINANCE:ETHUSDT" in received[0].chart_url
         # duplicate bar is dropped
         assert await dispatcher.dispatch_inbound(sig) is False
