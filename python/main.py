@@ -29,6 +29,7 @@ Endpoints:
   GET  /journal               recent fills
   PATCH /journal/{id}         set exit price on a fill
   GET  /journal/stats         win rate / R from fills (optional grade filter)
+  GET  /journal/developments  repeat alerts + price move + radar validity
   POST /webhook               OPTIONAL: receive Pine alerts (HMAC) and
                               re-broadcast through the same notifiers.
 """
@@ -66,6 +67,7 @@ from improve.analysis import analyze_signal, openai_configured
 from improve.checklist import evaluate_native, flatten_signal
 from improve.desk import run_desk
 from journal import JournalError, close_fill, create_fill, drift_message
+from signal_development import build_signal_developments
 from paper import PaperBook
 from guide import trading_guide
 from screens import VIEWS, build_screens
@@ -737,6 +739,43 @@ async def get_journal_stats(grades: str = "A+,A") -> dict[str, Any]:
         raise HTTPException(503, "db_not_ready")
     parsed = tuple(g.strip() for g in grades.split(",") if g.strip()) or None
     return await state.db.journal_stats(grades=parsed)
+
+
+@app.get("/journal/developments")
+async def get_journal_developments(
+    limit: int = 400,
+    min_alerts: int = 2,
+) -> dict[str, Any]:
+    """Repeat-alert threads: how price moved and whether daily radar still aligns.
+
+    For Discord/Journal review when the same symbol fires again — not orders.
+    """
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    min_alerts = max(1, min(int(min_alerts), 10))
+    signals = await state.db.recent_entry_signals(limit=max(50, min(limit, 2000)))
+    open_fills = await state.db.open_fills()
+    open_syms = {str(f.get("symbol") or "").upper() for f in open_fills if f.get("symbol")}
+
+    radar_rows: list[dict[str, Any]] = []
+    radar_as_of: str | None = None
+    if state.scheduler is not None and state.scheduler.last_radar is not None:
+        snap = state.scheduler.last_radar
+        radar_rows = list(snap.rows or [])
+        radar_as_of = str(snap.as_of)[:10] if snap.as_of else None
+
+    threads = build_signal_developments(
+        signals,
+        radar_rows=radar_rows,
+        min_alerts=min_alerts,
+        include_open_fill_symbols=open_syms,
+    )
+    return {
+        "radar_as_of": radar_as_of,
+        "min_alerts": min_alerts,
+        "count": len(threads),
+        "threads": threads,
+    }
 
 
 @app.patch("/journal/{fill_id}")

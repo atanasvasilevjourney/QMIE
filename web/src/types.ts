@@ -72,6 +72,47 @@ export type RadarSnapshot = {
   coverage_pct?: number | null
 }
 
+export type SignalDevelopmentThread = {
+  symbol: string
+  strategy: string
+  side?: string
+  alert_count: number
+  first_alert_at?: string
+  last_alert_at?: string
+  first_price?: number | null
+  last_alert_price?: number | null
+  mark_price?: number | null
+  pct_since_first?: number | null
+  pct_since_last_alert?: number | null
+  latest_signal_id: number
+  validity_status: 'VALID' | 'INVALID' | 'LATE' | 'FRESH' | 'WATCH' | 'UNKNOWN' | string
+  validity_detail: string
+  radar?: {
+    color?: string
+    days_in_state?: number
+    pct_since_flip?: number | null
+    flipped_at?: string | null
+    flip_from?: string | null
+    is_late_stage?: boolean
+    is_fresh_flip?: boolean
+    adx?: number
+  } | null
+  timeline: {
+    id: number
+    received_at?: string
+    signal_price?: number | null
+    bar_time?: string | number | null
+    grade?: string
+  }[]
+}
+
+export type SignalDevelopments = {
+  radar_as_of?: string | null
+  min_alerts: number
+  count: number
+  threads: SignalDevelopmentThread[]
+}
+
 export type SignalRow = {
   id: number
   symbol: string

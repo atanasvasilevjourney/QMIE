@@ -8,6 +8,7 @@ import type {
   JournalStats,
   RadarBreadthHistory,
   RadarSnapshot,
+  SignalDevelopments,
   SignalRow,
   AnalysisCard,
   TradingGuide,
@@ -101,6 +102,8 @@ export const api = {
   universe: () => getJson<{ count: number; symbols: string[]; timeframes: string[] }>('/universe'),
   journal: (limit = 30) => getJson<JournalFill[]>(`/journal?limit=${limit}`),
   journalStats: () => getJson<JournalStats>('/journal/stats?grades=A%2B,A'),
+  journalDevelopments: (minAlerts = 2) =>
+    getJson<SignalDevelopments>(`/journal/developments?min_alerts=${minAlerts}`),
   createFill: (payload: {
     signal_id: number
     fill_price: number

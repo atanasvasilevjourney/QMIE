@@ -351,8 +351,10 @@ export default function App() {
             >
               <JournalFlow
                 selected={selected}
+                signals={desk.signals}
                 fills={desk.fills}
                 stats={desk.stats}
+                onSelectSignal={setSelected}
                 onDone={() => void desk.refresh()}
                 onViewChart={goChart}
               />

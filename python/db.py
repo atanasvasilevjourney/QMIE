@@ -196,6 +196,23 @@ class Database:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
 
+    async def recent_entry_signals(self, limit: int = 400) -> list[dict]:
+        """ENTRY events only, newest first — for repeat-alert thread grouping."""
+        limit = max(1, min(int(limit), 2000))
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM signals
+                 WHERE lower(event) = 'entry'
+                 ORDER BY id DESC
+                 LIMIT ?
+                """,
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+                return [dict(r) for r in rows]
+
     # ─── Fills (manual journal) ──────────────────────────────────────────
     async def insert_fill(
         self,

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
-import type { JournalFill, JournalStats, SignalRow } from '../types'
+import type {
+  JournalFill,
+  JournalStats,
+  SignalDevelopmentThread,
+  SignalDevelopments,
+  SignalRow,
+} from '../types'
 import { formatPrice } from '../lib/formatPrice'
 import { Empty, PanelShell } from './RadarPanel'
 
@@ -23,16 +29,34 @@ function journalStatsLine(stats: JournalStats): string {
   )
 }
 
+function validityClass(status: string): string {
+  const s = status.toUpperCase()
+  if (s === 'VALID' || s === 'FRESH') return 'dev-valid'
+  if (s === 'INVALID') return 'dev-invalid'
+  if (s === 'LATE') return 'dev-late'
+  if (s === 'WATCH') return 'dev-watch'
+  return 'dev-unknown'
+}
+
+function fmtPct(v?: number | null): string {
+  if (v == null || Number.isNaN(v)) return '—'
+  return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+}
+
 export function JournalFlow({
   selected,
+  signals,
   fills,
   stats,
+  onSelectSignal,
   onDone,
   onViewChart,
 }: {
   selected: SignalRow | null
+  signals: SignalRow[]
   fills: JournalFill[]
   stats: JournalStats | null
+  onSelectSignal?: (row: SignalRow) => void
   onDone: () => void
   onViewChart?: (symbol: string, timeframe?: string) => void
 }) {
@@ -42,6 +66,24 @@ export function JournalFlow({
   const [notes, setNotes] = useState('manual desk fill')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [developments, setDevelopments] = useState<SignalDevelopments | null>(null)
+  const [devErr, setDevErr] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .journalDevelopments(2)
+      .then((d) => {
+        if (!cancelled) setDevelopments(d)
+      })
+      .catch((e) => {
+        if (!cancelled) setDevErr(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fills.length, stats?.closed])
 
   const openFills = useMemo(
     () => fills.filter((f) => !f.exit_price || f.outcome === 'OPEN'),
@@ -76,11 +118,29 @@ export function JournalFlow({
       if (exitPrice) payload.exit_price = Number(exitPrice)
       const row = await api.createFill(payload)
       setMsg(`Fill #${row.id} logged · ${row.outcome || 'OPEN'}`)
+      void api.journalDevelopments(2).then(setDevelopments).catch(() => {})
       onDone()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  function pickThread(t: SignalDevelopmentThread) {
+    const fromDesk = signals.find((s) => s.id === t.latest_signal_id)
+    if (fromDesk && onSelectSignal) {
+      onSelectSignal(fromDesk)
+      return
+    }
+    if (onSelectSignal) {
+      onSelectSignal({
+        id: t.latest_signal_id,
+        symbol: t.symbol,
+        side: t.side,
+        strategy: t.strategy,
+        signal_price: t.last_alert_price ?? undefined,
+      })
     }
   }
 
@@ -104,7 +164,70 @@ export function JournalFlow({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4">
+      <PanelShell
+        title="Repeat alerts · setup development"
+        subtitle={
+          developments?.radar_as_of
+            ? `Same symbol/strategy fired 2+ times · daily radar as of ${developments.radar_as_of}`
+            : 'Tracks price since first alert and whether daily Trend Radar still aligns'
+        }
+      >
+        {devErr && <p className="text-sm text-magenta">{devErr}</p>}
+        {!devErr && !developments && <p className="text-sm text-muted">Loading developments…</p>}
+        {developments && !developments.count && (
+          <p className="text-sm text-muted">
+            No repeat threads yet. When Discord/qmie-journal sends the same DailyBreakout or scanner
+            alert again, it appears here with % move and radar validity.
+          </p>
+        )}
+        <div className="dev-thread-list">
+          {developments?.threads.map((t) => {
+            const key = `${t.symbol}|${t.strategy}|${t.side}`
+            const open = expanded === key
+            const on = selected?.id === t.latest_signal_id
+            return (
+              <div key={key} className={`dev-thread ${on ? 'dev-thread-on' : ''}`}>
+                <button type="button" className="dev-thread-head" onClick={() => pickThread(t)}>
+                  <span className="font-mono font-semibold text-ink">{t.symbol.replace('USDT', '')}</span>
+                  <span className="text-xs text-muted">{t.strategy}</span>
+                  <span className={`dev-badge ${validityClass(t.validity_status)}`}>{t.validity_status}</span>
+                  <span className="tabular text-sm">
+                    {t.alert_count}× · since 1st {fmtPct(t.pct_since_first)} · since last{' '}
+                    {fmtPct(t.pct_since_last_alert)}
+                  </span>
+                </button>
+                <p className="dev-detail">{t.validity_detail}</p>
+                {t.radar && (
+                  <p className="dev-radar text-xs text-muted">
+                    Radar {t.radar.color} · {t.radar.days_in_state}d · ADX {t.radar.adx?.toFixed(1) ?? '—'}
+                    {t.radar.is_late_stage ? ' · LATE' : ''}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-sm dev-expand"
+                  onClick={() => setExpanded(open ? null : key)}
+                >
+                  {open ? 'Hide' : 'Show'} alert timeline
+                </button>
+                {open && (
+                  <ul className="dev-timeline">
+                    {t.timeline.map((a) => (
+                      <li key={a.id}>
+                        #{a.id} · {a.received_at?.slice(0, 10) ?? '—'} · {formatPrice(a.signal_price)}{' '}
+                        {a.grade ? `· ${a.grade}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </PanelShell>
+
+      <div className="grid gap-4 lg:grid-cols-2">
       <PanelShell
         title="Journal Workflow"
         subtitle={
@@ -214,6 +337,7 @@ export function JournalFlow({
           <p className="mt-2 text-sm text-amber">{openFills.length} open fill(s)</p>
         )}
       </PanelShell>
+      </div>
     </div>
   )
 }
