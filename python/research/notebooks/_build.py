@@ -1362,6 +1362,48 @@ btc_k = {
 }
 display(pd.DataFrame(btc_k).T.round(4))
 """),
+    cell(True, """## Fixed current top 20 (no monthly rotation)
+
+Liquidity rank from **OKX USDT-margined swaps** (`volCcy24h × last`, run time). **No universe rotation** — equal-weight Combo on this fixed list every day (names with no history yet are skipped that day).
+
+**Substitution:** `PEPEUSDT` has no Binance Vision klines → **`BNBUSDT`**.
+
+⚠️ Using *today’s* top 20 on *full* history is **survivorship / selection bias** (knows future winners). OOS stats below are still useful, but not a clean lockbox for “could we have picked these names in 2019?”
+"""),
+    cell(False, """
+# Refresh list: OKX tickers instType=SWAP, rank volCcy24h*last, exclude leveraged token suffixes.
+OKX_TOP20_RAW = [
+    "ETHUSDT", "BTCUSDT", "ZECUSDT", "SOLUSDT", "SNDKUSDT", "XRPUSDT", "AKEUSDT", "DOGEUSDT",
+    "HYPEUSDT", "UNIUSDT", "NEARUSDT", "ARBUSDT", "ENAUSDT", "ONEUSDT", "SUIUSDT", "FILUSDT",
+    "PEPEUSDT", "WLDUSDT", "TRUMPUSDT", "LITUSDT",
+]
+FIXED_TOP20 = [("BNBUSDT" if s == "PEPEUSDT" else s) for s in OKX_TOP20_RAW]
+print("Fixed top 20 for backtest:", FIXED_TOP20)
+
+fixed_cols = [c for c in FIXED_TOP20 if c in net_panel.columns]
+sub_fixed = net_panel[fixed_cols]
+n_fixed = sub_fixed.notna().sum(axis=1).replace(0, np.nan)
+port_fixed = (sub_fixed.sum(axis=1, skipna=True) / n_fixed).fillna(0.0).rename("net")
+
+fixed_full = kpis_from_net(port_fixed)
+fixed_oos = kpis_from_net(port_fixed.loc[cut:])
+fixed_is = kpis_from_net(port_fixed.loc[: cut - pd.Timedelta(days=1)])
+a_fix, b_fix = ann_alpha_vs_btc(port_fixed.loc[cut:], btc.loc[cut:])
+
+display(pd.DataFrame({
+    "fixed_top20_full": fixed_full,
+    "fixed_top20_IS": fixed_is,
+    "fixed_top20_OOS": fixed_oos,
+    "rotating_topN_OOS": oos_k,
+}).T.round(4))
+
+from scipy import stats as sp_stats
+oos_daily = port_fixed.loc[cut:].dropna()
+_, p_mean = sp_stats.ttest_1samp(oos_daily, 0.0)
+print("OOS ann alpha vs BTC", round(a_fix, 4), "beta", round(b_fix, 3))
+print("Mean names contributing", round(float(n_fixed.mean()), 2))
+print("OOS mean daily net", round(float(oos_daily.mean()), 6), "H0 mean=0 p-value", round(float(p_mean), 4))
+"""),
     cell(True, """## Readout vs paper (SSRN 5209907)
 
 | Metric (top-20 book, net) | Paper ~2015–Mar 2025 | This notebook |
