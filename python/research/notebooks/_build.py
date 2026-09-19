@@ -684,3 +684,462 @@ print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median(
 If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
+
+write("08_donchian_avwap_ranked_validation.ipynb", [
+    cell(True, """# 08 — Donchian + Anchored VWAP + Ranked allocation (validation)
+
+**Research only.** Validates the master-spec *approach* on daily USDT-M Vision klines (same archive as `trend_lab`). This is **not** live execution, not GA, and not a survivorship-clean top-100 universe.
+
+## Honest framing
+
+- Long-only trend is **upside convexity + exit optionality**, not symmetric long-vol (that needs shorts or options).
+- This notebook uses a **fixed liquid basket** (~11 symbols). Missing delisted alts **inflates** any positive result vs a true top-N universe.
+- Fills: **next-bar** (`shift(1)`). Features use **prior-window** Donchian (`shift(1)` rolling). OOS is **2023→today**; fit window is **2019-09→2022-12** (chronological — never train on the future).
+
+## Pre-registered checks in this notebook
+
+| Id | Test |
+|---|---|
+| H2 | AVWAP filter (`above_avwap`) vs same book without AVWAP gate |
+| H4 | Ranked top-K vs equal-weight on the same active set |
+| H5 | BTC regime filter ON vs OFF (gross cap when OFF) |
+| Placebo | Permuted entry flags — real book Sharpe should beat placebo band |
+
+Leakage: **+1 bar feature shift** should hurt Sharpe vs baseline.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+
+import numpy as np
+import pandas as pd
+from research.trend_lab.data import DEFAULT_UNIVERSE, load_symbol
+from research.trend_lab.metrics import kpis, kpis_from_net, max_dd
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS, split_frame
+from scanner.indicators import atr
+
+ANN = 365
+COST_BPS = 10.0
+"""),
+    cell(False, """
+@dataclass(frozen=True)
+class ConvexParams:
+    n_entry: int = 55
+    n_exit: int = 20
+    atr_stop_mult: float = 3.0
+    compression_window: int = 60
+    compression_pct_max: float = 40.0  # only enter if width pct <= this (coiled)
+    avwap_anchor: str = "breakout_bar"  # breakout_bar | swing_low
+    use_avwap_gate: bool = True
+    use_compression_gate: bool = True
+    top_k: int = 5
+    rank_decay_exp: float = 1.0
+    target_vol_ann: float = 0.25
+    rebalance_rule: str = "W-SUN"
+    regime_filter: bool = True
+    gross_cap_off_regime: float = 0.30
+    min_strength: float = 0.5
+    single_name_cap: float = 0.25
+    exec_lag: int = 1
+
+
+def donchian_dual(df: pd.DataFrame, n_entry: int, n_exit: int) -> pd.DataFrame:
+    hi = df["high"].shift(1).rolling(n_entry, min_periods=n_entry).max()
+    lo = df["low"].shift(1).rolling(n_exit, min_periods=n_exit).min()
+    mid = (hi + lo) / 2.0
+    width = (hi - lo) / (df["close"] + 1e-12)
+    return pd.DataFrame({"upper": hi, "lower": lo, "mid": mid, "width": width}, index=df.index)
+
+
+def compression_percentile(width: pd.Series, window: int) -> pd.Series:
+    def _pct(x: np.ndarray) -> float:
+        if len(x) < 2:
+            return np.nan
+        last = x[-1]
+        return float((x[:-1] <= last).mean() * 100.0)
+
+    return width.rolling(window, min_periods=window).apply(_pct, raw=True)
+
+
+def avwap_from_anchor(df: pd.DataFrame, anchor_ts: pd.Timestamp, end_ts: pd.Timestamp) -> float:
+    sl = df.loc[anchor_ts:end_ts]
+    if sl.empty:
+        return float("nan")
+    tp = (sl["high"] + sl["low"] + sl["close"]) / 3.0
+    vol = sl["volume"].replace(0, np.nan)
+    if vol.notna().sum() == 0:
+        return float(sl["close"].iloc[-1])
+    return float((tp * vol).sum() / vol.sum())
+
+
+def swing_low_ts(df: pd.DataFrame, before: pd.Timestamp, lookback: int = 20) -> pd.Timestamp:
+    sl = df.loc[:before].tail(lookback + 1)
+    if sl.empty:
+        return before
+    i = sl["low"].idxmin()
+    return pd.Timestamp(i)
+
+
+def coin_features(df: pd.DataFrame, p: ConvexParams) -> pd.DataFrame:
+    don = donchian_dual(df, p.n_entry, p.n_exit)
+    atr_s = atr(df, 14)
+    atr_pct = atr_s / (df["close"] + 1e-12)
+    comp_pct = compression_percentile(don["width"], p.compression_window)
+    breakout = df["close"] > don["upper"]
+    exit_lower = df["close"] < don["lower"]
+    dist_upper = (df["close"] - don["upper"]) / (atr_s + 1e-12)
+    return pd.DataFrame({
+        "close": df["close"],
+        "upper": don["upper"],
+        "lower": don["lower"],
+        "mid": don["mid"],
+        "width": don["width"],
+        "comp_pct": comp_pct,
+        "atr": atr_s,
+        "atr_pct": atr_pct,
+        "breakout": breakout.astype(float),
+        "exit_lower": exit_lower.astype(float),
+        "dist_upper": dist_upper,
+    }, index=df.index)
+
+
+def trend_strength(feats: pd.DataFrame, avwap_dist: pd.Series) -> pd.Series:
+    z = avwap_dist.replace([np.inf, -np.inf], np.nan)
+    z = (z - z.expanding(min_periods=20).mean()) / (z.expanding(min_periods=20).std(ddof=0) + 1e-12)
+    vol_exp = feats["width"].pct_change(5).replace([np.inf, -np.inf], np.nan)
+    score = feats["dist_upper"].fillna(0) + 0.5 * z.fillna(0) + 0.25 * vol_exp.fillna(0)
+    return score.rename("strength")
+
+
+def btc_regime(btc: pd.DataFrame, n_entry: int) -> pd.Series:
+    don = donchian_dual(btc, n_entry, max(5, n_entry // 3))
+    on = (btc["close"] > don["mid"]).astype(float)
+    return on.rename("regime")
+
+
+def _seed_avwap_cum(df: pd.DataFrame, anchor_ts: pd.Timestamp, end_ts: pd.Timestamp) -> tuple[float, float]:
+    sl = df.loc[anchor_ts:end_ts]
+    tp = (sl["high"] + sl["low"] + sl["close"]) / 3.0
+    vol = sl["volume"].astype(float)
+    return float((tp * vol).sum()), float(vol.sum())
+
+
+def simulate_coin_path(df: pd.DataFrame, p: ConvexParams, rebalance_days: set) -> pd.DataFrame:
+    \"\"\"Daily in/out: entries on rebalance days only; risk exits any day. Incremental AVWAP.\"\"\"
+    feats = coin_features(df, p)
+    idx = df.index
+    n = len(idx)
+    eligible = np.zeros(n, dtype=float)
+    strength = np.zeros(n, dtype=float)
+    dist_upper = feats["dist_upper"].to_numpy(dtype=float)
+    breakout = feats["breakout"].to_numpy(dtype=float)
+    comp_pct = feats["comp_pct"].to_numpy(dtype=float)
+    exit_lower = feats["exit_lower"].to_numpy(dtype=float)
+    atr_a = feats["atr"].to_numpy(dtype=float)
+    close_a = feats["close"].to_numpy(dtype=float)
+
+    in_pos = False
+    entry_px = np.nan
+    cum_pv, cum_v = 0.0, 0.0
+
+    for i, ts in enumerate(idx):
+        if in_pos and cum_v > 0:
+            av = cum_pv / cum_v
+            dist_av = (close_a[i] - av) / (atr_a[i] + 1e-12)
+            strength[i] = dist_upper[i] + 0.5 * dist_av
+        else:
+            strength[i] = dist_upper[i] if np.isfinite(dist_upper[i]) else 0.0
+
+        stop_hit = (
+            in_pos
+            and np.isfinite(entry_px)
+            and np.isfinite(atr_a[i])
+            and close_a[i] < entry_px - p.atr_stop_mult * atr_a[i]
+        )
+        if in_pos and (exit_lower[i] == 1.0 or stop_hit):
+            in_pos = False
+            entry_px = np.nan
+            cum_pv, cum_v = 0.0, 0.0
+
+        want = (
+            ts in rebalance_days
+            and not in_pos
+            and breakout[i] == 1.0
+            and np.isfinite(comp_pct[i])
+            and strength[i] >= p.min_strength
+        )
+        if want and p.use_compression_gate and comp_pct[i] > p.compression_pct_max:
+            want = False
+        if want:
+            anc = pd.Timestamp(ts) if p.avwap_anchor == "breakout_bar" else swing_low_ts(df, ts)
+            av0 = avwap_from_anchor(df, anc, ts)
+            dist0 = (close_a[i] - av0) / (atr_a[i] + 1e-12)
+            if p.use_avwap_gate and dist0 < 0:
+                want = False
+            else:
+                cum_pv, cum_v = _seed_avwap_cum(df, anc, ts)
+        if want:
+            in_pos = True
+            entry_px = close_a[i]
+        elif in_pos and cum_v > 0:
+            row = df.loc[ts]
+            tp = (row["high"] + row["low"] + row["close"]) / 3.0
+            cum_pv += float(tp) * float(row["volume"])
+            cum_v += float(row["volume"])
+
+        eligible[i] = 1.0 if in_pos else 0.0
+
+    return pd.DataFrame({"eligible": eligible, "strength": strength}, index=idx)
+
+
+def rank_weights(names: list[str], strengths: dict[str, float], vols: dict[str, float], p: ConvexParams) -> dict[str, float]:
+    if not names:
+        return {}
+    ranked = sorted(names, key=lambda n: strengths.get(n, -1e9), reverse=True)
+    ranked = [n for n in ranked if strengths.get(n, 0) >= p.min_strength][: p.top_k]
+    if not ranked:
+        return {}
+    raw = np.array([(len(ranked) - i) ** p.rank_decay_exp for i in range(len(ranked))], dtype=float)
+    inv_vol = np.array([1.0 / max(vols.get(n, 1e-6), 1e-6) for n in ranked], dtype=float)
+    w = raw * inv_vol
+    w = w / w.sum()
+    cap = p.single_name_cap
+    if cap < 1:
+        w = np.minimum(w, cap)
+        if w.sum() > 0:
+            w = w / w.sum()
+    return {n: float(wi) for n, wi in zip(ranked, w)}
+
+
+def vol_scale_weights(weights: dict[str, float], port_vol: float, target: float) -> dict[str, float]:
+    if port_vol <= 0 or not weights:
+        return weights
+    scale = min(1.0, target / port_vol)
+    return {k: v * scale for k, v in weights.items()}
+
+
+def common_index(ohlcv: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
+    idx = None
+    for df in ohlcv.values():
+        idx = df.index if idx is None else idx.intersection(df.index)
+    idx = pd.DatetimeIndex(idx).sort_values()
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx
+
+
+def precompute_paths(
+    ohlcv: dict[str, pd.DataFrame], p: ConvexParams, idx: pd.DatetimeIndex, rebalance_days: set
+) -> dict[str, pd.DataFrame]:
+    out = {}
+    for sym, df in ohlcv.items():
+        out[sym] = simulate_coin_path(df.loc[idx], p, rebalance_days)
+    return out
+
+
+def run_book_from_paths(
+    ohlcv: dict[str, pd.DataFrame],
+    btc: pd.DataFrame,
+    p: ConvexParams,
+    idx: pd.DatetimeIndex,
+    rebalance_days: set,
+    paths: dict[str, pd.DataFrame],
+    *,
+    ranked: bool = True,
+    permute_seed: int | None = None,
+) -> pd.DataFrame:
+    regime = btc_regime(btc, p.n_entry).reindex(idx).ffill().fillna(0)
+    syms = list(ohlcv.keys())
+    elig = pd.DataFrame({s: paths[s]["eligible"] for s in syms}, index=idx)
+    stren = pd.DataFrame({s: paths[s]["strength"] for s in syms}, index=idx)
+    if permute_seed is not None:
+        rng = np.random.default_rng(permute_seed)
+        for s in syms:
+            v = elig[s].to_numpy().copy()
+            rng.shuffle(v)
+            elig[s] = v
+
+    rets = pd.DataFrame({s: ohlcv[s]["close"].loc[idx].pct_change().fillna(0) for s in syms})
+    vol20 = rets.rolling(20).std(ddof=1)
+    held = pd.DataFrame(0.0, index=idx, columns=syms)
+    last = pd.Series(0.0, index=syms)
+
+    for ts in idx:
+        if ts in rebalance_days:
+            names = [s for s in syms if elig.at[ts, s] > 0]
+            w: dict[str, float] = {}
+            if names:
+                strengths = {s: float(stren.at[ts, s]) for s in names}
+                vols = {s: float(vol20.at[ts, s]) if pd.notna(vol20.at[ts, s]) else 1e-6 for s in names}
+                w = rank_weights(names, strengths, vols, p) if ranked else {s: 1.0 / len(names) for s in names}
+                gross = sum(w.values())
+                reg = float(regime.at[ts])
+                if p.regime_filter and reg < 0.5:
+                    gross = min(gross, p.gross_cap_off_regime)
+                elif not p.regime_filter:
+                    gross = min(gross, p.gross_cap_off_regime)
+                if gross > 0:
+                    w = {k: v * gross / sum(w.values()) for k, v in w.items()}
+                port_vol = float(
+                    np.sqrt(sum((float(vol20.at[ts, s]) or 0) ** 2 * (w.get(s, 0) ** 2) for s in w))
+                ) * np.sqrt(ANN)
+                w = vol_scale_weights(w, port_vol, p.target_vol_ann)
+            last = pd.Series(0.0, index=syms)
+            for s, wi in w.items():
+                last[s] = wi
+        for s in syms:
+            held.at[ts, s] = float(last[s]) if elig.at[ts, s] > 0 else 0.0
+
+    held_exec = held.shift(p.exec_lag).fillna(0)
+    gross_ret = (held_exec * rets).sum(axis=1)
+    turnover = held_exec.diff().abs().fillna(held_exec.abs()).sum(axis=1)
+    net = gross_ret - turnover * (COST_BPS / 1e4)
+    return pd.DataFrame({"net": net, "equity": (1 + net).cumprod(), "turnover": turnover, "gross": gross_ret})
+
+
+def run_book(
+    ohlcv: dict[str, pd.DataFrame],
+    btc: pd.DataFrame,
+    p: ConvexParams,
+    *,
+    ranked: bool = True,
+    permute_entries: bool = False,
+    seed: int = 42,
+) -> pd.DataFrame:
+    idx = common_index(ohlcv)
+    rebalance_days = set(pd.Series(1, index=idx).resample(p.rebalance_rule).last().dropna().index)
+    paths = precompute_paths(ohlcv, p, idx, rebalance_days)
+    return run_book_from_paths(
+        ohlcv,
+        btc,
+        p,
+        idx,
+        rebalance_days,
+        paths,
+        ranked=ranked,
+        permute_seed=seed if permute_entries else None,
+    )
+
+
+def block_bootstrap_diff(a: pd.Series, b: pd.Series, block: int = 20, n: int = 120, seed: int = 0) -> tuple[float, float, float]:
+    \"\"\"Paired bootstrap on aligned net returns: mean(a) - mean(b). Returns (obs, p_two_sided, ci95_low).\"\"\"
+    df = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna()
+    if len(df) < block * 3:
+        return float("nan"), float("nan"), float("nan")
+    obs = float(df["a"].mean() - df["b"].mean())
+    rng = np.random.default_rng(seed)
+    n_obs = len(df)
+    boots = []
+    for _ in range(n):
+        starts = rng.integers(0, max(1, n_obs - block + 1), size=max(1, n_obs // block))
+        ix = []
+        for s in starts:
+            ix.extend(range(s, min(s + block, n_obs)))
+        ix = ix[:n_obs]
+        samp = df.iloc[ix]
+        boots.append(float(samp["a"].mean() - samp["b"].mean()))
+    boots = np.array(boots)
+    p = float(2 * min((boots >= 0).mean(), (boots <= 0).mean()))
+    ci_low = float(np.percentile(boots, 2.5))
+    return obs, p, ci_low
+"""),
+    cell(False, """
+# Load daily OHLCV (Vision USDT-M). Survivorship: survivors only — interpret KPIs as optimistic.
+symbols = [s for s in DEFAULT_UNIVERSE if s != "BTCUSDT"]
+btc_df, btc_src = load_symbol("BTCUSDT", "1d")
+ohlcv = {}
+sources = {"BTCUSDT": btc_src}
+for sym in symbols:
+    df, src = load_symbol(sym, "1d")
+    if len(df) < WARMUP_BARS:
+        print("skip", sym, len(df))
+        continue
+    ohlcv[sym] = df
+    sources[sym] = src
+print("loaded", len(ohlcv), "alts + BTC regime", btc_src, "bars", len(btc_df))
+"""),
+    cell(False, """
+base = ConvexParams()
+idx = common_index(ohlcv)
+rebalance_days = set(pd.Series(1, index=idx).resample(base.rebalance_rule).last().dropna().index)
+paths_avwap = precompute_paths(ohlcv, base, idx, rebalance_days)
+paths_no_avwap = precompute_paths(ohlcv, ConvexParams(use_avwap_gate=False), idx, rebalance_days)
+
+book_rank_avwap = run_book_from_paths(ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=True)
+book_eq_avwap = run_book_from_paths(ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=False)
+book_no_avwap = run_book_from_paths(
+    ohlcv, btc_df, ConvexParams(use_avwap_gate=False), idx, rebalance_days, paths_no_avwap, ranked=True
+)
+book_no_regime = run_book_from_paths(
+    ohlcv, btc_df, ConvexParams(regime_filter=False), idx, rebalance_days, paths_avwap, ranked=True
+)
+
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_net = book_rank_avwap.loc[: cut - pd.Timedelta(days=1), "net"]
+oos_net = book_rank_avwap.loc[cut:, "net"]
+
+summary = pd.DataFrame({
+    "rank_avwap_IS": kpis_from_net(is_net),
+    "rank_avwap_OOS": kpis_from_net(oos_net),
+    "equal_avwap_OOS": kpis_from_net(book_eq_avwap.loc[cut:, "net"]),
+    "rank_no_avwap_OOS": kpis_from_net(book_no_avwap.loc[cut:, "net"]),
+    "rank_no_regime_OOS": kpis_from_net(book_no_regime.loc[cut:, "net"]),
+}).T
+display(summary.round(4))
+"""),
+    cell(False, """
+# H2 / H4 / H5 — paired bootstrap on daily net (OOS)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+oos_a = book_rank_avwap.loc[cut:, "net"]
+oos_b = book_no_avwap.loc[cut:, "net"]
+oos_eq = book_eq_avwap.loc[cut:, "net"]
+oos_reg = book_no_regime.loc[cut:, "net"]
+
+h2 = block_bootstrap_diff(oos_a, oos_b, block=15, seed=1)
+h4 = block_bootstrap_diff(oos_a, oos_eq, block=15, seed=2)
+h5 = block_bootstrap_diff(book_rank_avwap.loc[cut:, "net"], oos_reg, block=15, seed=3)
+
+hyp = pd.DataFrame([
+    {"id": "H2_avwap", "obs_mean_diff": h2[0], "p_approx": h2[1], "ci95_low": h2[2],
+     "pass_rule": "obs>0 and p<0.05 (exploratory — not lockbox)"},
+    {"id": "H4_ranked", "obs_mean_diff": h4[0], "p_approx": h4[1], "ci95_low": h4[2],
+     "pass_rule": "ranked net mean > equal-weight"},
+    {"id": "H5_regime", "obs_mean_diff": h5[0], "p_approx": h5[1], "ci95_low": h5[2],
+     "pass_rule": "regime ON improves DD or Calmar (check KPI table)"},
+])
+display(hyp.round(5))
+"""),
+    cell(False, """
+# Placebo distribution (permute eligible flags; reuses path cache)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+real_sh = float(kpis_from_net(book_rank_avwap.loc[cut:, "net"])["sharpe"])
+placebo = []
+for seed in range(12):
+    pb = run_book_from_paths(
+        ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=True, permute_seed=seed
+    )
+    placebo.append(float(kpis_from_net(pb.loc[cut:, "net"])["sharpe"]))
+placebo = np.array(placebo)
+print("OOS Sharpe real", round(real_sh, 3), "placebo median", round(float(np.median(placebo)), 3),
+      "pctile real", round(float((placebo < real_sh).mean()), 3))
+"""),
+    cell(False, """
+# Leakage sanity: +1 bar lag on OHLC (features see stale prices; Sharpe should drop)
+lagged = {s: df.shift(1).dropna() for s, df in ohlcv.items()}
+btc_lag = btc_df.shift(1).dropna()
+book_lag = run_book(lagged, btc_lag, base, ranked=True)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+sh_ok = float(kpis_from_net(book_rank_avwap.loc[cut:, "net"])["sharpe"])
+sh_lag = float(kpis_from_net(book_lag.loc[cut:, "net"])["sharpe"])
+print("OOS Sharpe baseline", round(sh_ok, 3), "lagged OHLC", round(sh_lag, 3), "degraded", sh_lag < sh_ok)
+"""),
+    cell(True, """## Readout
+
+- If **OOS Sharpe** is not above the **placebo** band, treat edge as unproven (sample is small; costs are constant bps, not sqrt-impact).
+- **H2/H4/H5** bootstrap p-values are exploratory; full pre-registration lives in `hypotheses.py` (not built in this notebook-only pass).
+- Next hardening steps: spot Vision loader, rolling top-N universe with delists, weekly/monthly rebalance grid, sqrt slippage, nested walk-forward — STAGES 1–4 of the master spec.
+"""),
+])
