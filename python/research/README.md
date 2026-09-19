@@ -50,6 +50,8 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/05_tema_validation.ipynb` — frozen 4h TEMA equity, honest DD, daily-marked KPIs
 - `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
+- `research/notebooks/08_donchian_avwap_ranked_validation.ipynb` — Donchian + anchored VWAP + ranked spot book (H2/H4/H5 + placebo; research only)
+- `research/notebooks/09_catching_crypto_trends.ipynb` — **Final approach:** Zarattini et al. Combo (9 Donchian horizons) + vol target + monthly top-N rotation (SSRN 5209907 replica on Vision)
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
