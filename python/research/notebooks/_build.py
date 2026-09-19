@@ -1190,7 +1190,7 @@ CANDIDATES = [
     "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "DOGEUSDT", "ADAUSDT",
     "TRXUSDT", "LINKUSDT", "AVAXUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "UNIUSDT",
     "ATOMUSDT", "ETCUSDT", "FILUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "NEARUSDT",
-    "INJUSDT", "SUIUSDT", "SEIUSDT", "TIAUSDT",
+    "INJUSDT", "SUIUSDT", "SEIUSDT", "TIAUSDT", "ZECUSDT", "HYPEUSDT", "XLMUSDT", "ENAUSDT",
 ]
 """),
     cell(False, """
@@ -1362,23 +1362,20 @@ btc_k = {
 }
 display(pd.DataFrame(btc_k).T.round(4))
 """),
-    cell(True, """## Fixed current top 20 (no monthly rotation)
+    cell(True, """## Fixed top 20 by market cap (no rotation)
 
-Liquidity rank from **OKX USDT-margined swaps** (`volCcy24h × last`, run time). **No universe rotation** — equal-weight Combo on this fixed list every day (names with no history yet are skipped that day).
+**Operator list:** large-cap liquid USDT-M perps; **#19 = ENA**, **#20 = SUI**. Rank 17 uses **NEAR** (`SHIBUSDT` has no Vision daily file). **No monthly rotation** — equal-weight Combo each day (names without history yet are skipped).
 
-**Substitution:** `PEPEUSDT` has no Binance Vision klines → **`BNBUSDT`**.
-
-⚠️ Using *today’s* top 20 on *full* history is **survivorship / selection bias** (knows future winners). OOS stats below are still useful, but not a clean lockbox for “could we have picked these names in 2019?”
+⚠️ Fixed cap-weighted *today* on full history is still **survivorship/selection bias** unless membership is point-in-time.
 """),
     cell(False, """
-# Refresh list: OKX tickers instType=SWAP, rank volCcy24h*last, exclude leveraged token suffixes.
-OKX_TOP20_RAW = [
-    "ETHUSDT", "BTCUSDT", "ZECUSDT", "SOLUSDT", "SNDKUSDT", "XRPUSDT", "AKEUSDT", "DOGEUSDT",
-    "HYPEUSDT", "UNIUSDT", "NEARUSDT", "ARBUSDT", "ENAUSDT", "ONEUSDT", "SUIUSDT", "FILUSDT",
-    "PEPEUSDT", "WLDUSDT", "TRUMPUSDT", "LITUSDT",
+MCAP_TOP20 = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "TRXUSDT", "ZECUSDT", "DOGEUSDT",
+    "HYPEUSDT", "ADAUSDT", "LINKUSDT", "XLMUSDT", "UNIUSDT", "LTCUSDT", "BCHUSDT", "AVAXUSDT",
+    "NEARUSDT", "DOTUSDT", "ENAUSDT", "SUIUSDT",
 ]
-FIXED_TOP20 = [("BNBUSDT" if s == "PEPEUSDT" else s) for s in OKX_TOP20_RAW]
-print("Fixed top 20 for backtest:", FIXED_TOP20)
+FIXED_TOP20 = MCAP_TOP20
+print("Fixed mcap top 20 (#19 ENA, #20 SUI):", FIXED_TOP20)
 
 fixed_cols = [c for c in FIXED_TOP20 if c in net_panel.columns]
 sub_fixed = net_panel[fixed_cols]
