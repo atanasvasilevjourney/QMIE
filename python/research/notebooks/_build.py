@@ -1143,3 +1143,256 @@ print("OOS Sharpe baseline", round(sh_ok, 3), "lagged OHLC", round(sh_lag, 3), "
 - Next hardening steps: spot Vision loader, rolling top-N universe with delists, weekly/monthly rebalance grid, sqrt slippage, nested walk-forward — STAGES 1–4 of the master spec.
 """),
 ])
+
+write("09_catching_crypto_trends.ipynb", [
+    cell(True, """# 09 — Catching Crypto Trends (Zarattini et al., SSRN 5209907)
+
+**Final research approach (paper replica on QMIE data).** Implements the published **Combo** model:
+
+- **9 Donchian horizons:** 5, 10, 20, 30, 60, 90, 150, 250, 360 days (close-based channels)
+- **Entry:** close at upper band; **exit:** close below **mid-band trailing stop** (stop = max(prior stop, mid), never lowered)
+- **Sizing:** target **25%** ann. vol via **90-day** return σ, cap **2×**
+- **Combo:** equal-weight average of sub-model weights
+- **Portfolio:** **top N** names by **median daily dollar volume** (prior 30 days), **monthly** rotation, **equal capital** per name
+- **Costs:** **10 bps** + **20%** weight-change rebalance threshold (per paper Section 5–7)
+
+**Data:** Binance Vision USDT-M daily (same as `trend_lab`). This is **not** CoinMarketCap’s full survivorship panel — headline stats are **not** comparable 1:1 to the paper until CMC replication exists.
+
+**Execution discipline:** weights applied with **`shift(1)`** (next-bar) to avoid same-bar fill optimism.
+
+Reference: [SSRN 5209907](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5209907)
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+from datetime import date
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from research.trend_lab.data import load_symbol
+from research.trend_lab.metrics import kpis_from_net, max_dd, cagr
+from research.trend_lab.protocol import SPLIT
+
+HORIZONS = (5, 10, 20, 30, 60, 90, 150, 250, 360)
+VOL_TARGET = 0.25
+SIGMA_DAYS = 90
+LEV_CAP = 2.0
+COST_BPS = 10.0
+REBAL_THRESH = 0.20
+TOP_N = 20
+EXEC_LAG = 1
+ANN = 365
+
+CANDIDATES = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "DOGEUSDT", "ADAUSDT",
+    "TRXUSDT", "LINKUSDT", "AVAXUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "UNIUSDT",
+    "ATOMUSDT", "ETCUSDT", "FILUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "NEARUSDT",
+    "INJUSDT", "SUIUSDT", "SEIUSDT", "TIAUSDT",
+]
+"""),
+    cell(False, """
+def donchian_close(close: pd.Series, n: int) -> pd.DataFrame:
+    \"\"\"Paper-style channels on close (includes current bar in rolling window).\"\"\"
+    up = close.rolling(n, min_periods=n).max()
+    dn = close.rolling(n, min_periods=n).min()
+    mid = (up + dn) / 2.0
+    return pd.DataFrame({"up": up, "dn": dn, "mid": mid})
+
+
+def combo_net(close: pd.Series) -> pd.Series:
+    \"\"\"Single-pass Combo: all horizons updated in one bar loop.\"\"\"
+    c = close.to_numpy(dtype=float)
+    n_bars = len(c)
+    sigma = close.pct_change().rolling(SIGMA_DAYS).std(ddof=1).to_numpy(dtype=float) * np.sqrt(ANN)
+    mids = {}
+    ups = {}
+    for n in HORIZONS:
+        ch = donchian_close(close, n)
+        mids[n] = ch["mid"].to_numpy(dtype=float)
+        ups[n] = ch["up"].to_numpy(dtype=float)
+    nh = len(HORIZONS)
+    in_pos = np.zeros(nh, dtype=bool)
+    trail = np.full(nh, np.nan)
+    w_exec = np.zeros(nh)
+    w_combo = np.zeros(n_bars)
+    for i in range(n_bars):
+        ci = c[i]
+        sig = sigma[i]
+        for j, n in enumerate(HORIZONS):
+            mid = mids[n][i]
+            up = ups[n][i]
+            if not in_pos[j]:
+                if np.isfinite(up) and ci >= up:
+                    in_pos[j] = True
+                    trail[j] = mid
+            else:
+                if np.isfinite(trail[j]) and ci < trail[j]:
+                    in_pos[j] = False
+                    trail[j] = np.nan
+                elif np.isfinite(mid):
+                    trail[j] = max(trail[j], mid)
+            w_tgt = 0.0
+            if in_pos[j] and np.isfinite(sig) and sig > 0:
+                w_tgt = min(LEV_CAP, VOL_TARGET / sig)
+            if abs(w_tgt - w_exec[j]) > REBAL_THRESH:
+                w_exec[j] = w_tgt
+        w_combo[i] = w_exec.mean()
+    w_s = pd.Series(w_combo, index=close.index)
+    ret = close.pct_change().fillna(0.0)
+    held = w_s.shift(EXEC_LAG).fillna(0.0)
+    turnover = held.diff().abs().fillna(held.abs())
+    return (held * ret - turnover * (COST_BPS / 1e4)).rename("net")
+
+
+def ann_alpha_vs_btc(net: pd.Series, btc_close: pd.Series) -> tuple[float, float, float]:
+    b = btc_close.pct_change().reindex(net.index).fillna(0.0)
+    p = net.reindex(b.index).fillna(0.0)
+    if len(p.dropna()) < 50:
+        return float("nan"), float("nan"), float("nan")
+    beta, alpha_d, _, _, _ = stats.linregress(b.values, p.values)
+    alpha_ann = float(alpha_d * ANN)
+    return alpha_ann, float(beta), float(stats.pearsonr(b, p)[0])
+"""),
+    cell(False, """
+# Load Vision daily OHLCV (parallel; cache warm after first run)
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def _load_one(sym: str):
+    df, src = load_symbol(sym, "1d", start=date(2015, 1, 1))
+    return sym, df, src
+
+ohlcv: dict[str, pd.DataFrame] = {}
+min_bars = max(HORIZONS) + SIGMA_DAYS + 10
+with ThreadPoolExecutor(max_workers=6) as ex:
+    futs = {ex.submit(_load_one, sym): sym for sym in CANDIDATES}
+    for fut in as_completed(futs):
+        sym, df, src = fut.result()
+        if len(df) < min_bars:
+            continue
+        ohlcv[sym] = df
+        print(sym, len(df), src)
+print("tradable with enough history:", len(ohlcv))
+"""),
+    cell(False, """
+# Per-asset Combo net returns
+net_by_sym = {sym: combo_net(df["close"]) for sym, df in ohlcv.items()}
+net_panel = pd.DataFrame(net_by_sym).sort_index()
+dollar_vol = pd.DataFrame(
+    {s: ohlcv[s]["close"] * ohlcv[s]["volume"] for s in ohlcv}
+).reindex(net_panel.index)
+
+# Monthly top-N by prior 30-day median dollar volume (point-in-time)
+idx = net_panel.index
+month_starts = pd.Series(1, index=idx).resample("MS").first().dropna().index
+membership: dict[pd.Timestamp, list[str]] = {}
+for ms in month_starts:
+    prior = dollar_vol.loc[ms - pd.Timedelta(days=30): ms - pd.Timedelta(days=1)]
+    if prior.empty:
+        continue
+    med = prior.median().dropna().sort_values(ascending=False)
+    membership[ms] = list(med.head(TOP_N).index)
+
+# Daily portfolio: equal-weight across active names for that month
+port_net = pd.Series(0.0, index=idx)
+counts = pd.Series(0, index=idx)
+active_sets = []
+for ts in idx:
+    ms = max([m for m in month_starts if m <= ts], default=None)
+    if ms is None or ms not in membership:
+        continue
+    active = [s for s in membership[ms] if s in net_panel.columns and pd.notna(net_panel.at[ts, s])]
+    if not active:
+        continue
+    port_net.at[ts] = float(net_panel.loc[ts, active].mean())
+    counts.at[ts] = len(active)
+    active_sets.append((ts, len(active)))
+
+port_net = port_net.rename("net")
+btc = ohlcv["BTCUSDT"]["close"].reindex(idx).ffill()
+btc_net = btc.pct_change().fillna(0.0)
+"""),
+    cell(False, """
+# Full-sample and OOS KPIs (chronological split at SPLIT.oos_start)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+full_k = kpis_from_net(port_net)
+oos_k = kpis_from_net(port_net.loc[cut:])
+is_k = kpis_from_net(port_net.loc[: cut - pd.Timedelta(days=1)])
+btc_oos = kpis_from_net(btc_net.loc[cut:])
+alpha_full, beta_full, corr_full = ann_alpha_vs_btc(port_net, btc)
+alpha_oos, beta_oos, corr_oos = ann_alpha_vs_btc(port_net.loc[cut:], btc.loc[cut:])
+
+summary = pd.DataFrame({
+    "Combo_topN_full": full_k,
+    "Combo_topN_IS": is_k,
+    "Combo_topN_OOS": oos_k,
+    "BTC_BH_OOS": btc_oos,
+}).T
+display(summary.round(4))
+
+print("Ann. alpha vs BTC (lin. reg on daily net): full", round(alpha_full, 4), "OOS", round(alpha_oos, 4))
+print("Beta vs BTC: full", round(beta_full, 3), "OOS", round(beta_oos, 3))
+print("Mean active names:", round(float(counts.replace(0, np.nan).mean()), 1))
+"""),
+    cell(False, """
+# Equity vs vol-matched BTC (OOS)
+eq = (1.0 + port_net).cumprod()
+eq_btc = (1.0 + btc_net).cumprod()
+vol_p = float(port_net.loc[cut:].std(ddof=1) * np.sqrt(ANN))
+vol_b = float(btc_net.loc[cut:].std(ddof=1) * np.sqrt(ANN))
+scale = vol_p / vol_b if vol_b > 0 else 1.0
+eq_btc_s = (1.0 + btc_net * scale).cumprod()
+
+cmp = pd.DataFrame({
+    "Combo_topN": eq.loc[cut:],
+    "BTC_vol_scaled": eq_btc_s.loc[cut:],
+}).dropna()
+display(cmp.tail(1).round(4))
+print("OOS max DD Combo", round(max_dd(eq.loc[cut:]), 4), "BTC scaled", round(max_dd(eq_btc_s.loc[cut:]), 4))
+print("OOS CAGR Combo", round(cagr(eq.loc[cut:]), 4), "BTC scaled", round(cagr(eq_btc_s.loc[cut:]), 4))
+"""),
+    cell(False, """
+# Single-asset BTC Combo (paper Table 1 analogue; Vision data, 10bps, 20% threshold, exec lag 1)
+btc_combo = net_by_sym["BTCUSDT"]
+btc_k = {
+    "full": kpis_from_net(btc_combo),
+    "OOS": kpis_from_net(btc_combo.loc[cut:]),
+}
+display(pd.DataFrame(btc_k).T.round(4))
+"""),
+    cell(True, """## Readout vs paper (SSRN 5209907)
+
+| Metric (top-20 book, net) | Paper ~2015–Mar 2025 | This notebook |
+|---|---:|---:|
+| Sharpe | **1.57** | see table above |
+| CAGR | **~18%** | see table above |
+| Max DD | **~11%** | see table above |
+| Alpha vs BTC | **10.8%** / yr | see print above |
+
+**Gaps:** CMC survivorship panel, exact same-bar execution, and broader alt history. Treat this as **QMIE Vision replication**, not a claim to reproduce Concretum’s exact numbers.
+
+**Not long-vol:** this is **trend + vol targeting + rotation**, same economic story as the paper — not options straddle long-vol.
+"""),
+    cell(False, """
+# Optional: export last KPI snapshot for CI / agents (no secrets)
+import json
+from pathlib import Path
+snap = {
+    "model": "Combo_topN_SSRN5209907_replica",
+    "data": "binance_vision_usdt_m_1d",
+    "n_symbols_loaded": len(ohlcv),
+    "top_n": TOP_N,
+    "full": full_k,
+    "oos": oos_k,
+    "alpha_ann_vs_btc_full": alpha_full,
+    "alpha_ann_vs_btc_oos": alpha_oos,
+    "btc_combo_oos": btc_k["OOS"],
+}
+out = Path("/opt/cursor/artifacts/catching_crypto_trends_results.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(snap, indent=2, default=float))
+print("wrote", out)
+"""),
+])
