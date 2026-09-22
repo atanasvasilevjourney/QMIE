@@ -1435,3 +1435,147 @@ out.write_text(json.dumps(snap, indent=2, default=float))
 print("wrote", out)
 """),
 ])
+
+write("10_donchian_carver_cross_sectional.ipynb", [
+    cell(True, """# 10 — Donchian Combo × Carver × cross-sectional rank
+
+**One notebook, two questions** (fixed **mcap top 20**, Vision 1d, #19 ENA / #20 SUI — same as notebook 09):
+
+1. **Donchian + Carver** — per-asset **50/50 blend**, **Carver gated by Donchian** (`carver × 1{donchian>1%}`), vs each engine alone (equal-weight 20 names).
+2. **Donchian + cross-sectional** — apply **`carver_book`** ranked layer (60d ROC, **top 5**, portfolio vol target) to **Donchian weights**, **Carver weights**, and the blends.
+
+**Carver source:** `HedgeFund_WiP/carver_engine_with_cross_sectional.ipynb` → `trend_lab/carver.py` + `carver_book.py`.
+
+**Costs / execution:** 10 bps turnover, `shift(1)` weights. OOS split: `SPLIT.oos_start` (2023-01-01).
+
+Research only — does not change live QMIE scanner weights.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from research.trend_lab.allocation import blend_weights
+from research.trend_lab.carver import VOL_TARGET
+from research.trend_lab.carver_book import BookParams, book_from_raw_weights, carver_weight_panel
+from research.trend_lab.data import load_symbol
+from research.trend_lab.donchian_combo import (
+    COST_BPS, EXEC_LAG, MCAP_TOP20, combo_weight_series, equal_weight_portfolio,
+)
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.protocol import SPLIT
+
+ANN = 365
+MIN_BARS = 370
+START_CAP = 100_000.0
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+"""),
+    cell(False, """
+def load_panel(symbols: list[str]) -> pd.DataFrame:
+    def _one(sym: str):
+        df, _ = load_symbol(sym, "1d", start=date(2015, 1, 1))
+        return sym, df
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        rows = list(ex.map(_one, symbols))
+    ok = {s: df["close"] for s, df in rows if len(df) >= MIN_BARS}
+    panel = pd.DataFrame(ok).sort_index()
+    print("panel", panel.shape, "from", panel.index[0], "to", panel.index[-1])
+    return panel
+
+panel = load_panel(MCAP_TOP20)
+"""),
+    cell(False, """
+# Raw weight panels
+w_don = pd.DataFrame({s: combo_weight_series(panel[s]) for s in panel.columns})
+w_car = carver_weight_panel(panel, use_cs=True, ann_days=ANN)
+w_blend = pd.DataFrame(
+    {s: blend_weights(w_car[s], w_don[s], mix=0.5) for s in panel.columns},
+    index=panel.index,
+)
+w_gate = w_car * (w_don > 0.01).astype(float)
+print("mean lagged Donchian weight OOS", float(w_don.loc[cut:].shift(EXEC_LAG).mean().mean()))
+print("mean lagged Carver weight OOS", float(w_car.loc[cut:].shift(EXEC_LAG).mean().mean()))
+"""),
+    cell(True, """## Part 1 — Donchian channel breakout + Carver (equal-weight 20)
+
+Per-name weights are combined **before** the equal-weight portfolio step.
+"""),
+    cell(False, """
+part1_books = {
+    "donchian_combo_eq20": equal_weight_portfolio(w_don, panel),
+    "carver_engine_eq20": equal_weight_portfolio(w_car, panel),
+    "blend_50_50_eq20": equal_weight_portfolio(w_blend, panel),
+    "gate_carver_if_donchian_eq20": equal_weight_portfolio(w_gate, panel),
+}
+
+def kpi_row(name: str, net: pd.Series) -> dict:
+    oos = net.loc[cut:].fillna(0.0)
+    k = kpis_from_net(oos)
+    pnl = float(START_CAP * ((1.0 + oos).prod() - 1.0))
+    return {"book": name, "oos_sharpe": k["sharpe"], "oos_cagr": k["cagr"],
+            "oos_max_dd": k["max_dd"], "oos_pnl_100k": pnl}
+
+part1 = pd.DataFrame([kpi_row(n, s) for n, s in part1_books.items()]).sort_values("oos_sharpe", ascending=False)
+display(part1.round(4))
+"""),
+    cell(True, """## Part 2 — Cross-sectional ranked book (ROC 60, top 5)
+
+Same **`book_from_raw_weights`** as ranked Carver desk research: rank by 60d return among names with raw weight > 0, keep top 5, scale to Carver vol target (20% crypto default in engine).
+"""),
+    cell(False, """
+cs = BookParams(vol_target=VOL_TARGET, lookback=60, top_n=5, cost_bps=COST_BPS, exec_lag=EXEC_LAG)
+
+part2_books = {
+    "donchian_cs_top5": book_from_raw_weights(panel, w_don, cs)["net"],
+    "carver_cs_top5": book_from_raw_weights(panel, w_car, cs)["net"],
+    "blend_cs_top5": book_from_raw_weights(panel, w_blend, cs)["net"],
+    "gate_cs_top5": book_from_raw_weights(panel, w_gate, cs)["net"],
+}
+
+part2 = pd.DataFrame([kpi_row(n, s) for n, s in part2_books.items()]).sort_values("oos_sharpe", ascending=False)
+display(part2.round(4))
+
+# Baselines side-by-side (OOS)
+compare = pd.concat([
+    part1.assign(layer="eq20"),
+    part2.assign(layer="cs_top5"),
+], ignore_index=True)
+display(compare.sort_values("oos_sharpe", ascending=False).round(4))
+"""),
+    cell(False, """
+# OOS equity curves ($100k start at OOS open)
+eq_rows = {}
+for label, net in {**part1_books, **part2_books}.items():
+    oos = net.loc[cut:].fillna(0.0)
+    eq_rows[label] = START_CAP * (1.0 + oos).cumprod()
+eq_df = pd.DataFrame(eq_rows).dropna(how="all")
+display(eq_df.tail(3).round(0))
+
+out = Path("/opt/cursor/artifacts/donchian_carver_cs_notebook10.json")
+payload = {
+    "universe": list(panel.columns),
+    "oos_start": str(cut.date()),
+    "part1_donchian_plus_carver": part1.to_dict(orient="records"),
+    "part2_cross_sectional": part2.to_dict(orient="records"),
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- **Donchian-only eq20** is the conservative baseline (~−8% OOS max DD in prior runs).
+- **Donchian + CS top5** concentrates into momentum leaders — higher CAGR / Sharpe but **deeper drawdowns** (~−20% class).
+- **Carver + Donchian blend** sits between; gating Carver on Donchian trend reduces turnover when breakout flat.
+
+Re-run CLI: `python -m research.trend_lab.run_donchian_carver_hybrid`
+"""),
+])

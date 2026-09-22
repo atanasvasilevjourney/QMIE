@@ -22,74 +22,18 @@ from research.trend_lab.allocation import blend_weights
 from research.trend_lab.carver import VOL_TARGET
 from research.trend_lab.carver_book import BookParams, book_from_raw_weights, carver_weight_panel
 from research.trend_lab.data import load_symbol
+from research.trend_lab.donchian_combo import (
+    ANN,
+    COST_BPS,
+    EXEC_LAG,
+    MCAP_TOP20,
+    combo_weight_series,
+    equal_weight_portfolio,
+)
 from research.trend_lab.metrics import kpis_from_net
 from research.trend_lab.protocol import SPLIT
 
-MCAP_TOP20 = [
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "TRXUSDT", "ZECUSDT", "DOGEUSDT",
-    "HYPEUSDT", "ADAUSDT", "LINKUSDT", "XLMUSDT", "UNIUSDT", "LTCUSDT", "BCHUSDT", "AVAXUSDT",
-    "NEARUSDT", "DOTUSDT", "ENAUSDT", "SUIUSDT",
-]
-
-HORIZONS = (5, 10, 20, 30, 60, 90, 150, 250, 360)
-DON_VOL_TARGET = 0.25
-SIGMA_DAYS = 90
-LEV_CAP = 2.0
-COST_BPS = 10.0
-REBAL_THRESH = 0.20
-EXEC_LAG = 1
-ANN = 365
 MIN_BARS = 370
-
-
-def combo_weight_series(close: pd.Series) -> pd.Series:
-    c = close.to_numpy(dtype=float)
-    n_bars = len(c)
-    sigma = close.pct_change().rolling(SIGMA_DAYS).std(ddof=1).to_numpy(dtype=float) * np.sqrt(ANN)
-    mids, ups = {}, {}
-    for n in HORIZONS:
-        up = close.rolling(n, min_periods=n).max().to_numpy(dtype=float)
-        dn = close.rolling(n, min_periods=n).min().to_numpy(dtype=float)
-        mids[n] = (up + dn) / 2
-        ups[n] = up
-    nh = len(HORIZONS)
-    in_pos = np.zeros(nh, dtype=bool)
-    trail = np.full(nh, np.nan)
-    w_exec = np.zeros(nh)
-    w_combo = np.zeros(n_bars)
-    for i in range(n_bars):
-        ci = c[i]
-        sig = sigma[i]
-        for j, n in enumerate(HORIZONS):
-            mid, up = mids[n][i], ups[n][i]
-            if not in_pos[j]:
-                if np.isfinite(up) and ci >= up:
-                    in_pos[j] = True
-                    trail[j] = mid
-            else:
-                if np.isfinite(trail[j]) and ci < trail[j]:
-                    in_pos[j] = False
-                    trail[j] = np.nan
-                elif np.isfinite(mid):
-                    trail[j] = max(trail[j], mid)
-            w_tgt = 0.0
-            if in_pos[j] and np.isfinite(sig) and sig > 0:
-                w_tgt = min(LEV_CAP, DON_VOL_TARGET / sig)
-            if abs(w_tgt - w_exec[j]) > REBAL_THRESH:
-                w_exec[j] = w_tgt
-        w_combo[i] = w_exec.mean()
-    return pd.Series(w_combo, index=close.index)
-
-
-def equal_weight_portfolio(raw_w: pd.DataFrame, panel: pd.DataFrame) -> pd.Series:
-    """Mean of per-asset net returns (notebook 09 style)."""
-    rets = panel.pct_change(fill_method=None).fillna(0.0)
-    held = raw_w.shift(EXEC_LAG).fillna(0.0)
-    nets = {}
-    for c in raw_w.columns:
-        w = held[c]
-        nets[c] = w * rets[c] - w.diff().abs().fillna(w.abs()) * (COST_BPS / 1e4)
-    return pd.DataFrame(nets).mean(axis=1)
 
 
 def load_panel(symbols: list[str]) -> pd.DataFrame:
@@ -132,13 +76,25 @@ def main() -> None:
     }
 
     cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+    start_cap = 100_000.0
     rows = []
     for name, net in books.items():
         full = kpis_from_net(net)
         oos = kpis_from_net(net.loc[cut:])
         is_ = kpis_from_net(net.loc[: cut - pd.Timedelta(days=1)])
-        rows.append({"book": name, "full_sharpe": full["sharpe"], "oos_sharpe": oos["sharpe"],
-                     "oos_cagr": oos["cagr"], "oos_max_dd": oos["max_dd"], "is_sharpe": is_["sharpe"]})
+        oos_net = net.loc[cut:].fillna(0.0)
+        oos_pnl = float(start_cap * ((1.0 + oos_net).prod() - 1.0))
+        full_pnl = float(start_cap * ((1.0 + net.fillna(0.0)).prod() - 1.0))
+        rows.append({
+            "book": name,
+            "full_sharpe": full["sharpe"],
+            "oos_sharpe": oos["sharpe"],
+            "oos_cagr": oos["cagr"],
+            "oos_max_dd": oos["max_dd"],
+            "is_sharpe": is_["sharpe"],
+            "oos_pnl_usd_100k": oos_pnl,
+            "full_pnl_usd_100k": full_pnl,
+        })
 
     table = pd.DataFrame(rows).sort_values("oos_sharpe", ascending=False)
     print(table.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
