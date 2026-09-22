@@ -52,6 +52,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
 - `research/notebooks/08_donchian_avwap_ranked_validation.ipynb` — Donchian + anchored VWAP + ranked spot book (H2/H4/H5 + placebo; research only)
 - `research/notebooks/09_catching_crypto_trends.ipynb` — **Final approach:** Zarattini et al. Combo (9 Donchian horizons) + vol target + monthly top-N rotation (SSRN 5209907 replica on Vision)
+- `research/trend_lab/run_donchian_carver_hybrid.py` — Donchian Combo × Carver engine × CS rank (`HedgeFund_WiP` notebooks → `carver.py` + `carver_book.py`)
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
