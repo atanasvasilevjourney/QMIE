@@ -50,6 +50,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/05_tema_validation.ipynb` — frozen 4h TEMA equity, honest DD, daily-marked KPIs
 - `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
+- `research/notebooks/08_donchian_stm_validation.ipynb` — daily Donchian + SUPER_TRADEMAN-style trail/attribution validation
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
@@ -68,6 +69,14 @@ weight at IS entries so OOS average stake ≈ binary.
 ```bash
 cd /workspace/python
 /workspace/.venv/bin/python -m research.trend_lab.run_tema_lab
+```
+
+Donchian STM validation (1d Vision, long/short attribution, trail sweep):
+
+```bash
+cd /workspace/python
+/workspace/.venv/bin/python -m research.trend_lab.run_donchian_stm_validation
+/workspace/.venv/bin/python -m research.trend_lab.run_donchian_stm_validation --quick
 ```
 
 ## Promote-to-live rule

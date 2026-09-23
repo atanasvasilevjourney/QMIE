@@ -684,3 +684,104 @@ print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median(
 If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
+
+write("08_donchian_stm_validation.ipynb", [
+    cell(True, """# 08 — Donchian validation (SUPER_TRADEMAN enhancements)
+
+Research only. QMIE live scanner stays **TEMA 9/90/199**; this notebook validates **daily Donchian** variants with ideas from [SUPER_TRADEMAN](https://github.com/mubasharali24428-crypto/SUPER_TRADEMAN):
+
+| Enhancement | Implementation |
+|---|---|
+| Prior-window channel | ``features.donchian`` (shift 1) |
+| Long + short books | ``donchian_stm.backtest_donchian_stm`` |
+| Trailing ATR exit | ``trail_atr_mult`` (primary exit) |
+| Pessimistic fills | Gap-through-stop; stop on intrabar touch |
+| Attribution | Separate long/short R, Wilson CI |
+| QMIE coil gate | ``mode=qmie_coil`` width ≤ 15% |
+
+**Protocol:** IS 2019-09 → 2022-12, OOS 2023 → today. Vision USDT-M **1d**. No ``W_*`` retune.
+
+## Hypotheses
+
+| Id | Claim |
+|---|---|
+| H1 | 55-bar Turtle daily (STM default) beats buy-and-hold on OOS **long+short total R** with controlled DD |
+| H2 | Long and short books are both positive OOS (STM attribution check) |
+| H3 | 20-bar QMIE coil gate improves Sharpe vs raw 20-bar Turtle |
+| H4 | Trailing ATR sweep is stable across ≥3 settings (not one lucky trail) |
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from research.trend_lab.data import load_symbol
+from research.trend_lab.donchian_stm import DonchianStmParams, eval_donchian_stm, trail_sweep
+from research.trend_lab.evaluate import _bh
+from research.trend_lab.metrics import kpi_table
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS, split_frame
+from research.trend_lab.run_donchian_stm_validation import _warmup
+
+print(SPLIT.requested_note)
+"""),
+    cell(False, """
+import pandas as pd
+
+sym = "BTCUSDT"
+df, src = load_symbol(sym, "1d")
+print(sym, src, "bars", len(df))
+parts = split_frame(df, warmup=_warmup(55))
+print("OOS from", parts["oos"].index[0].date(), "BH OOS", _bh(parts["oos"]))
+"""),
+    cell(False, """
+configs = {
+    "turtle_55": DonchianStmParams(entry_lookback=55, mode="turtle"),
+    "turtle_20": DonchianStmParams(entry_lookback=20, mode="turtle"),
+    "qmie_coil_20": DonchianStmParams(entry_lookback=20, mode="qmie_coil", coil_max_width_pct=15.0),
+}
+rows = []
+for name, p in configs.items():
+    ev = eval_donchian_stm(df, p, warmup=_warmup(p.entry_lookback))
+    att = ev["oos_attribution"]
+    rows.append({
+        "config": name,
+        "oos_sharpe": ev["oos"]["sharpe"],
+        "oos_max_dd": ev["oos"]["max_dd"],
+        "trades": att["n"],
+        "long_total_r": att["long"].get("total_r"),
+        "short_total_r": att["short"].get("total_r"),
+        "all_avg_r": att["all"].get("avg_r"),
+    })
+display(kpi_table({r["config"]: r for r in rows}).T)
+"""),
+    cell(False, """
+sweep = trail_sweep(df, base=configs["turtle_55"], warmup=_warmup(55))
+display(sweep.round(3))
+"""),
+    cell(False, """
+panel = []
+for sym in ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]:
+    ohlcv, _ = load_symbol(sym, "1d")
+    if ohlcv.empty:
+        continue
+    p = DonchianStmParams(entry_lookback=55, mode="turtle")
+    ev = eval_donchian_stm(ohlcv, p, warmup=_warmup(55))
+    att = ev["oos_attribution"]
+    panel.append({
+        "symbol": sym,
+        "oos_sharpe": ev["oos"]["sharpe"],
+        "oos_max_dd": ev["oos"]["max_dd"],
+        "trades": att["n"],
+        "long_total_r": att["long"].get("total_r"),
+        "short_total_r": att["short"].get("total_r"),
+    })
+panel_df = pd.DataFrame(panel)
+display(panel_df.round(3))
+"""),
+    cell(True, """## Verdict rubric (do not auto-promote)
+
+- **H1 PASS** if 55-bar OOS Sharpe > 0 and max DD materially below BH on majors.
+- **H2 PASS** if both long and short ``total_r`` > 0 on BTC **and** at least 3/5 STM universe symbols.
+- **H3 PASS** if ``qmie_coil_20`` Sharpe > ``turtle_20`` on BTC OOS with ≥5 trades.
+- **H4 PASS** if ≥3 trail settings have positive OOS ``avg_r`` on BTC.
+
+Artifacts: ``python -m research.trend_lab.run_donchian_stm_validation`` → ``research/artifacts/donchian_stm_validation.json``.
+"""),
+])
