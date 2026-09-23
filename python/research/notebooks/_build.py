@@ -1673,3 +1673,201 @@ display(pd.DataFrame({"IS_10pct_dial": k_is, "OOS": k_oos}).T.round(4))
 print("OOS PnL $100k", round(START_CAP * ((1 + net_dd.loc[cut:].fillna(0)).prod() - 1), 0))
 """),
 ])
+
+write("12_mentor_prop_hypothesis.ipynb", [
+    cell(True, """# 12 — Mentor prop hypothesis (ensemble flag → Carver + canaries)
+
+**Research only.** Tests the Bootcamp / Carver **deployment model** for prop firms (FTMO-style), not a live playbook.
+
+## Mentor model (what we pre-register)
+
+1. **Timing (M1):** binary **ensemble** (`spot_signal`) or **Donchian** breakout **flags** *when* to participate.
+2. **Sizing (M2):** **Carver** continuous weights *how much* (vol-targeted).
+3. **Basket:** **Decorrelated trio** BTC/QQQ/GLD (252d ann) vs **crypto-only** panel (365d ann) — **separate ledgers, never merged**.
+4. **Macro:** simple **canaries** (QQQ/SPY, XLU/SPY) scale gross on the **trio** book only.
+5. **Prop dial:** IS-only scale to **−8% max DD** proxy under 10% static loss / 5% daily loss.
+
+## Hypotheses
+
+| Id | Claim |
+|----|--------|
+| H1 | Gated Carver (ensemble **or** Donchian flag) has **lower OOS max DD** than always-on equal-weight Carver on the same universe |
+| H2 | Trio ranked Carver shows **meaningful CS diversification** vs crypto-only (different DD/Corr — not higher Sharpe guaranteed) |
+| H3 | **Mentor stack** `flag × Carver` on crypto beats always-on Carver on **FTMO proxy** (DD + worst day) at lower CAGR |
+| H4 | Canary gross multiplier on trio **reduces OOS DD** vs unscaled trio Carver |
+| H5 | After IS dial, report **days to +10%** on OOS for eval timeline (not a pass guarantee) |
+
+Split: IS through `SPLIT.is_end`, OOS from `SPLIT.oos_start`. No tuning on OOS.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from IPython.display import display
+
+from research.trend_lab.allocation import blend_weights
+from research.trend_lab.carver import full_carver, position_from_forecast, vol_stack
+from research.trend_lab.carver_book import (
+    ANN_SESSIONS,
+    BookParams,
+    book_from_raw_weights,
+    carver_weight_panel,
+    pick_vol_target,
+)
+from research.trend_lab.data import DEFAULT_UNIVERSE, load_etf, load_symbol, mixed_panel
+from research.trend_lab.donchian_combo import COST_BPS, equal_weight_portfolio
+from research.trend_lab.donchian_nb08 import Donchian08Params, donchian_nb08_weight_panel
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.mentor_prop import (
+    apply_gross_multiplier,
+    canary_defensive_multiplier,
+    days_to_profit_pct,
+    dial_return_scale_is,
+    ftmo_daily_stats,
+    mentor_gated_weights,
+)
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS
+from research.trend_lab.spot_system import SpotParams, spot_signal
+
+START_CAP = 100_000.0
+FTMO_MAX_DD = -0.10
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_end = cut - pd.Timedelta(days=1)
+spot_p = SpotParams()
+"""),
+    cell(True, """## A — Crypto ledger (365d, Vision alts + BTC in panel)"""),
+    cell(False, """
+symbols = ["BTCUSDT"] + [s for s in DEFAULT_UNIVERSE if s != "BTCUSDT"]
+ohlcv_c = {}
+for sym in symbols:
+    df, src = load_symbol(sym, "1d", start=date(2015, 1, 1))
+    if len(df) >= WARMUP_BARS:
+        ohlcv_c[sym] = df
+        print(sym, len(df), src)
+panel_c = pd.DataFrame({s: df["close"] for s, df in ohlcv_c.items()}).sort_index()
+w_car_c = carver_weight_panel(panel_c, use_cs=True, ann_days=365)
+flags_ens = pd.DataFrame(
+    {s: spot_signal(ohlcv_c[s], spot_p)["signal"].reindex(panel_c.index).fillna(0) for s in panel_c.columns},
+    index=panel_c.index,
+)
+w_don_c = donchian_nb08_weight_panel(ohlcv_c, Donchian08Params()).reindex(panel_c.index).fillna(0.0)
+flags_don = (w_don_c > 0.01).astype(float)
+
+def crypto_net(w: pd.DataFrame) -> pd.Series:
+    return equal_weight_portfolio(w, panel_c, cost_bps=COST_BPS)
+
+books_c = {
+    "carver_always_on": crypto_net(w_car_c),
+    "mentor_ensemble_x_carver": crypto_net(mentor_gated_weights(w_car_c, flags_ens)),
+    "mentor_donchian_x_carver": crypto_net(mentor_gated_weights(w_car_c, flags_don)),
+    "blend_50_50_carver_don": crypto_net(
+        pd.DataFrame({s: blend_weights(w_car_c[s], w_don_c[s], mix=0.5) for s in panel_c.columns}, index=panel_c.index)
+    ),
+}
+"""),
+    cell(False, """
+def eval_row(name: str, net: pd.Series, *, dial: bool = True) -> dict:
+    net = net.fillna(0.0)
+    sc, scaled = dial_return_scale_is(net, is_end) if dial else (1.0, net)
+    oos = scaled.loc[cut:]
+    k = kpis_from_net(oos)
+    fd = ftmo_daily_stats(oos)
+    d10 = days_to_profit_pct(oos, 0.10)
+    return {
+        "ledger": "crypto",
+        "book": name,
+        "is_scale": sc,
+        "oos_sharpe": k["sharpe"],
+        "oos_cagr": k["cagr"],
+        "oos_max_dd": k["max_dd"],
+        "oos_pnl_100k": float(START_CAP * ((1 + oos).prod() - 1)),
+        "oos_days_to_10pct": d10,
+        "ftmo_10pct_ok": k["max_dd"] > FTMO_MAX_DD,
+        **fd,
+    }
+
+rows_c = [eval_row(n, s) for n, s in books_c.items()]
+tbl_c = pd.DataFrame(rows_c).sort_values("oos_max_dd", ascending=False)
+display(tbl_c.round(4))
+h1 = (
+    tbl_c.loc[tbl_c["book"] == "carver_always_on", "oos_max_dd"].iloc[0]
+    > tbl_c.loc[tbl_c["book"] == "mentor_ensemble_x_carver", "oos_max_dd"].iloc[0]
+)
+print("H1 ensemble gate improves DD vs always-on Carver:", h1)
+"""),
+    cell(True, """## B — Trio ledger (BTC / QQQ / GLD, 252d, separate from crypto)"""),
+    cell(False, """
+panel_t, src_t = mixed_panel()
+is_p = panel_t.loc[:is_end]
+raw_w_t = carver_weight_panel(panel_t, use_cs=True, ann_days=ANN_SESSIONS)
+picked = pick_vol_target(is_p, raw_w_t.reindex(is_p.index).fillna(0.0), lookback=60, top_n=2)
+params = BookParams(vol_target=picked["vol_target"], lookback=60, top_n=2, cost_bps=2.0)
+book_t = book_from_raw_weights(panel_t, raw_w_t, params)["net"]
+
+# Ensemble flags on trio (close-only OHLCV proxy for Donchian on ETFs)
+ohlcv_t = {
+    c: pd.DataFrame(
+        {"open": panel_t[c], "high": panel_t[c], "low": panel_t[c], "close": panel_t[c], "volume": 1.0},
+        index=panel_t.index,
+    )
+    for c in panel_t.columns
+}
+flags_t = pd.DataFrame(
+    {c: spot_signal(ohlcv_t[c], spot_p)["signal"].reindex(panel_t.index).fillna(0) for c in panel_t.columns},
+    index=panel_t.index,
+)
+w_car_t = raw_w_t.reindex(panel_t.index).fillna(0.0)
+w_gate_t = mentor_gated_weights(w_car_t, flags_t)
+net_gate_t = equal_weight_portfolio(w_gate_t, panel_t, cost_bps=2.0)
+
+books_t = {"trio_ranked_carver": book_t, "trio_mentor_ensemble_x_carver": net_gate_t}
+rows_t = [eval_row(n, s) | {"ledger": "trio"} for n, s in books_t.items()]
+tbl_t = pd.DataFrame(rows_t)
+display(tbl_t.round(4))
+"""),
+    cell(True, """## C — Canaries on trio (macro gross multiplier)"""),
+    cell(False, """
+spy, _ = load_etf("SPY")
+qqq, _ = load_etf("QQQ")
+xlu, _ = load_etf("XLU")
+mult = canary_defensive_multiplier(spy, qqq, xlu).reindex(panel_t.index).ffill().fillna(1.0)
+w_canary = apply_gross_multiplier(w_car_t, mult)
+net_canary = equal_weight_portfolio(w_canary, panel_t, cost_bps=2.0)
+row_can = eval_row("trio_carver_x_canary", net_canary) | {"ledger": "trio"}
+display(pd.DataFrame([row_can]).round(4))
+h4 = row_can["oos_max_dd"] > tbl_t.loc[tbl_t["book"] == "trio_ranked_carver", "oos_max_dd"].iloc[0]
+print("H4 canary improves DD vs ranked Carver:", h4)
+"""),
+    cell(True, """## D — Combined hypothesis board + artifact"""),
+    cell(False, """
+all_rows = rows_c + rows_t + [row_can]
+board = pd.DataFrame(all_rows)
+board["recommended_prop"] = board["ftmo_10pct_ok"] & (board["worst_daily_loss_pct"] > -0.05)
+display(board.sort_values(["recommended_prop", "oos_cagr"], ascending=[False, False]).round(4))
+
+payload = {
+    "mentor_model": "ensemble_or_donchian_flag_x_carver_size",
+    "hypotheses": {"H1_ensemble_gate_dd": bool(h1), "H4_canary_dd": bool(h4)},
+    "ledgers_separate": ["crypto", "trio"],
+    "sources_trio": src_t,
+    "results": board.to_dict(orient="records"),
+}
+out = Path("/opt/cursor/artifacts/mentor_prop_hypothesis.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- **Mentor prop** = **flag → Carver**, not Donchian-only or Carver-only by default.
+- Compare **crypto** rows to **trio** rows separately; do not sum PnL.
+- **`oos_days_to_10pct`** is bars from OOS start on the **scaled** book — see notebook 12 / FTMO runner for rolling pass time.
+- Re-run: execute all cells or `python research/notebooks/_build.py` then open this notebook.
+"""),
+])
