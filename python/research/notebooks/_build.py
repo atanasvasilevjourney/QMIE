@@ -1656,4 +1656,20 @@ out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps({"params": p.__dict__, "results": tbl.to_dict(orient="records")}, indent=2, default=float))
 print("wrote", out)
 """),
+    cell(True, """## Donchian only @ ~10% max DD (prop dial)
+
+**IS-only** search on ``target_vol_ann`` (2023 split held out). Channels unchanged (55/20). Not Carver.
+"""),
+    cell(False, """
+from research.trend_lab.donchian_nb08 import dial_target_vol_for_dd
+
+is_end = cut - pd.Timedelta(days=1)
+vt_dd, net_dd = dial_target_vol_for_dd(ohlcv, panel, is_end=is_end, target_dd=-0.10)
+p_dd = Donchian08Params(target_vol_ann=vt_dd)
+k_is = kpis_from_net(net_dd.loc[:is_end])
+k_oos = kpis_from_net(net_dd.loc[cut:])
+print("chosen target_vol_ann (IS dial)", vt_dd)
+display(pd.DataFrame({"IS_10pct_dial": k_is, "OOS": k_oos}).T.round(4))
+print("OOS PnL $100k", round(START_CAP * ((1 + net_dd.loc[cut:].fillna(0)).prod() - 1), 0))
+"""),
 ])

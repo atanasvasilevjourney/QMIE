@@ -105,6 +105,34 @@ def donchian_nb08_weight_series(df: pd.DataFrame, p: Donchian08Params | None = N
     return pd.Series(w_out, index=df.index, name="w_don08")
 
 
+def dial_target_vol_for_dd(
+    ohlcv: dict[str, pd.DataFrame],
+    panel: pd.DataFrame,
+    *,
+    is_end: pd.Timestamp,
+    target_dd: float = -0.10,
+    grid: np.ndarray | None = None,
+) -> tuple[float, pd.Series]:
+    """IS-only grid on ``target_vol_ann`` to land near ``target_dd`` max drawdown."""
+    from research.trend_lab.donchian_combo import equal_weight_portfolio
+    from research.trend_lab.metrics import max_dd
+
+    if grid is None:
+        grid = np.round(np.arange(0.04, 0.26, 0.01), 2)
+    best: tuple[float, float, float, pd.Series] | None = None
+    for vt in grid:
+        p = Donchian08Params(target_vol_ann=float(vt))
+        w = donchian_nb08_weight_panel(ohlcv, p).reindex(panel.index).fillna(0.0)
+        net = equal_weight_portfolio(w, panel)
+        is_net = net.loc[:is_end].fillna(0.0)
+        dd = max_dd((1.0 + is_net).cumprod())
+        gap = abs(dd - target_dd)
+        if best is None or gap < best[0]:
+            best = (gap, float(vt), dd, net)
+    assert best is not None
+    return best[1], best[3]
+
+
 def donchian_nb08_weight_panel(
     ohlcv: dict[str, pd.DataFrame],
     p: Donchian08Params | None = None,
