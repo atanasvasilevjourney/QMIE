@@ -51,6 +51,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
 - `research/notebooks/08_donchian_stm_validation.ipynb` — daily Donchian + SUPER_TRADEMAN-style trail/attribution validation
+- `research/notebooks/09_crypto_turtle_validation.ipynb` — roman-karpovich/crypto-turtle 20/10 + RSI/ATR, CSV + plots
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
@@ -77,6 +78,13 @@ Donchian STM validation (1d Vision, long/short attribution, trail sweep):
 cd /workspace/python
 /workspace/.venv/bin/python -m research.trend_lab.run_donchian_stm_validation
 /workspace/.venv/bin/python -m research.trend_lab.run_donchian_stm_validation --quick
+```
+
+crypto-turtle style (20/10 channels, RSI/ATR confirm, signal CSV + PNG):
+
+```bash
+cd /workspace/python
+/workspace/.venv/bin/python -m research.trend_lab.run_crypto_turtle_validation
 ```
 
 ## Promote-to-live rule

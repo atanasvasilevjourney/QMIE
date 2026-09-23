@@ -785,3 +785,89 @@ display(panel_df.round(3))
 Artifacts: ``python -m research.trend_lab.run_donchian_stm_validation`` → ``research/artifacts/donchian_stm_validation.json``.
 """),
 ])
+
+write("09_crypto_turtle_validation.ipynb", [
+    cell(True, """# 09 — crypto-turtle validation (roman-karpovich style)
+
+Mirrors the signal + review workflow from [crypto-turtle](https://github.com/roman-karpovich/crypto-turtle):
+
+- **20-day** Donchian entry / **10-day** exit channels (prior bar windows)
+- **RSI(14)** > 50 long, < 50 short
+- **ATR(14)/price** > 0.5%
+- CSV signal history, matplotlib overlays (exits drawn first, entries on top)
+- Backtest summary: total trades, win rate %, total/average profit %
+
+**QMIE protocol:** Vision USDT-M **1d**, IS 2019-09→2022-12, OOS 2023→today. Daily replay (not Bybit 1h merge). **No live orders.**
+
+## Hypotheses
+
+| Id | Claim |
+|---|---|
+| H1 | Confirmed 20/10 turtle beats buy-and-hold on OOS Sharpe on BTC |
+| H2 | Long and short attribution both positive on ≥3 symbols |
+| H3 | Signal CSV + plots match manual inspection on last 200 bars |
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from pathlib import Path
+import pandas as pd
+from research.trend_lab.crypto_turtle import (
+    TurtleCryptoParams,
+    eval_turtle_crypto,
+    export_signals_csv,
+    plot_backtest_trades,
+    plot_turtle_signals,
+    turtle_signal_frame,
+    backtest_turtle_crypto,
+    backtest_summary,
+    attribution_by_side,
+)
+from research.trend_lab.data import load_symbol
+from research.trend_lab.evaluate import _bh
+from research.trend_lab.protocol import SPLIT, split_frame
+from research.trend_lab.run_crypto_turtle_validation import _warmup, TURTLE_SYMBOLS
+
+p = TurtleCryptoParams()
+print(p)
+print(SPLIT.requested_note)
+"""),
+    cell(False, """
+sym = "BTCUSDT"
+df, src = load_symbol(sym, "1d")
+print(sym, src, len(df))
+parts = split_frame(df, warmup=_warmup())
+ev = eval_turtle_crypto(df, p, warmup=_warmup())
+print("OOS KPIs", ev["oos"])
+print("OOS summary (crypto-turtle console style)", ev["oos_summary"])
+display(ev["oos_attribution"])
+print("BH OOS", _bh(parts["oos"]))
+"""),
+    cell(False, """
+art = Path("research/artifacts/crypto_turtle")
+sig = turtle_signal_frame(df, p)
+export_signals_csv(df, sig, art / "signals" / f"signals_{sym}.csv")
+plot_turtle_signals(df, sig, sym, art / "plots" / f"plot_signals_{sym}.png")
+_, trades = backtest_turtle_crypto(df, p)
+plot_backtest_trades(df, trades[-40:], sym, art / "plots" / f"backtest_{sym}.png")
+print("Saved CSV + PNG under", art.resolve())
+sig.tail(10)[["close", "rsi", "atr_pct", "long_entry", "short_entry", "long_exit", "short_exit"]]
+"""),
+    cell(False, """
+rows = []
+for s in TURTLE_SYMBOLS:
+    ohlcv, _ = load_symbol(s, "1d")
+    if ohlcv.empty:
+        continue
+    e = eval_turtle_crypto(ohlcv, p, warmup=_warmup())
+    rows.append({"symbol": s, **e["oos_summary"], "oos_sharpe": e["oos"]["sharpe"]})
+pd.DataFrame(rows)
+"""),
+    cell(True, """## Run all symbols + JSON artifact
+
+```bash
+cd python && python -m research.trend_lab.run_crypto_turtle_validation
+```
+
+Plots: ``research/artifacts/crypto_turtle/plots/``. Do not promote to live ``W_*`` without DF + manual book.
+"""),
+])
