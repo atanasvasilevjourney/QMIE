@@ -52,7 +52,6 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
 - `research/notebooks/08_donchian_stm_validation.ipynb` — daily Donchian + SUPER_TRADEMAN-style trail/attribution validation
 - `research/notebooks/09_crypto_turtle_validation.ipynb` — roman-karpovich/crypto-turtle 20/10 + RSI/ATR, CSV + plots
-- `research/notebooks/10_adaptivetrend_validation.ipynb` — arXiv:2602.11708 fixed-param 6h momentum + ATR trail
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
@@ -86,13 +85,6 @@ crypto-turtle style (20/10 channels, RSI/ATR confirm, signal CSV + PNG):
 ```bash
 cd /workspace/python
 /workspace/.venv/bin/python -m research.trend_lab.run_crypto_turtle_validation
-```
-
-AdaptiveTrend replication (6h from Vision 4h):
-
-```bash
-cd /workspace/python
-/workspace/.venv/bin/python -m research.trend_lab.run_adaptivetrend_validation --paper-window
 ```
 
 ## Promote-to-live rule
