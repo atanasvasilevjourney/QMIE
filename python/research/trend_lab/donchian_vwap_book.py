@@ -276,23 +276,23 @@ def dial_target_vol_is(
     grid: np.ndarray | None = None,
     ranked: bool = True,
 ) -> tuple[float, pd.Series]:
-    """IS-only search on ``target_vol_ann`` to stay at or above ``target_dd`` max DD."""
+    """Largest ``target_vol_ann`` on IS whose max DD is no worse than ``target_dd`` (prop dial)."""
     from .metrics import max_dd
 
     if grid is None:
         grid = np.round(np.arange(0.06, 0.31, 0.01), 2)
-    chosen_vt = float(base.target_vol_ann)
+    chosen_vt = float(grid[0])
     chosen_net: pd.Series | None = None
-    best_dd = -1.0
     for vt in grid:
         p = DonchianVwapParams(**{**base.__dict__, "target_vol_ann": float(vt)})
         net = run_book(ohlcv, btc, p, ranked=ranked)["net"]
         is_net = net.loc[:is_end].fillna(0.0)
         dd = max_dd((1.0 + is_net).cumprod())
-        if dd >= target_dd and dd >= best_dd:
-            best_dd = dd
+        if dd >= target_dd:
             chosen_vt = float(vt)
             chosen_net = net
+        else:
+            break
     if chosen_net is None:
         p = DonchianVwapParams(**{**base.__dict__, "target_vol_ann": float(grid[0])})
         return float(grid[0]), run_book(ohlcv, btc, p, ranked=ranked)["net"]

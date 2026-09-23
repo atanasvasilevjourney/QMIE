@@ -104,7 +104,19 @@ def main() -> None:
     vt_rank, net_rank = dial_target_vol_is(
         alts, btc, base_vwap, is_end, target_dd=args.max_dd_floor, ranked=True,
     )
-    books["weekly_rank_avwap_coil_vol"] = net_rank
+    books["weekly_rank5_avwap_coil"] = net_rank
+
+    base_weekly_k3 = DonchianVwapParams(
+        **{
+            **base_vwap.__dict__,
+            "top_k": 3,
+            "single_name_cap": 0.45,
+        },
+    )
+    vt_k3, net_k3 = dial_target_vol_is(
+        alts, btc, base_weekly_k3, is_end, target_dd=args.max_dd_floor, ranked=True,
+    )
+    books["weekly_rank3_avwap_coil"] = net_k3
 
     p_no_av = DonchianVwapParams(**{**base_vwap.__dict__, "use_avwap_gate": False, "target_vol_ann": vt_rank})
     books["weekly_rank_no_avwap"] = run_book(alts, btc, p_no_av, ranked=True)["net"]
@@ -138,7 +150,10 @@ def main() -> None:
         if name.startswith("weekly") or name.startswith("daily_rank"):
             sc = 1.0
             scaled = net
-            dial_note = f"target_vol_ann={vt_rank:.2f}" if "weekly" in name or "daily_rank" in name else ""
+            vt_note = vt_k3 if name == "weekly_rank3_avwap_coil" else vt_rank
+            dial_note = f"top_k={'3' if 'rank3' in name else '5' if 'rank5' in name else '?'}; target_vol_ann={vt_note:.2f}"
+            if name.startswith("daily_rank"):
+                dial_note = f"target_vol_ann={vt_rank:.2f}"
         else:
             sc, scaled = dial_scale_is(net, is_end, max_dd_floor=args.max_dd_floor)
             dial_note = f"target_vol_ann={vt_don:.2f}; return_scale={sc:.2f}"
@@ -163,7 +178,12 @@ def main() -> None:
         if r["ftmo_static_10pct_ok_oos"] and r["oos_worst_daily_loss_pct"] > -FTMO_DAILY_LOSS_PCT
     ]
     ok.sort(key=lambda r: (-r["oos_cagr"], -r["oos_sharpe"]))
-    primary = ok[0]["book"] if ok else max(rows, key=lambda r: r["oos_sharpe"])["book"]
+    weekly_ok = [r for r in ok if r["book"].startswith("weekly_rank")]
+    primary = (
+        weekly_ok[0]["book"]
+        if weekly_ok
+        else (ok[0]["book"] if ok else max(rows, key=lambda r: r["oos_sharpe"])["book"])
+    )
     for r in rows:
         r["recommended_ftmo"] = r["book"] == primary
 
@@ -183,6 +203,11 @@ def main() -> None:
         },
         "universe_loaded": list(alts.keys()),
         "primary_book": primary,
+        "weekly_rank3": {
+            "top_k": 3,
+            "rebalance_rule": base_vwap.rebalance_rule,
+            "is_target_vol_ann": vt_k3,
+        },
         "results": rows,
     }
     out = Path(args.out)
