@@ -16,6 +16,8 @@ import pandas as pd
 
 from scanner.indicators import atr
 
+from .donchian_avwap_util import avwap_from_anchor, seed_avwap_cum
+
 ANN = 365
 
 
@@ -72,8 +74,11 @@ def donchian_nb08_weight_series(df: pd.DataFrame, p: Donchian08Params | None = N
     w_out = np.zeros(n)
     in_pos = False
     entry_px = np.nan
+    cum_pv, cum_v = 0.0, 0.0
+    idx = df.index
 
     for i in range(n):
+        ts = idx[i]
         stop_hit = (
             in_pos
             and np.isfinite(entry_px)
@@ -83,6 +88,7 @@ def donchian_nb08_weight_series(df: pd.DataFrame, p: Donchian08Params | None = N
         if in_pos and (np.isfinite(lower[i]) and close[i] < lower[i] or stop_hit):
             in_pos = False
             entry_px = np.nan
+            cum_pv, cum_v = 0.0, 0.0
 
         want = (
             not in_pos
@@ -91,11 +97,26 @@ def donchian_nb08_weight_series(df: pd.DataFrame, p: Donchian08Params | None = N
         )
         if want and p.use_compression_gate and (not np.isfinite(comp[i]) or comp[i] > p.compression_pct_max):
             want = False
-        # AVWAP gate omitted in daily path unless extended later (needs anchor loop from nb 08)
+        if want and p.use_avwap_gate:
+            anc = pd.Timestamp(ts)
+            av0 = avwap_from_anchor(df, anc, ts)
+            dist0 = (close[i] - av0) / (atr_a[i] + 1e-12)
+            if dist0 < 0:
+                want = False
+            else:
+                cum_pv, cum_v = seed_avwap_cum(df, anc, ts)
+        elif want:
+            anc = pd.Timestamp(ts)
+            cum_pv, cum_v = seed_avwap_cum(df, anc, ts)
 
         if want:
             in_pos = True
             entry_px = close[i]
+        elif in_pos and cum_v > 0:
+            row = df.iloc[i]
+            tp = (row["high"] + row["low"] + row["close"]) / 3.0
+            cum_pv += float(tp) * float(row["volume"])
+            cum_v += float(row["volume"])
 
         if in_pos and np.isfinite(vol_a[i]) and vol_a[i] > 0:
             w_out[i] = min(p.lev_cap, p.target_vol_ann / vol_a[i])

@@ -55,6 +55,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/11_donchian_nb08_carver.ipynb` — **Focus:** notebook **08** dual Donchian (55/20) × Carver only (no AVWAP book, no SSRN Combo, no CS rank)
 - `research/trend_lab/run_donchian_nb08_carver.py` — CLI + JSON for notebook 11
 - `research/trend_lab/run_ftmo_swing_crypto.py` — mcap crypto list, Carver + Donchian, IS DD floor for FTMO Swing proxy
+- `research/trend_lab/run_ftmo_donchian_vwap_crypto.py` — **crypto-only** Donchian 55/20 + AVWAP + compression coil; ranked weekly or daily; FTMO proxy (no Carver; not merged with BTC/QQQ/GLD)
 - `research/trend_lab/run_fti_donchian_carver_edge.py` — Khalsa FTI (indicatorPy) gates on Donchian/Carver/blend
 - `research/trend_lab/run_btc_qqq_gld_suite.py` — BTC/QQQ/GLD ranked + equal Carver, Donchian, FTI (`run_carver_book` for charts)
 - `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)
