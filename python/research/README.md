@@ -59,6 +59,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/12_mentor_prop_hypothesis.ipynb` — mentor model: **ensemble/Donchian flag × Carver**, separate crypto vs trio ledgers, canary gross scale, FTMO dial + days-to-+10%
 - `research/trend_lab/run_mentor_prop_hypothesis.py` — CLI mirror of notebook 12 → `/opt/cursor/artifacts/mentor_prop_hypothesis.json`
 - `research/trend_lab/run_prop_eval_monte_carlo.py` — **prop rinse MC:** EV/day vs risk scale (IS bootstrap); eval sprint vs funded throttle documented in output JSON
+- `research/trend_lab/run_equity_momentum_rotation.py` — **S&P 500** monthly top-10 momentum vs **+SMA200** (survivorship-biased current members); 14-day eval cadence proxy
 - `research/trend_lab/run_fti_donchian_carver_edge.py` — Khalsa FTI (indicatorPy) gates on Donchian/Carver/blend
 - `research/trend_lab/run_btc_qqq_gld_suite.py` — BTC/QQQ/GLD ranked + equal Carver, Donchian, FTI (`run_carver_book` for charts)
 - `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)
