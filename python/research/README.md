@@ -54,6 +54,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/09_catching_crypto_trends.ipynb` — **Final approach:** Zarattini et al. Combo (9 Donchian horizons) + vol target + monthly top-N rotation (SSRN 5209907 replica on Vision)
 - `research/notebooks/11_donchian_nb08_carver.ipynb` — **Focus:** notebook **08** dual Donchian (55/20) × Carver only (no AVWAP book, no SSRN Combo, no CS rank)
 - `research/trend_lab/run_donchian_nb08_carver.py` — CLI + JSON for notebook 11
+- `research/trend_lab/run_ftmo_swing_crypto.py` — mcap crypto list, Carver + Donchian, IS DD floor for FTMO Swing proxy
 - `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)
 - `research/trend_lab/run_donchian_carver_hybrid.py` — same books as notebook 10 (CLI + JSON artifact)
 
