@@ -17,6 +17,7 @@ from research.trend_lab.momentum_rotation import (
     rotation_net_returns,
 )
 from research.trend_lab.mentor_prop import dial_return_scale_is, ftmo_daily_stats
+from research.trend_lab.prop_sizing import pick_rotation_vol_target_is
 from research.trend_lab.protocol import SPLIT
 from research.trend_lab.us100_canary import us100_bull_canary
 
@@ -39,7 +40,7 @@ def gated_net(
     return rotation_net_returns(panel, w, p)
 
 
-def prop_row(name: str, net: pd.Series, *, max_dd_floor: float) -> dict:
+def prop_row(name: str, net: pd.Series, *, max_dd_floor: float, method: str = "return_dial") -> dict:
     sc, scaled = dial_return_scale_is(net, is_end, max_dd_floor=max_dd_floor)
     oos = scaled.loc[cut:].fillna(0.0)
     k = kpis_from_net(oos)
@@ -47,12 +48,43 @@ def prop_row(name: str, net: pd.Series, *, max_dd_floor: float) -> dict:
     return {
         "book": name,
         "slice": "OOS_prop_dial",
+        "prop_method": method,
         "is_return_scale": sc,
         "is_max_dd_floor": max_dd_floor,
         **k,
         "ftmo_10pct_ok": k["max_dd"] > FTMO_MAX_DD,
+        "ftmo_5pct_daily_ok": fd["worst_daily_loss_pct"] > -0.05,
         **fd,
     }
+
+
+def vol_target_row(
+    name: str,
+    panel: pd.DataFrame,
+    weights: pd.DataFrame,
+    p: RotationParams,
+    *,
+    max_dd_floor: float,
+) -> tuple[dict, pd.Series]:
+    picked = pick_rotation_vol_target_is(
+        panel, weights, p, is_end, max_dd_floor=max_dd_floor,
+    )
+    net = picked["net"]
+    oos = net.loc[cut:].fillna(0.0)
+    k = kpis_from_net(oos)
+    fd = ftmo_daily_stats(oos)
+    row = {
+        "book": name,
+        "slice": "OOS_vol_target",
+        "prop_method": "vol_target_is",
+        "is_vol_target": picked["vol_target"],
+        "is_max_dd_floor": max_dd_floor,
+        **k,
+        "ftmo_10pct_ok": k["max_dd"] > FTMO_MAX_DD,
+        "ftmo_5pct_daily_ok": fd["worst_daily_loss_pct"] > -0.05,
+        **fd,
+    }
+    return row, net
 
 
 def main() -> None:
@@ -113,18 +145,36 @@ def main() -> None:
     }
 
     prop_rows = [prop_row(n, net, max_dd_floor=args.max_dd_floor) for n, net in books.items() if n != "SPY_buy_hold"]
-    story["prop_note"] = (
-        "Raw max DD is not prop-safe. OOS_prop_dial applies IS-only return scale to sit near max_dd_floor "
-        "under FTMO 10% static loss proxy."
+
+    w_gated = monthly_top_momentum_weights(panel, p)
+    mult = canary_both.reindex(panel.index).ffill().fillna(0.0) * args.canary_gross
+    w_gated = w_gated.mul(mult, axis=0)
+    vt_row, net_vt = vol_target_row(
+        "top10_gated_us100_canary_both_vol_target",
+        panel,
+        w_gated,
+        p,
+        max_dd_floor=args.max_dd_floor,
     )
-    story["OOS_prop_dial"] = {r["book"]: r for r in prop_rows}
+    prop_rows.append(vt_row)
+    books["top10_gated_us100_canary_both_vol_target"] = net_vt
+
+    story["prop_note"] = (
+        "Raw max DD is not prop-safe. Prefer OOS_vol_target (lagged book vol, IS pick) per "
+        "docs/prop-sizing-ftmo-swing.md; OOS_prop_dial is a legacy uniform return scale."
+    )
+    story["OOS_prop_dial"] = {r["book"]: r for r in prop_rows if r["slice"] == "OOS_prop_dial"}
+    story["OOS_vol_target"] = {r["book"]: r for r in prop_rows if r["slice"] == "OOS_vol_target"}
 
     print("Symbols", panel.shape[1], "QQQ", qsrc, "canary_gross", args.canary_gross)
     print("\n--- Raw OOS (not prop-safe) ---")
     print(oos_tbl[["sharpe", "cagr", "max_dd", "calmar"]].round(4).to_string())
     prop_tbl = pd.DataFrame(prop_rows).set_index("book")
     print(f"\n--- OOS after IS prop dial (floor {args.max_dd_floor:.0%}) ---")
-    print(prop_tbl[["is_return_scale", "sharpe", "cagr", "max_dd", "ftmo_10pct_ok", "worst_daily_loss_pct"]].round(4))
+    cols = ["prop_method", "sharpe", "cagr", "max_dd", "ftmo_10pct_ok", "ftmo_5pct_daily_ok", "worst_daily_loss_pct"]
+    show = [c for c in cols if c in prop_tbl.columns]
+    extra = [c for c in ("is_return_scale", "is_vol_target") if c in prop_tbl.columns]
+    print(prop_tbl[show + extra].round(4))
     print("\nStory:", json.dumps(story["OOS_compare_canary_both_vs_ungated"], indent=2))
 
     payload = {"story": story, "results": rows, "prop_dial": prop_rows}
