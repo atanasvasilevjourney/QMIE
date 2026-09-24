@@ -684,3 +684,319 @@ print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median(
 If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
+
+write("08_donchian_stm_validation.ipynb", [
+    cell(True, """# 08 — Donchian validation (SUPER_TRADEMAN enhancements)
+
+Research only. QMIE live scanner stays **TEMA 9/90/199**; this notebook validates **daily Donchian** variants with ideas from [SUPER_TRADEMAN](https://github.com/mubasharali24428-crypto/SUPER_TRADEMAN):
+
+| Enhancement | Implementation |
+|---|---|
+| Prior-window channel | ``features.donchian`` (shift 1) |
+| Long + short books | ``donchian_stm.backtest_donchian_stm`` |
+| Trailing ATR exit | ``trail_atr_mult`` (primary exit) |
+| Pessimistic fills | Gap-through-stop; stop on intrabar touch |
+| Attribution | Separate long/short R, Wilson CI |
+| QMIE coil gate | ``mode=qmie_coil`` width ≤ 15% |
+
+**Protocol:** IS 2019-09 → 2022-12, OOS 2023 → today. Vision USDT-M **1d**. No ``W_*`` retune.
+
+## Hypotheses
+
+| Id | Claim |
+|---|---|
+| H1 | 55-bar Turtle daily (STM default) beats buy-and-hold on OOS **long+short total R** with controlled DD |
+| H2 | Long and short books are both positive OOS (STM attribution check) |
+| H3 | 20-bar QMIE coil gate improves Sharpe vs raw 20-bar Turtle |
+| H4 | Trailing ATR sweep is stable across ≥3 settings (not one lucky trail) |
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from research.trend_lab.data import load_symbol
+from research.trend_lab.donchian_stm import DonchianStmParams, eval_donchian_stm, trail_sweep
+from research.trend_lab.evaluate import _bh
+from research.trend_lab.metrics import kpi_table
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS, split_frame
+from research.trend_lab.run_donchian_stm_validation import _warmup
+
+print(SPLIT.requested_note)
+"""),
+    cell(False, """
+import pandas as pd
+
+sym = "BTCUSDT"
+df, src = load_symbol(sym, "1d")
+print(sym, src, "bars", len(df))
+parts = split_frame(df, warmup=_warmup(55))
+print("OOS from", parts["oos"].index[0].date(), "BH OOS", _bh(parts["oos"]))
+"""),
+    cell(False, """
+configs = {
+    "turtle_55": DonchianStmParams(entry_lookback=55, mode="turtle"),
+    "turtle_20": DonchianStmParams(entry_lookback=20, mode="turtle"),
+    "qmie_coil_20": DonchianStmParams(entry_lookback=20, mode="qmie_coil", coil_max_width_pct=15.0),
+}
+rows = []
+for name, p in configs.items():
+    ev = eval_donchian_stm(df, p, warmup=_warmup(p.entry_lookback))
+    att = ev["oos_attribution"]
+    rows.append({
+        "config": name,
+        "oos_sharpe": ev["oos"]["sharpe"],
+        "oos_max_dd": ev["oos"]["max_dd"],
+        "trades": att["n"],
+        "long_total_r": att["long"].get("total_r"),
+        "short_total_r": att["short"].get("total_r"),
+        "all_avg_r": att["all"].get("avg_r"),
+    })
+display(kpi_table({r["config"]: r for r in rows}).T)
+"""),
+    cell(False, """
+sweep = trail_sweep(df, base=configs["turtle_55"], warmup=_warmup(55))
+display(sweep.round(3))
+"""),
+    cell(False, """
+panel = []
+for sym in ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]:
+    ohlcv, _ = load_symbol(sym, "1d")
+    if ohlcv.empty:
+        continue
+    p = DonchianStmParams(entry_lookback=55, mode="turtle")
+    ev = eval_donchian_stm(ohlcv, p, warmup=_warmup(55))
+    att = ev["oos_attribution"]
+    panel.append({
+        "symbol": sym,
+        "oos_sharpe": ev["oos"]["sharpe"],
+        "oos_max_dd": ev["oos"]["max_dd"],
+        "trades": att["n"],
+        "long_total_r": att["long"].get("total_r"),
+        "short_total_r": att["short"].get("total_r"),
+    })
+panel_df = pd.DataFrame(panel)
+display(panel_df.round(3))
+"""),
+    cell(True, """## Verdict rubric (do not auto-promote)
+
+- **H1 PASS** if 55-bar OOS Sharpe > 0 and max DD materially below BH on majors.
+- **H2 PASS** if both long and short ``total_r`` > 0 on BTC **and** at least 3/5 STM universe symbols.
+- **H3 PASS** if ``qmie_coil_20`` Sharpe > ``turtle_20`` on BTC OOS with ≥5 trades.
+- **H4 PASS** if ≥3 trail settings have positive OOS ``avg_r`` on BTC.
+
+Artifacts: ``python -m research.trend_lab.run_donchian_stm_validation`` → ``research/artifacts/donchian_stm_validation.json``.
+"""),
+])
+
+write("09_crypto_turtle_validation.ipynb", [
+    cell(True, """# 09 — crypto-turtle validation (roman-karpovich style)
+
+Mirrors the signal + review workflow from [crypto-turtle](https://github.com/roman-karpovich/crypto-turtle):
+
+- **20-day** Donchian entry / **10-day** exit channels (prior bar windows)
+- **RSI(14)** > 50 long, < 50 short
+- **ATR(14)/price** > 0.5%
+- CSV signal history, matplotlib overlays (exits drawn first, entries on top)
+- Backtest summary: total trades, win rate %, total/average profit %
+
+**QMIE protocol:** Vision USDT-M **1d**, IS 2019-09→2022-12, OOS 2023→today. Daily replay (not Bybit 1h merge). **No live orders.**
+
+## Hypotheses
+
+| Id | Claim |
+|---|---|
+| H1 | Confirmed 20/10 turtle beats buy-and-hold on OOS Sharpe on BTC |
+| H2 | Long and short attribution both positive on ≥3 symbols |
+| H3 | Signal CSV + plots match manual inspection on last 200 bars |
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from pathlib import Path
+import pandas as pd
+from research.trend_lab.crypto_turtle import (
+    TurtleCryptoParams,
+    eval_turtle_crypto,
+    export_signals_csv,
+    plot_backtest_trades,
+    plot_turtle_signals,
+    turtle_signal_frame,
+    backtest_turtle_crypto,
+    backtest_summary,
+    attribution_by_side,
+)
+from research.trend_lab.data import load_symbol
+from research.trend_lab.evaluate import _bh
+from research.trend_lab.protocol import SPLIT, split_frame
+from research.trend_lab.run_crypto_turtle_validation import _warmup, TURTLE_SYMBOLS
+
+p = TurtleCryptoParams()
+print(p)
+print(SPLIT.requested_note)
+"""),
+    cell(False, """
+sym = "BTCUSDT"
+df, src = load_symbol(sym, "1d")
+print(sym, src, len(df))
+parts = split_frame(df, warmup=_warmup())
+ev = eval_turtle_crypto(df, p, warmup=_warmup())
+print("OOS KPIs", ev["oos"])
+print("OOS summary (crypto-turtle console style)", ev["oos_summary"])
+display(ev["oos_attribution"])
+print("BH OOS", _bh(parts["oos"]))
+"""),
+    cell(False, """
+art = Path("research/artifacts/crypto_turtle")
+sig = turtle_signal_frame(df, p)
+export_signals_csv(df, sig, art / "signals" / f"signals_{sym}.csv")
+plot_turtle_signals(df, sig, sym, art / "plots" / f"plot_signals_{sym}.png")
+_, trades = backtest_turtle_crypto(df, p)
+plot_backtest_trades(df, trades[-40:], sym, art / "plots" / f"backtest_{sym}.png")
+print("Saved CSV + PNG under", art.resolve())
+sig.tail(10)[["close", "rsi", "atr_pct", "long_entry", "short_entry", "long_exit", "short_exit"]]
+"""),
+    cell(False, """
+rows = []
+for s in TURTLE_SYMBOLS:
+    ohlcv, _ = load_symbol(s, "1d")
+    if ohlcv.empty:
+        continue
+    e = eval_turtle_crypto(ohlcv, p, warmup=_warmup())
+    rows.append({"symbol": s, **e["oos_summary"], "oos_sharpe": e["oos"]["sharpe"]})
+pd.DataFrame(rows)
+"""),
+    cell(True, """## Run all symbols + JSON artifact
+
+```bash
+cd python && python -m research.trend_lab.run_crypto_turtle_validation
+```
+
+Plots: ``research/artifacts/crypto_turtle/plots/``. Do not promote to live ``W_*`` without DF + manual book.
+"""),
+])
+
+write("10_tema_4h_prop_top3_top10.ipynb", [
+    cell(True, """# 10 — TEMA 4h A/A+ prop compliance (Top 3 vs Top 10)
+
+Frozen QMIE scoring (**Triple EMA 9/90/199**), **4h** timeframe, grades **A/A+** only.
+Measurement window matches [`docs/backtest-baseline.md`](../../docs/backtest-baseline.md):
+
+- OOS **≥ 2025-01-01**
+- Post-filters: **ADX ≥ 20**, **ATR% 0.4–4.0**
+- Outcome: first touch SL 1.5×ATR / TP 2.5×ATR (same as live info levels)
+
+**Universes**
+
+| Label | Symbols |
+|---|---|
+| **Top 3** | BTC, ETH, SOL USDT-M perps |
+| **Top 10** | Default backtest basket (10 liquid USDT-M names) |
+
+**Paper cash sim (prop-style, not an order)**
+
+- $10k start, **1% isolated stake** per ticket, **1×** leverage
+- **Max 3** concurrent positions, **one open per symbol**, fill free slots by **score**
+- KPIs: signal win %, E[R], PF, Sharpe (daily R), SQN; sim profit %, max DD %, worst daily loss %, liquidations, blown flag
+- Pass flags vs configurable rules (default: trailing DD ≤10%, daily loss ≤5%, E[R]≥0, PF≥1, ≥30 taken trades)
+
+Generate parquet first if missing:
+
+```bash
+cd python
+python -m backtest.run --start 2024-01-01 --split 2025-01-01 \\
+  --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h
+python -m research.trend_lab.run_tema_prop_validation
+```
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from pathlib import Path
+import pandas as pd
+from research.trend_lab.tema_prop_universe import (
+    PropRules,
+    SimConfig,
+    UNIVERSES,
+    compare_universes,
+    default_parquet,
+    kpi_table,
+)
+
+parquet = default_parquet()
+print("parquet", parquet, "exists", parquet.exists())
+if not parquet.exists():
+    raise FileNotFoundError(
+        "Run: python -m backtest.run --start 2024-01-01 --split 2025-01-01 "
+        "--min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h"
+    )
+rules = PropRules()
+sim = SimConfig()
+payload = compare_universes(parquet, sim=sim, rules=rules)
+display(kpi_table(payload))
+"""),
+    cell(False, """
+rows = []
+for key, block in payload["universes"].items():
+    sig = block["signal_kpis"]
+    cash = block["cash_sim"]
+    rows.append({
+        "universe": key,
+        "symbols": ", ".join(block["symbols"][:3]) + ("…" if len(block["symbols"]) > 3 else ""),
+        "book_n": block["n_book"],
+        "win_%": sig.get("win_pct"),
+        "E[R]": sig.get("expectancy_r"),
+        "PF": sig.get("pf"),
+        "Sharpe": sig.get("sharpe"),
+        "SQN": sig.get("sqn"),
+        "sim_taken": cash.get("taken"),
+        "sim_profit_%": cash.get("profit_pct"),
+        "max_DD_%": cash.get("max_dd_pct_daily_curve"),
+        "worst_day_%": cash.get("worst_daily_loss_pct"),
+        "prop_ok": block["prop"]["prop_compliant"],
+    })
+summary = pd.DataFrame(rows).set_index("universe")
+display(summary.round(3))
+"""),
+    cell(False, """
+for key, block in payload["universes"].items():
+    print(f"\\n=== {key.upper()} prop checks ===")
+    for name, ok in block["prop"]["checks"].items():
+        print(f"  {name}: {'PASS' if ok else 'FAIL'}")
+    print("  OVERALL:", "COMPLIANT" if block["prop"]["prop_compliant"] else "NOT COMPLIANT")
+"""),
+    cell(True, """## Top 10 — Python visuals
+
+Matplotlib PNGs + optional Plotly dashboard (research only). Regenerate:
+
+```bash
+python -m research.trend_lab.run_tema_prop_validation --plots
+```
+
+Files land in ``research/artifacts/tema_prop/plots/`` (and ``/opt/cursor/artifacts/tema_prop_plots/`` on cloud runs).
+"""),
+    cell(False, """
+%matplotlib inline
+from IPython.display import Image, display, HTML
+from research.trend_lab.tema_prop_plots import render_top10_plots, symbol_stats
+from research.trend_lab.tema_prop_universe import TOP10_SYMBOLS, load_oos_book
+
+plot_paths = render_top10_plots(parquet, sim=sim)
+dash = plot_paths.get("dashboard_html")
+if dash:
+    display(HTML(f'<b>Plotly dashboard:</b> open <code>{dash}</code> in the browser'))
+for name in (
+    "equity_dd", "monthly_r", "monthly_pnl", "symbol_er", "symbol_win",
+    "grade_mix", "score_r", "cum_r", "calendar", "timeline",
+):
+    p = plot_paths.get(name)
+    if p:
+        print(name, p)
+        display(Image(filename=p, width=920))
+display(symbol_stats(load_oos_book(parquet, TOP10_SYMBOLS)).round(3))
+"""),
+    cell(True, """## How to read vs live prop
+
+- **Signal KPIs** are on the full gated OOS book (all alerts that closed WIN/LOSS).
+- **Sim KPIs** apply slot/cash constraints — closer to a funded account with a 3-name book.
+- Passing these checks is **necessary but not sufficient** for a prop payout: you still need **≥30 manual journal fills** on the live desk before treating paper PnL as edge (`AGENTS.md`).
+- Do **not** retune ``W_*`` from this notebook. One-knob proposal remains ``SCAN_TIMEFRAMES=4h`` only (`strategy/reviews/2026-08-25.md`).
+
+Artifact JSON: ``python -m research.trend_lab.run_tema_prop_validation`` → ``research/artifacts/tema_prop_top3_top10.json``.
+"""),
+])
