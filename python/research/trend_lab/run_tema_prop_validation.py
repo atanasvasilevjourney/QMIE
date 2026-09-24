@@ -97,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Run backtest.run when parquet is missing",
     )
     p.add_argument("--parquet", default=str(default_parquet()))
+    p.add_argument(
+        "--plots",
+        action="store_true",
+        help="Write Top-10 matplotlib/plotly visuals to research/artifacts/tema_prop/plots/",
+    )
     args = p.parse_args(argv)
 
     parquet = Path(args.parquet)
@@ -122,6 +127,15 @@ def main(argv: list[str] | None = None) -> int:
     CURSOR.mkdir(parents=True, exist_ok=True)
     (CURSOR / "tema_prop_top3_top10.json").write_text(json.dumps(_json_ready(payload), indent=2))
     print(f"\nWrote {out}")
+
+    if args.plots:
+        from .tema_prop_plots import render_top10_plots
+
+        paths = render_top10_plots(parquet)
+        print("Top-10 plots:")
+        for name, pth in sorted(paths.items()):
+            print(f"  {name}: {pth}")
+
     print("places_orders=false")
     return 0
 

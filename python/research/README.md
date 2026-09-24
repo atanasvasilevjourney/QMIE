@@ -96,7 +96,10 @@ cd /workspace/python
   --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h
 /workspace/.venv/bin/python -m research.trend_lab.run_tema_prop_validation
 /workspace/.venv/bin/python -m research.trend_lab.run_tema_prop_validation --run-backtest --quick
+/workspace/.venv/bin/python -m research.trend_lab.run_tema_prop_validation --plots
 ```
+
+Top-10 matplotlib/plotly outputs: `research/artifacts/tema_prop/plots/` (equity, drawdown, monthly R/PnL, per-symbol bars, score scatter, timeline, heatmap, `dashboard.html`).
 
 ## Promote-to-live rule
 

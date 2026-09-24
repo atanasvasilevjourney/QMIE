@@ -960,6 +960,36 @@ for key, block in payload["universes"].items():
         print(f"  {name}: {'PASS' if ok else 'FAIL'}")
     print("  OVERALL:", "COMPLIANT" if block["prop"]["prop_compliant"] else "NOT COMPLIANT")
 """),
+    cell(True, """## Top 10 — Python visuals
+
+Matplotlib PNGs + optional Plotly dashboard (research only). Regenerate:
+
+```bash
+python -m research.trend_lab.run_tema_prop_validation --plots
+```
+
+Files land in ``research/artifacts/tema_prop/plots/`` (and ``/opt/cursor/artifacts/tema_prop_plots/`` on cloud runs).
+"""),
+    cell(False, """
+%matplotlib inline
+from IPython.display import Image, display, HTML
+from research.trend_lab.tema_prop_plots import render_top10_plots, symbol_stats
+from research.trend_lab.tema_prop_universe import TOP10_SYMBOLS, load_oos_book
+
+plot_paths = render_top10_plots(parquet, sim=sim)
+dash = plot_paths.get("dashboard_html")
+if dash:
+    display(HTML(f'<b>Plotly dashboard:</b> open <code>{dash}</code> in the browser'))
+for name in (
+    "equity_dd", "monthly_r", "monthly_pnl", "symbol_er", "symbol_win",
+    "grade_mix", "score_r", "cum_r", "calendar", "timeline",
+):
+    p = plot_paths.get(name)
+    if p:
+        print(name, p)
+        display(Image(filename=p, width=920))
+display(symbol_stats(load_oos_book(parquet, TOP10_SYMBOLS)).round(3))
+"""),
     cell(True, """## How to read vs live prop
 
 - **Signal KPIs** are on the full gated OOS book (all alerts that closed WIN/LOSS).

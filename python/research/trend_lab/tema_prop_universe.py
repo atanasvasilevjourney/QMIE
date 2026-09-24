@@ -131,7 +131,8 @@ def _curve_daily_metrics(
     return round(max_dd_pct, 2), round(worst_daily_loss_pct, 2)
 
 
-def cash_kpis(book: pd.DataFrame, cfg: SimConfig) -> dict[str, Any]:
+def run_paper_sim(book: pd.DataFrame, cfg: SimConfig) -> tuple[dict[str, Any], float]:
+    """Full ``simulate`` output plus stake size (paper only, not an order)."""
     stake = round(cfg.start_cash * cfg.stake_pct, 2)
     sim = simulate(
         book,
@@ -143,6 +144,11 @@ def cash_kpis(book: pd.DataFrame, cfg: SimConfig) -> dict[str, Any]:
         one_per_symbol=cfg.one_per_symbol,
         isolated=cfg.isolated,
     )
+    return sim, stake
+
+
+def cash_kpis(book: pd.DataFrame, cfg: SimConfig) -> dict[str, Any]:
+    sim, stake = run_paper_sim(book, cfg)
     taken = sim["taken_rows"]
     sig_taken = signal_kpis(taken) if len(taken) else signal_kpis(book.iloc[0:0])
     max_dd_usd = abs(float(sim["max_dd"]))
