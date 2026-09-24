@@ -1712,7 +1712,6 @@ import pandas as pd
 from IPython.display import display
 
 from research.trend_lab.allocation import blend_weights
-from research.trend_lab.carver import full_carver, position_from_forecast, vol_stack
 from research.trend_lab.carver_book import (
     ANN_SESSIONS,
     BookParams,
@@ -1868,6 +1867,85 @@ print("wrote", out)
 - **Mentor prop** = **flag → Carver**, not Donchian-only or Carver-only by default.
 - Compare **crypto** rows to **trio** rows separately; do not sum PnL.
 - **`oos_days_to_10pct`** is bars from OOS start on the **scaled** book — see notebook 12 / FTMO runner for rolling pass time.
-- Re-run: execute all cells or `python research/notebooks/_build.py` then open this notebook.
+- Re-run: execute all cells, or `python -m research.trend_lab.run_mentor_prop_hypothesis`, or regenerate via `python research/notebooks/_build.py`.
+"""),
+])
+
+write("14_us100_canary_stock_momentum.ipynb", [
+    cell(True, """# 14 — US100 canary × S&P momentum (validation)
+
+**Idea:** When **US100** ( **QQQ** proxy ) is in a bull regime (**> SMA200** and **Donchian breakout**), allow a **top-10 monthly momentum** book on **current S&P 500** members. When canary is off, stock gross = 0.
+
+**Compare:**
+- Ungated top-10 momentum
+- Per-stock **> SMA200** filter (rotation style)
+- US100 canary gated (both / Donchian-only / SMA200-only)
+
+**Honesty:** Survivorship-biased index membership; not prop-safe at full gross. Research only.
+
+CLI: `python -m research.trend_lab.run_us100_canary_validation`
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import display
+
+from research.trend_lab.data import load_etf
+from research.trend_lab.equity_universe import load_equity_panel, sp500_tickers
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.momentum_rotation import RotationParams, monthly_top_momentum_weights, rotation_net_returns
+from research.trend_lab.protocol import SPLIT
+from research.trend_lab.us100_canary import us100_bull_canary
+
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_end = cut - pd.Timedelta(days=1)
+"""),
+    cell(False, """
+panel, _ = load_equity_panel(sp500_tickers(), start=date(2015, 1, 1))
+qqq, qsrc = load_etf("QQQ")
+qqq = qqq.reindex(panel.index).ffill()
+canary = us100_bull_canary(qqq, mode="both")
+print("stocks", panel.shape[1], "bars", len(panel), "QQQ", qsrc)
+print("OOS canary ON %", round(float(canary.loc[cut:].mean()) * 100, 1))
+"""),
+    cell(False, """
+def gated_net(panel, canary, p):
+    w = monthly_top_momentum_weights(panel, p)
+    mult = canary.reindex(panel.index).ffill().fillna(0.0)
+    return rotation_net_returns(panel, w.mul(mult, axis=0), p)
+
+p = RotationParams(top_n=10, use_sma200_filter=False)
+p_stk = RotationParams(top_n=10, use_sma200_filter=True)
+books = {
+    "ungated": rotation_net_returns(panel, monthly_top_momentum_weights(panel, p), p),
+    "per_stock_sma200": rotation_net_returns(panel, monthly_top_momentum_weights(panel, p_stk), p_stk),
+    "us100_canary_both": gated_net(panel, canary, p),
+    "us100_donchian_only": gated_net(panel, us100_bull_canary(qqq, mode="donchian"), p),
+}
+spy = load_etf("SPY")[0].reindex(panel.index).ffill().pct_change(fill_method=None).fillna(0.0)
+books["SPY"] = spy
+"""),
+    cell(False, """
+rows = []
+for name, net in books.items():
+    for label, sl in [("IS", net.loc[:is_end]), ("OOS", net.loc[cut:])]:
+        rows.append({"book": name, "slice": label, **kpis_from_net(sl)})
+tbl = pd.DataFrame(rows)
+display(tbl[tbl["slice"] == "OOS"].set_index("book").round(4))
+out = Path("/opt/cursor/artifacts/us100_canary_validation.json")
+out.write_text(json.dumps({"results": rows}, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- If **us100_canary_both** has **shallower OOS max DD** than **ungated** with acceptable CAGR, the regime gate adds value.
+- If **per_stock_sma200** and **canary** look similar, macro gate duplicates single-name trend filters.
+- Do **not** merge this book with US100/XAU/BTC Carver without separate vol budgets.
 """),
 ])
