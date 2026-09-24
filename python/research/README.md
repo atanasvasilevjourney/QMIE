@@ -52,6 +52,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
 - `research/notebooks/08_donchian_stm_validation.ipynb` — daily Donchian + SUPER_TRADEMAN-style trail/attribution validation
 - `research/notebooks/09_crypto_turtle_validation.ipynb` — roman-karpovich/crypto-turtle 20/10 + RSI/ATR, CSV + plots
+- `research/notebooks/10_tema_4h_prop_top3_top10.ipynb` — frozen 4h A/A+ OOS, Top 3 vs Top 10 prop-style KPIs
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
@@ -85,6 +86,16 @@ crypto-turtle style (20/10 channels, RSI/ATR confirm, signal CSV + PNG):
 ```bash
 cd /workspace/python
 /workspace/.venv/bin/python -m research.trend_lab.run_crypto_turtle_validation
+```
+
+TEMA 4h prop compliance (Top 3 vs Top 10, needs `backtest/results/latest.parquet`):
+
+```bash
+cd /workspace/python
+/workspace/.venv/bin/python -m backtest.run --start 2024-01-01 --split 2025-01-01 \
+  --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h
+/workspace/.venv/bin/python -m research.trend_lab.run_tema_prop_validation
+/workspace/.venv/bin/python -m research.trend_lab.run_tema_prop_validation --run-backtest --quick
 ```
 
 ## Promote-to-live rule

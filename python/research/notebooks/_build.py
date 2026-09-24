@@ -871,3 +871,102 @@ cd python && python -m research.trend_lab.run_crypto_turtle_validation
 Plots: ``research/artifacts/crypto_turtle/plots/``. Do not promote to live ``W_*`` without DF + manual book.
 """),
 ])
+
+write("10_tema_4h_prop_top3_top10.ipynb", [
+    cell(True, """# 10 — TEMA 4h A/A+ prop compliance (Top 3 vs Top 10)
+
+Frozen QMIE scoring (**Triple EMA 9/90/199**), **4h** timeframe, grades **A/A+** only.
+Measurement window matches [`docs/backtest-baseline.md`](../../docs/backtest-baseline.md):
+
+- OOS **≥ 2025-01-01**
+- Post-filters: **ADX ≥ 20**, **ATR% 0.4–4.0**
+- Outcome: first touch SL 1.5×ATR / TP 2.5×ATR (same as live info levels)
+
+**Universes**
+
+| Label | Symbols |
+|---|---|
+| **Top 3** | BTC, ETH, SOL USDT-M perps |
+| **Top 10** | Default backtest basket (10 liquid USDT-M names) |
+
+**Paper cash sim (prop-style, not an order)**
+
+- $10k start, **1% isolated stake** per ticket, **1×** leverage
+- **Max 3** concurrent positions, **one open per symbol**, fill free slots by **score**
+- KPIs: signal win %, E[R], PF, Sharpe (daily R), SQN; sim profit %, max DD %, worst daily loss %, liquidations, blown flag
+- Pass flags vs configurable rules (default: trailing DD ≤10%, daily loss ≤5%, E[R]≥0, PF≥1, ≥30 taken trades)
+
+Generate parquet first if missing:
+
+```bash
+cd python
+python -m backtest.run --start 2024-01-01 --split 2025-01-01 \\
+  --min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h
+python -m research.trend_lab.run_tema_prop_validation
+```
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from pathlib import Path
+import pandas as pd
+from research.trend_lab.tema_prop_universe import (
+    PropRules,
+    SimConfig,
+    UNIVERSES,
+    compare_universes,
+    default_parquet,
+    kpi_table,
+)
+
+parquet = default_parquet()
+print("parquet", parquet, "exists", parquet.exists())
+if not parquet.exists():
+    raise FileNotFoundError(
+        "Run: python -m backtest.run --start 2024-01-01 --split 2025-01-01 "
+        "--min-adx 20 --min-atr-pct 0.4 --max-atr-pct 4.0 --tf 4h"
+    )
+rules = PropRules()
+sim = SimConfig()
+payload = compare_universes(parquet, sim=sim, rules=rules)
+display(kpi_table(payload))
+"""),
+    cell(False, """
+rows = []
+for key, block in payload["universes"].items():
+    sig = block["signal_kpis"]
+    cash = block["cash_sim"]
+    rows.append({
+        "universe": key,
+        "symbols": ", ".join(block["symbols"][:3]) + ("…" if len(block["symbols"]) > 3 else ""),
+        "book_n": block["n_book"],
+        "win_%": sig.get("win_pct"),
+        "E[R]": sig.get("expectancy_r"),
+        "PF": sig.get("pf"),
+        "Sharpe": sig.get("sharpe"),
+        "SQN": sig.get("sqn"),
+        "sim_taken": cash.get("taken"),
+        "sim_profit_%": cash.get("profit_pct"),
+        "max_DD_%": cash.get("max_dd_pct_daily_curve"),
+        "worst_day_%": cash.get("worst_daily_loss_pct"),
+        "prop_ok": block["prop"]["prop_compliant"],
+    })
+summary = pd.DataFrame(rows).set_index("universe")
+display(summary.round(3))
+"""),
+    cell(False, """
+for key, block in payload["universes"].items():
+    print(f"\\n=== {key.upper()} prop checks ===")
+    for name, ok in block["prop"]["checks"].items():
+        print(f"  {name}: {'PASS' if ok else 'FAIL'}")
+    print("  OVERALL:", "COMPLIANT" if block["prop"]["prop_compliant"] else "NOT COMPLIANT")
+"""),
+    cell(True, """## How to read vs live prop
+
+- **Signal KPIs** are on the full gated OOS book (all alerts that closed WIN/LOSS).
+- **Sim KPIs** apply slot/cash constraints — closer to a funded account with a 3-name book.
+- Passing these checks is **necessary but not sufficient** for a prop payout: you still need **≥30 manual journal fills** on the live desk before treating paper PnL as edge (`AGENTS.md`).
+- Do **not** retune ``W_*`` from this notebook. One-knob proposal remains ``SCAN_TIMEFRAMES=4h`` only (`strategy/reviews/2026-08-25.md`).
+
+Artifact JSON: ``python -m research.trend_lab.run_tema_prop_validation`` → ``research/artifacts/tema_prop_top3_top10.json``.
+"""),
+])
