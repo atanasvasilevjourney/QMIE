@@ -62,6 +62,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/trend_lab/run_equity_momentum_rotation.py` — **S&P 500** monthly top-10 momentum vs **+SMA200** (survivorship-biased current members); 14-day eval cadence proxy
 - `research/notebooks/14_us100_canary_stock_momentum.ipynb` — **US100 (QQQ) canary** gates S&P top-10 momentum; `run_us100_canary_validation`
 - `docs/prop-sizing-ftmo-swing.md` — **FTMO Swing rules + prop sizing web synthesis**; vol-target layer in `prop_sizing.py`
+- `research/trend_lab/run_carver_cs_layer_study.py` — **CS layer on vs off** by bucket → `/opt/cursor/artifacts/carver_cs_layer_study.json`
 - `research/trend_lab/run_fti_donchian_carver_edge.py` — Khalsa FTI (indicatorPy) gates on Donchian/Carver/blend
 - `research/trend_lab/run_btc_qqq_gld_suite.py` — BTC/QQQ/GLD ranked + equal Carver, Donchian, FTI (`run_carver_book` for charts)
 - `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)
