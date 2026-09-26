@@ -1944,8 +1944,127 @@ print("wrote", out)
 """),
     cell(True, """## Readout
 
-- If **us100_canary_both** has **shallower OOS max DD** than **ungated** with acceptable CAGR, the regime gate adds value.
-- If **per_stock_sma200** and **canary** look similar, macro gate duplicates single-name trend filters.
-- Do **not** merge this book with US100/XAU/BTC Carver without separate vol budgets.
+- **Raw OOS max DD ~−16%** on the strict canary book **fails** FTMO **10%** static max loss — canary alone is **not** prop-compliant.
+- Apply **IS-only return scale** (see `run_us100_canary_validation` **OOS_prop_dial**): at **~0.18×** the gated book sits **~−3% OOS DD** but **~2.4% OOS CAGR** — safe, **slow** eval.
+- For **quick prop**, use **US100/XAU/BTC Carver** (trio), not full-size stock momentum; use this sleeve as **regime-signed overlay** at **dialed** gross.
+- Do **not** merge with trio Carver without separate vol budgets.
+"""),
+])
+
+write("15_tema_macd_prop_grid.ipynb", [
+    cell(True, """# 15 — TEMA + MACD prop grid (QQQ / GLD / BTC)
+
+**Research only.** Brute-force **IS** grid maximizing **Calmar** with **max DD ≥ −10%** (FTMO static loss proxy).
+**OOS 2023→** is never used to pick parameters.
+
+- **Daily** bars; **1× leverage**, **1% risk/trade** compounding on $100k (`tema_macd_prop.py`).
+- **MACD histogram > 0** gate optional per grid cell.
+- **Not** live QMIE 4h TEMA 9/90/199 — do **not** promote grid winners to `scanner/signal_engine.py` without walk-forward + Pine parity review.
+
+## Prop readout
+
+After grid: check OOS **max_dd**, **worst_daily_loss_pct**, **calmar**. Tighten `max_dd_floor` to **−0.08** for buffer under 10% firm max loss.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from dataclasses import asdict
+from pathlib import Path
+import json
+
+import pandas as pd
+
+from research.trend_lab.protocol import SPLIT
+from research.trend_lab.tema_macd_prop import (
+    ANN_PROP,
+    PROP_START_EQ,
+    TemaMacdParams,
+    brute_force_calmar_is,
+    eval_tema_macd_prop,
+    ftmo_proxy,
+    load_trio_daily_ohlcv,
+)
+
+is_end = pd.Timestamp(SPLIT.is_end, tz="UTC")
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+MAX_DD_FLOOR = -0.10
+QUICK = True  # set False for larger grid (~2k combos / symbol)
+
+ohlcv, sources = load_trio_daily_ohlcv()
+print("sources", sources)
+for k, df in ohlcv.items():
+    print(k, df.index[0].date(), "→", df.index[-1].date(), len(df))
+"""),
+    cell(False, """
+grid_rows = {}
+best_params = {}
+for sym, df in ohlcv.items():
+    table, best = brute_force_calmar_is(
+        df, is_end=is_end, quick=QUICK, max_dd_floor=MAX_DD_FLOOR, min_trades=8,
+    )
+    grid_rows[sym] = table
+    best_params[sym] = best
+    print(f"\\n=== {sym} IS grid top 5 (Calmar) ===")
+    if table.empty:
+        print("no combo passed filters")
+        continue
+    cols = ["calmar", "sharpe", "cagr", "max_dd", "n_trades", "use_macd", "fast", "mid", "slow", "sl_atr", "tp_atr", "min_adx"]
+    print(table.head(5)[cols].to_string(index=False))
+"""),
+    cell(False, """
+results = []
+for sym, df in ohlcv.items():
+    p = best_params[sym]
+    if p is None:
+        continue
+    ev = eval_tema_macd_prop(df, p, is_end=is_end, ann=ANN_PROP)
+    for slice_name, k in [("IS", ev["is"]), ("OOS", ev["oos"])]:
+        fp = ftmo_proxy(ev["net"].loc[:is_end] if slice_name == "IS" else ev["net"].loc[cut:])
+        results.append({
+            "symbol": sym,
+            "slice": slice_name,
+            **k,
+            **fp,
+            "n_trades": ev["n_trades_full"],
+            "params": ev["params"],
+        })
+res = pd.DataFrame(results)
+display(res.drop(columns=["params"], errors="ignore").round(4))
+"""),
+    cell(False, """
+# Equal-weight portfolio of daily nets (research ledger)
+nets = []
+for sym, df in ohlcv.items():
+    p = best_params[sym]
+    if p is None:
+        continue
+    ev = eval_tema_macd_prop(df, p, is_end=is_end)
+    nets.append(ev["net"].rename(sym))
+if nets:
+    port = pd.concat(nets, axis=1).fillna(0.0).mean(axis=1)
+    from research.trend_lab.metrics import kpis_from_net
+    for label, sl in [("IS", port.loc[:is_end]), ("OOS", port.loc[cut:])]:
+        k = kpis_from_net(sl, ann=ANN_PROP)
+        fp = ftmo_proxy(sl)
+        print(label, {**k, **fp})
+"""),
+    cell(False, """
+out = Path("/opt/cursor/artifacts/tema_macd_prop_grid.json")
+payload = {
+    "protocol": {"is_end": str(is_end.date()), "oos_start": str(cut.date()), "max_dd_floor": MAX_DD_FLOOR},
+    "sources": sources,
+    "best_params": {k: asdict(v) for k, v in best_params.items() if v is not None},
+    "results": results,
+    "grid_top10": {k: v.head(10).to_dict(orient="records") for k, v in grid_rows.items() if not v.empty},
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Notes
+
+- **Overfitting:** Calmar on IS with many knobs — always read **OOS** and walk-forward before prop.
+- **ETF OHLC** is synthetic from close; BTC uses Vision OHLC.
+- **TradingView:** export best params per symbol into Pine alerts (TEMA stack + MACD hist); no auto parity with this notebook until scripted.
+- **vs trio Carver:** this is **discrete TEMA+MACD tickets**; Carver is **continuous vol book** — separate ledgers.
 """),
 ])
