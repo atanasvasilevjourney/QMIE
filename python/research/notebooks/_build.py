@@ -684,3 +684,1387 @@ print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median(
 If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
+
+write("08_donchian_avwap_ranked_validation.ipynb", [
+    cell(True, """# 08 — Donchian + Anchored VWAP + Ranked allocation (validation)
+
+**Research only.** Validates the master-spec *approach* on daily USDT-M Vision klines (same archive as `trend_lab`). This is **not** live execution, not GA, and not a survivorship-clean top-100 universe.
+
+## Honest framing
+
+- Long-only trend is **upside convexity + exit optionality**, not symmetric long-vol (that needs shorts or options).
+- This notebook uses a **fixed liquid basket** (~11 symbols). Missing delisted alts **inflates** any positive result vs a true top-N universe.
+- Fills: **next-bar** (`shift(1)`). Features use **prior-window** Donchian (`shift(1)` rolling). OOS is **2023→today**; fit window is **2019-09→2022-12** (chronological — never train on the future).
+
+## Pre-registered checks in this notebook
+
+| Id | Test |
+|---|---|
+| H2 | AVWAP filter (`above_avwap`) vs same book without AVWAP gate |
+| H4 | Ranked top-K vs equal-weight on the same active set |
+| H5 | BTC regime filter ON vs OFF (gross cap when OFF) |
+| Placebo | Permuted entry flags — real book Sharpe should beat placebo band |
+
+Leakage: **+1 bar feature shift** should hurt Sharpe vs baseline.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+
+import numpy as np
+import pandas as pd
+from research.trend_lab.data import DEFAULT_UNIVERSE, load_symbol
+from research.trend_lab.metrics import kpis, kpis_from_net, max_dd
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS, split_frame
+from scanner.indicators import atr
+
+ANN = 365
+COST_BPS = 10.0
+"""),
+    cell(False, """
+@dataclass(frozen=True)
+class ConvexParams:
+    n_entry: int = 55
+    n_exit: int = 20
+    atr_stop_mult: float = 3.0
+    compression_window: int = 60
+    compression_pct_max: float = 40.0  # only enter if width pct <= this (coiled)
+    avwap_anchor: str = "breakout_bar"  # breakout_bar | swing_low
+    use_avwap_gate: bool = True
+    use_compression_gate: bool = True
+    top_k: int = 5
+    rank_decay_exp: float = 1.0
+    target_vol_ann: float = 0.25
+    rebalance_rule: str = "W-SUN"
+    regime_filter: bool = True
+    gross_cap_off_regime: float = 0.30
+    min_strength: float = 0.5
+    single_name_cap: float = 0.25
+    exec_lag: int = 1
+
+
+def donchian_dual(df: pd.DataFrame, n_entry: int, n_exit: int) -> pd.DataFrame:
+    hi = df["high"].shift(1).rolling(n_entry, min_periods=n_entry).max()
+    lo = df["low"].shift(1).rolling(n_exit, min_periods=n_exit).min()
+    mid = (hi + lo) / 2.0
+    width = (hi - lo) / (df["close"] + 1e-12)
+    return pd.DataFrame({"upper": hi, "lower": lo, "mid": mid, "width": width}, index=df.index)
+
+
+def compression_percentile(width: pd.Series, window: int) -> pd.Series:
+    def _pct(x: np.ndarray) -> float:
+        if len(x) < 2:
+            return np.nan
+        last = x[-1]
+        return float((x[:-1] <= last).mean() * 100.0)
+
+    return width.rolling(window, min_periods=window).apply(_pct, raw=True)
+
+
+def avwap_from_anchor(df: pd.DataFrame, anchor_ts: pd.Timestamp, end_ts: pd.Timestamp) -> float:
+    sl = df.loc[anchor_ts:end_ts]
+    if sl.empty:
+        return float("nan")
+    tp = (sl["high"] + sl["low"] + sl["close"]) / 3.0
+    vol = sl["volume"].replace(0, np.nan)
+    if vol.notna().sum() == 0:
+        return float(sl["close"].iloc[-1])
+    return float((tp * vol).sum() / vol.sum())
+
+
+def swing_low_ts(df: pd.DataFrame, before: pd.Timestamp, lookback: int = 20) -> pd.Timestamp:
+    sl = df.loc[:before].tail(lookback + 1)
+    if sl.empty:
+        return before
+    i = sl["low"].idxmin()
+    return pd.Timestamp(i)
+
+
+def coin_features(df: pd.DataFrame, p: ConvexParams) -> pd.DataFrame:
+    don = donchian_dual(df, p.n_entry, p.n_exit)
+    atr_s = atr(df, 14)
+    atr_pct = atr_s / (df["close"] + 1e-12)
+    comp_pct = compression_percentile(don["width"], p.compression_window)
+    breakout = df["close"] > don["upper"]
+    exit_lower = df["close"] < don["lower"]
+    dist_upper = (df["close"] - don["upper"]) / (atr_s + 1e-12)
+    return pd.DataFrame({
+        "close": df["close"],
+        "upper": don["upper"],
+        "lower": don["lower"],
+        "mid": don["mid"],
+        "width": don["width"],
+        "comp_pct": comp_pct,
+        "atr": atr_s,
+        "atr_pct": atr_pct,
+        "breakout": breakout.astype(float),
+        "exit_lower": exit_lower.astype(float),
+        "dist_upper": dist_upper,
+    }, index=df.index)
+
+
+def trend_strength(feats: pd.DataFrame, avwap_dist: pd.Series) -> pd.Series:
+    z = avwap_dist.replace([np.inf, -np.inf], np.nan)
+    z = (z - z.expanding(min_periods=20).mean()) / (z.expanding(min_periods=20).std(ddof=0) + 1e-12)
+    vol_exp = feats["width"].pct_change(5).replace([np.inf, -np.inf], np.nan)
+    score = feats["dist_upper"].fillna(0) + 0.5 * z.fillna(0) + 0.25 * vol_exp.fillna(0)
+    return score.rename("strength")
+
+
+def btc_regime(btc: pd.DataFrame, n_entry: int) -> pd.Series:
+    don = donchian_dual(btc, n_entry, max(5, n_entry // 3))
+    on = (btc["close"] > don["mid"]).astype(float)
+    return on.rename("regime")
+
+
+def _seed_avwap_cum(df: pd.DataFrame, anchor_ts: pd.Timestamp, end_ts: pd.Timestamp) -> tuple[float, float]:
+    sl = df.loc[anchor_ts:end_ts]
+    tp = (sl["high"] + sl["low"] + sl["close"]) / 3.0
+    vol = sl["volume"].astype(float)
+    return float((tp * vol).sum()), float(vol.sum())
+
+
+def simulate_coin_path(df: pd.DataFrame, p: ConvexParams, rebalance_days: set) -> pd.DataFrame:
+    \"\"\"Daily in/out: entries on rebalance days only; risk exits any day. Incremental AVWAP.\"\"\"
+    feats = coin_features(df, p)
+    idx = df.index
+    n = len(idx)
+    eligible = np.zeros(n, dtype=float)
+    strength = np.zeros(n, dtype=float)
+    dist_upper = feats["dist_upper"].to_numpy(dtype=float)
+    breakout = feats["breakout"].to_numpy(dtype=float)
+    comp_pct = feats["comp_pct"].to_numpy(dtype=float)
+    exit_lower = feats["exit_lower"].to_numpy(dtype=float)
+    atr_a = feats["atr"].to_numpy(dtype=float)
+    close_a = feats["close"].to_numpy(dtype=float)
+
+    in_pos = False
+    entry_px = np.nan
+    cum_pv, cum_v = 0.0, 0.0
+
+    for i, ts in enumerate(idx):
+        if in_pos and cum_v > 0:
+            av = cum_pv / cum_v
+            dist_av = (close_a[i] - av) / (atr_a[i] + 1e-12)
+            strength[i] = dist_upper[i] + 0.5 * dist_av
+        else:
+            strength[i] = dist_upper[i] if np.isfinite(dist_upper[i]) else 0.0
+
+        stop_hit = (
+            in_pos
+            and np.isfinite(entry_px)
+            and np.isfinite(atr_a[i])
+            and close_a[i] < entry_px - p.atr_stop_mult * atr_a[i]
+        )
+        if in_pos and (exit_lower[i] == 1.0 or stop_hit):
+            in_pos = False
+            entry_px = np.nan
+            cum_pv, cum_v = 0.0, 0.0
+
+        want = (
+            ts in rebalance_days
+            and not in_pos
+            and breakout[i] == 1.0
+            and np.isfinite(comp_pct[i])
+            and strength[i] >= p.min_strength
+        )
+        if want and p.use_compression_gate and comp_pct[i] > p.compression_pct_max:
+            want = False
+        if want:
+            anc = pd.Timestamp(ts) if p.avwap_anchor == "breakout_bar" else swing_low_ts(df, ts)
+            av0 = avwap_from_anchor(df, anc, ts)
+            dist0 = (close_a[i] - av0) / (atr_a[i] + 1e-12)
+            if p.use_avwap_gate and dist0 < 0:
+                want = False
+            else:
+                cum_pv, cum_v = _seed_avwap_cum(df, anc, ts)
+        if want:
+            in_pos = True
+            entry_px = close_a[i]
+        elif in_pos and cum_v > 0:
+            row = df.loc[ts]
+            tp = (row["high"] + row["low"] + row["close"]) / 3.0
+            cum_pv += float(tp) * float(row["volume"])
+            cum_v += float(row["volume"])
+
+        eligible[i] = 1.0 if in_pos else 0.0
+
+    return pd.DataFrame({"eligible": eligible, "strength": strength}, index=idx)
+
+
+def rank_weights(names: list[str], strengths: dict[str, float], vols: dict[str, float], p: ConvexParams) -> dict[str, float]:
+    if not names:
+        return {}
+    ranked = sorted(names, key=lambda n: strengths.get(n, -1e9), reverse=True)
+    ranked = [n for n in ranked if strengths.get(n, 0) >= p.min_strength][: p.top_k]
+    if not ranked:
+        return {}
+    raw = np.array([(len(ranked) - i) ** p.rank_decay_exp for i in range(len(ranked))], dtype=float)
+    inv_vol = np.array([1.0 / max(vols.get(n, 1e-6), 1e-6) for n in ranked], dtype=float)
+    w = raw * inv_vol
+    w = w / w.sum()
+    cap = p.single_name_cap
+    if cap < 1:
+        w = np.minimum(w, cap)
+        if w.sum() > 0:
+            w = w / w.sum()
+    return {n: float(wi) for n, wi in zip(ranked, w)}
+
+
+def vol_scale_weights(weights: dict[str, float], port_vol: float, target: float) -> dict[str, float]:
+    if port_vol <= 0 or not weights:
+        return weights
+    scale = min(1.0, target / port_vol)
+    return {k: v * scale for k, v in weights.items()}
+
+
+def common_index(ohlcv: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
+    idx = None
+    for df in ohlcv.values():
+        idx = df.index if idx is None else idx.intersection(df.index)
+    idx = pd.DatetimeIndex(idx).sort_values()
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx
+
+
+def precompute_paths(
+    ohlcv: dict[str, pd.DataFrame], p: ConvexParams, idx: pd.DatetimeIndex, rebalance_days: set
+) -> dict[str, pd.DataFrame]:
+    out = {}
+    for sym, df in ohlcv.items():
+        out[sym] = simulate_coin_path(df.loc[idx], p, rebalance_days)
+    return out
+
+
+def run_book_from_paths(
+    ohlcv: dict[str, pd.DataFrame],
+    btc: pd.DataFrame,
+    p: ConvexParams,
+    idx: pd.DatetimeIndex,
+    rebalance_days: set,
+    paths: dict[str, pd.DataFrame],
+    *,
+    ranked: bool = True,
+    permute_seed: int | None = None,
+) -> pd.DataFrame:
+    regime = btc_regime(btc, p.n_entry).reindex(idx).ffill().fillna(0)
+    syms = list(ohlcv.keys())
+    elig = pd.DataFrame({s: paths[s]["eligible"] for s in syms}, index=idx)
+    stren = pd.DataFrame({s: paths[s]["strength"] for s in syms}, index=idx)
+    if permute_seed is not None:
+        rng = np.random.default_rng(permute_seed)
+        for s in syms:
+            v = elig[s].to_numpy().copy()
+            rng.shuffle(v)
+            elig[s] = v
+
+    rets = pd.DataFrame({s: ohlcv[s]["close"].loc[idx].pct_change().fillna(0) for s in syms})
+    vol20 = rets.rolling(20).std(ddof=1)
+    held = pd.DataFrame(0.0, index=idx, columns=syms)
+    last = pd.Series(0.0, index=syms)
+
+    for ts in idx:
+        if ts in rebalance_days:
+            names = [s for s in syms if elig.at[ts, s] > 0]
+            w: dict[str, float] = {}
+            if names:
+                strengths = {s: float(stren.at[ts, s]) for s in names}
+                vols = {s: float(vol20.at[ts, s]) if pd.notna(vol20.at[ts, s]) else 1e-6 for s in names}
+                w = rank_weights(names, strengths, vols, p) if ranked else {s: 1.0 / len(names) for s in names}
+                gross = sum(w.values())
+                reg = float(regime.at[ts])
+                if p.regime_filter and reg < 0.5:
+                    gross = min(gross, p.gross_cap_off_regime)
+                elif not p.regime_filter:
+                    gross = min(gross, p.gross_cap_off_regime)
+                if gross > 0:
+                    w = {k: v * gross / sum(w.values()) for k, v in w.items()}
+                port_vol = float(
+                    np.sqrt(sum((float(vol20.at[ts, s]) or 0) ** 2 * (w.get(s, 0) ** 2) for s in w))
+                ) * np.sqrt(ANN)
+                w = vol_scale_weights(w, port_vol, p.target_vol_ann)
+            last = pd.Series(0.0, index=syms)
+            for s, wi in w.items():
+                last[s] = wi
+        for s in syms:
+            held.at[ts, s] = float(last[s]) if elig.at[ts, s] > 0 else 0.0
+
+    held_exec = held.shift(p.exec_lag).fillna(0)
+    gross_ret = (held_exec * rets).sum(axis=1)
+    turnover = held_exec.diff().abs().fillna(held_exec.abs()).sum(axis=1)
+    net = gross_ret - turnover * (COST_BPS / 1e4)
+    return pd.DataFrame({"net": net, "equity": (1 + net).cumprod(), "turnover": turnover, "gross": gross_ret})
+
+
+def run_book(
+    ohlcv: dict[str, pd.DataFrame],
+    btc: pd.DataFrame,
+    p: ConvexParams,
+    *,
+    ranked: bool = True,
+    permute_entries: bool = False,
+    seed: int = 42,
+) -> pd.DataFrame:
+    idx = common_index(ohlcv)
+    rebalance_days = set(pd.Series(1, index=idx).resample(p.rebalance_rule).last().dropna().index)
+    paths = precompute_paths(ohlcv, p, idx, rebalance_days)
+    return run_book_from_paths(
+        ohlcv,
+        btc,
+        p,
+        idx,
+        rebalance_days,
+        paths,
+        ranked=ranked,
+        permute_seed=seed if permute_entries else None,
+    )
+
+
+def block_bootstrap_diff(a: pd.Series, b: pd.Series, block: int = 20, n: int = 120, seed: int = 0) -> tuple[float, float, float]:
+    \"\"\"Paired bootstrap on aligned net returns: mean(a) - mean(b). Returns (obs, p_two_sided, ci95_low).\"\"\"
+    df = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna()
+    if len(df) < block * 3:
+        return float("nan"), float("nan"), float("nan")
+    obs = float(df["a"].mean() - df["b"].mean())
+    rng = np.random.default_rng(seed)
+    n_obs = len(df)
+    boots = []
+    for _ in range(n):
+        starts = rng.integers(0, max(1, n_obs - block + 1), size=max(1, n_obs // block))
+        ix = []
+        for s in starts:
+            ix.extend(range(s, min(s + block, n_obs)))
+        ix = ix[:n_obs]
+        samp = df.iloc[ix]
+        boots.append(float(samp["a"].mean() - samp["b"].mean()))
+    boots = np.array(boots)
+    p = float(2 * min((boots >= 0).mean(), (boots <= 0).mean()))
+    ci_low = float(np.percentile(boots, 2.5))
+    return obs, p, ci_low
+"""),
+    cell(False, """
+# Load daily OHLCV (Vision USDT-M). Survivorship: survivors only — interpret KPIs as optimistic.
+symbols = [s for s in DEFAULT_UNIVERSE if s != "BTCUSDT"]
+btc_df, btc_src = load_symbol("BTCUSDT", "1d")
+ohlcv = {}
+sources = {"BTCUSDT": btc_src}
+for sym in symbols:
+    df, src = load_symbol(sym, "1d")
+    if len(df) < WARMUP_BARS:
+        print("skip", sym, len(df))
+        continue
+    ohlcv[sym] = df
+    sources[sym] = src
+print("loaded", len(ohlcv), "alts + BTC regime", btc_src, "bars", len(btc_df))
+"""),
+    cell(False, """
+base = ConvexParams()
+idx = common_index(ohlcv)
+rebalance_days = set(pd.Series(1, index=idx).resample(base.rebalance_rule).last().dropna().index)
+paths_avwap = precompute_paths(ohlcv, base, idx, rebalance_days)
+paths_no_avwap = precompute_paths(ohlcv, ConvexParams(use_avwap_gate=False), idx, rebalance_days)
+
+book_rank_avwap = run_book_from_paths(ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=True)
+book_eq_avwap = run_book_from_paths(ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=False)
+book_no_avwap = run_book_from_paths(
+    ohlcv, btc_df, ConvexParams(use_avwap_gate=False), idx, rebalance_days, paths_no_avwap, ranked=True
+)
+book_no_regime = run_book_from_paths(
+    ohlcv, btc_df, ConvexParams(regime_filter=False), idx, rebalance_days, paths_avwap, ranked=True
+)
+
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_net = book_rank_avwap.loc[: cut - pd.Timedelta(days=1), "net"]
+oos_net = book_rank_avwap.loc[cut:, "net"]
+
+summary = pd.DataFrame({
+    "rank_avwap_IS": kpis_from_net(is_net),
+    "rank_avwap_OOS": kpis_from_net(oos_net),
+    "equal_avwap_OOS": kpis_from_net(book_eq_avwap.loc[cut:, "net"]),
+    "rank_no_avwap_OOS": kpis_from_net(book_no_avwap.loc[cut:, "net"]),
+    "rank_no_regime_OOS": kpis_from_net(book_no_regime.loc[cut:, "net"]),
+}).T
+display(summary.round(4))
+"""),
+    cell(False, """
+# H2 / H4 / H5 — paired bootstrap on daily net (OOS)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+oos_a = book_rank_avwap.loc[cut:, "net"]
+oos_b = book_no_avwap.loc[cut:, "net"]
+oos_eq = book_eq_avwap.loc[cut:, "net"]
+oos_reg = book_no_regime.loc[cut:, "net"]
+
+h2 = block_bootstrap_diff(oos_a, oos_b, block=15, seed=1)
+h4 = block_bootstrap_diff(oos_a, oos_eq, block=15, seed=2)
+h5 = block_bootstrap_diff(book_rank_avwap.loc[cut:, "net"], oos_reg, block=15, seed=3)
+
+hyp = pd.DataFrame([
+    {"id": "H2_avwap", "obs_mean_diff": h2[0], "p_approx": h2[1], "ci95_low": h2[2],
+     "pass_rule": "obs>0 and p<0.05 (exploratory — not lockbox)"},
+    {"id": "H4_ranked", "obs_mean_diff": h4[0], "p_approx": h4[1], "ci95_low": h4[2],
+     "pass_rule": "ranked net mean > equal-weight"},
+    {"id": "H5_regime", "obs_mean_diff": h5[0], "p_approx": h5[1], "ci95_low": h5[2],
+     "pass_rule": "regime ON improves DD or Calmar (check KPI table)"},
+])
+display(hyp.round(5))
+"""),
+    cell(False, """
+# Placebo distribution (permute eligible flags; reuses path cache)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+real_sh = float(kpis_from_net(book_rank_avwap.loc[cut:, "net"])["sharpe"])
+placebo = []
+for seed in range(12):
+    pb = run_book_from_paths(
+        ohlcv, btc_df, base, idx, rebalance_days, paths_avwap, ranked=True, permute_seed=seed
+    )
+    placebo.append(float(kpis_from_net(pb.loc[cut:, "net"])["sharpe"]))
+placebo = np.array(placebo)
+print("OOS Sharpe real", round(real_sh, 3), "placebo median", round(float(np.median(placebo)), 3),
+      "pctile real", round(float((placebo < real_sh).mean()), 3))
+"""),
+    cell(False, """
+# Leakage sanity: +1 bar lag on OHLC (features see stale prices; Sharpe should drop)
+lagged = {s: df.shift(1).dropna() for s, df in ohlcv.items()}
+btc_lag = btc_df.shift(1).dropna()
+book_lag = run_book(lagged, btc_lag, base, ranked=True)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+sh_ok = float(kpis_from_net(book_rank_avwap.loc[cut:, "net"])["sharpe"])
+sh_lag = float(kpis_from_net(book_lag.loc[cut:, "net"])["sharpe"])
+print("OOS Sharpe baseline", round(sh_ok, 3), "lagged OHLC", round(sh_lag, 3), "degraded", sh_lag < sh_ok)
+"""),
+    cell(True, """## Readout
+
+- If **OOS Sharpe** is not above the **placebo** band, treat edge as unproven (sample is small; costs are constant bps, not sqrt-impact).
+- **H2/H4/H5** bootstrap p-values are exploratory; full pre-registration lives in `hypotheses.py` (not built in this notebook-only pass).
+- Next hardening steps: spot Vision loader, rolling top-N universe with delists, weekly/monthly rebalance grid, sqrt slippage, nested walk-forward — STAGES 1–4 of the master spec.
+"""),
+])
+
+write("09_catching_crypto_trends.ipynb", [
+    cell(True, """# 09 — Catching Crypto Trends (Zarattini et al., SSRN 5209907)
+
+**Final research approach (paper replica on QMIE data).** Implements the published **Combo** model:
+
+- **9 Donchian horizons:** 5, 10, 20, 30, 60, 90, 150, 250, 360 days (close-based channels)
+- **Entry:** close at upper band; **exit:** close below **mid-band trailing stop** (stop = max(prior stop, mid), never lowered)
+- **Sizing:** target **25%** ann. vol via **90-day** return σ, cap **2×**
+- **Combo:** equal-weight average of sub-model weights
+- **Portfolio:** **top N** names by **median daily dollar volume** (prior 30 days), **monthly** rotation, **equal capital** per name
+- **Costs:** **10 bps** + **20%** weight-change rebalance threshold (per paper Section 5–7)
+
+**Data:** Binance Vision USDT-M daily (same as `trend_lab`). This is **not** CoinMarketCap’s full survivorship panel — headline stats are **not** comparable 1:1 to the paper until CMC replication exists.
+
+**Execution discipline:** weights applied with **`shift(1)`** (next-bar) to avoid same-bar fill optimism.
+
+Reference: [SSRN 5209907](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5209907)
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+from datetime import date
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from research.trend_lab.data import load_symbol
+from research.trend_lab.metrics import kpis_from_net, max_dd, cagr
+from research.trend_lab.protocol import SPLIT
+
+HORIZONS = (5, 10, 20, 30, 60, 90, 150, 250, 360)
+VOL_TARGET = 0.25
+SIGMA_DAYS = 90
+LEV_CAP = 2.0
+COST_BPS = 10.0
+REBAL_THRESH = 0.20
+TOP_N = 20
+EXEC_LAG = 1
+ANN = 365
+
+CANDIDATES = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "DOGEUSDT", "ADAUSDT",
+    "TRXUSDT", "LINKUSDT", "AVAXUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "UNIUSDT",
+    "ATOMUSDT", "ETCUSDT", "FILUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "NEARUSDT",
+    "INJUSDT", "SUIUSDT", "SEIUSDT", "TIAUSDT", "ZECUSDT", "HYPEUSDT", "XLMUSDT", "ENAUSDT",
+]
+"""),
+    cell(False, """
+def donchian_close(close: pd.Series, n: int) -> pd.DataFrame:
+    \"\"\"Paper-style channels on close (includes current bar in rolling window).\"\"\"
+    up = close.rolling(n, min_periods=n).max()
+    dn = close.rolling(n, min_periods=n).min()
+    mid = (up + dn) / 2.0
+    return pd.DataFrame({"up": up, "dn": dn, "mid": mid})
+
+
+def combo_net(close: pd.Series) -> pd.Series:
+    \"\"\"Single-pass Combo: all horizons updated in one bar loop.\"\"\"
+    c = close.to_numpy(dtype=float)
+    n_bars = len(c)
+    sigma = close.pct_change().rolling(SIGMA_DAYS).std(ddof=1).to_numpy(dtype=float) * np.sqrt(ANN)
+    mids = {}
+    ups = {}
+    for n in HORIZONS:
+        ch = donchian_close(close, n)
+        mids[n] = ch["mid"].to_numpy(dtype=float)
+        ups[n] = ch["up"].to_numpy(dtype=float)
+    nh = len(HORIZONS)
+    in_pos = np.zeros(nh, dtype=bool)
+    trail = np.full(nh, np.nan)
+    w_exec = np.zeros(nh)
+    w_combo = np.zeros(n_bars)
+    for i in range(n_bars):
+        ci = c[i]
+        sig = sigma[i]
+        for j, n in enumerate(HORIZONS):
+            mid = mids[n][i]
+            up = ups[n][i]
+            if not in_pos[j]:
+                if np.isfinite(up) and ci >= up:
+                    in_pos[j] = True
+                    trail[j] = mid
+            else:
+                if np.isfinite(trail[j]) and ci < trail[j]:
+                    in_pos[j] = False
+                    trail[j] = np.nan
+                elif np.isfinite(mid):
+                    trail[j] = max(trail[j], mid)
+            w_tgt = 0.0
+            if in_pos[j] and np.isfinite(sig) and sig > 0:
+                w_tgt = min(LEV_CAP, VOL_TARGET / sig)
+            if abs(w_tgt - w_exec[j]) > REBAL_THRESH:
+                w_exec[j] = w_tgt
+        w_combo[i] = w_exec.mean()
+    w_s = pd.Series(w_combo, index=close.index)
+    ret = close.pct_change().fillna(0.0)
+    held = w_s.shift(EXEC_LAG).fillna(0.0)
+    turnover = held.diff().abs().fillna(held.abs())
+    return (held * ret - turnover * (COST_BPS / 1e4)).rename("net")
+
+
+def ann_alpha_vs_btc(net: pd.Series, btc_close: pd.Series) -> tuple[float, float, float]:
+    b = btc_close.pct_change().reindex(net.index).fillna(0.0)
+    p = net.reindex(b.index).fillna(0.0)
+    if len(p.dropna()) < 50:
+        return float("nan"), float("nan"), float("nan")
+    beta, alpha_d, _, _, _ = stats.linregress(b.values, p.values)
+    alpha_ann = float(alpha_d * ANN)
+    return alpha_ann, float(beta), float(stats.pearsonr(b, p)[0])
+"""),
+    cell(False, """
+# Load Vision daily OHLCV (parallel; cache warm after first run)
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def _load_one(sym: str):
+    df, src = load_symbol(sym, "1d", start=date(2015, 1, 1))
+    return sym, df, src
+
+ohlcv: dict[str, pd.DataFrame] = {}
+min_bars = max(HORIZONS) + SIGMA_DAYS + 10
+with ThreadPoolExecutor(max_workers=6) as ex:
+    futs = {ex.submit(_load_one, sym): sym for sym in CANDIDATES}
+    for fut in as_completed(futs):
+        sym, df, src = fut.result()
+        if len(df) < min_bars:
+            continue
+        ohlcv[sym] = df
+        print(sym, len(df), src)
+print("tradable with enough history:", len(ohlcv))
+"""),
+    cell(False, """
+# Per-asset Combo net returns
+net_by_sym = {sym: combo_net(df["close"]) for sym, df in ohlcv.items()}
+net_panel = pd.DataFrame(net_by_sym).sort_index()
+dollar_vol = pd.DataFrame(
+    {s: ohlcv[s]["close"] * ohlcv[s]["volume"] for s in ohlcv}
+).reindex(net_panel.index)
+
+# Monthly top-N by prior 30-day median dollar volume (point-in-time)
+idx = net_panel.index
+month_starts = pd.Series(1, index=idx).resample("MS").first().dropna().index
+membership: dict[pd.Timestamp, list[str]] = {}
+for ms in month_starts:
+    prior = dollar_vol.loc[ms - pd.Timedelta(days=30): ms - pd.Timedelta(days=1)]
+    if prior.empty:
+        continue
+    med = prior.median().dropna().sort_values(ascending=False)
+    membership[ms] = list(med.head(TOP_N).index)
+
+# Daily portfolio: equal-weight across active names for that month
+port_net = pd.Series(0.0, index=idx)
+counts = pd.Series(0, index=idx)
+active_sets = []
+for ts in idx:
+    ms = max([m for m in month_starts if m <= ts], default=None)
+    if ms is None or ms not in membership:
+        continue
+    active = [s for s in membership[ms] if s in net_panel.columns and pd.notna(net_panel.at[ts, s])]
+    if not active:
+        continue
+    port_net.at[ts] = float(net_panel.loc[ts, active].mean())
+    counts.at[ts] = len(active)
+    active_sets.append((ts, len(active)))
+
+port_net = port_net.rename("net")
+btc = ohlcv["BTCUSDT"]["close"].reindex(idx).ffill()
+btc_net = btc.pct_change().fillna(0.0)
+"""),
+    cell(False, """
+# Full-sample and OOS KPIs (chronological split at SPLIT.oos_start)
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+full_k = kpis_from_net(port_net)
+oos_k = kpis_from_net(port_net.loc[cut:])
+is_k = kpis_from_net(port_net.loc[: cut - pd.Timedelta(days=1)])
+btc_oos = kpis_from_net(btc_net.loc[cut:])
+alpha_full, beta_full, corr_full = ann_alpha_vs_btc(port_net, btc)
+alpha_oos, beta_oos, corr_oos = ann_alpha_vs_btc(port_net.loc[cut:], btc.loc[cut:])
+
+summary = pd.DataFrame({
+    "Combo_topN_full": full_k,
+    "Combo_topN_IS": is_k,
+    "Combo_topN_OOS": oos_k,
+    "BTC_BH_OOS": btc_oos,
+}).T
+display(summary.round(4))
+
+print("Ann. alpha vs BTC (lin. reg on daily net): full", round(alpha_full, 4), "OOS", round(alpha_oos, 4))
+print("Beta vs BTC: full", round(beta_full, 3), "OOS", round(beta_oos, 3))
+print("Mean active names:", round(float(counts.replace(0, np.nan).mean()), 1))
+"""),
+    cell(False, """
+# Equity vs vol-matched BTC (OOS)
+eq = (1.0 + port_net).cumprod()
+eq_btc = (1.0 + btc_net).cumprod()
+vol_p = float(port_net.loc[cut:].std(ddof=1) * np.sqrt(ANN))
+vol_b = float(btc_net.loc[cut:].std(ddof=1) * np.sqrt(ANN))
+scale = vol_p / vol_b if vol_b > 0 else 1.0
+eq_btc_s = (1.0 + btc_net * scale).cumprod()
+
+cmp = pd.DataFrame({
+    "Combo_topN": eq.loc[cut:],
+    "BTC_vol_scaled": eq_btc_s.loc[cut:],
+}).dropna()
+display(cmp.tail(1).round(4))
+print("OOS max DD Combo", round(max_dd(eq.loc[cut:]), 4), "BTC scaled", round(max_dd(eq_btc_s.loc[cut:]), 4))
+print("OOS CAGR Combo", round(cagr(eq.loc[cut:]), 4), "BTC scaled", round(cagr(eq_btc_s.loc[cut:]), 4))
+"""),
+    cell(False, """
+# Single-asset BTC Combo (paper Table 1 analogue; Vision data, 10bps, 20% threshold, exec lag 1)
+btc_combo = net_by_sym["BTCUSDT"]
+btc_k = {
+    "full": kpis_from_net(btc_combo),
+    "OOS": kpis_from_net(btc_combo.loc[cut:]),
+}
+display(pd.DataFrame(btc_k).T.round(4))
+"""),
+    cell(True, """## Fixed top 20 by market cap (no rotation)
+
+**Operator list:** large-cap liquid USDT-M perps; **#19 = ENA**, **#20 = SUI**. Rank 17 uses **NEAR** (`SHIBUSDT` has no Vision daily file). **No monthly rotation** — equal-weight Combo each day (names without history yet are skipped).
+
+⚠️ Fixed cap-weighted *today* on full history is still **survivorship/selection bias** unless membership is point-in-time.
+"""),
+    cell(False, """
+MCAP_TOP20 = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "TRXUSDT", "ZECUSDT", "DOGEUSDT",
+    "HYPEUSDT", "ADAUSDT", "LINKUSDT", "XLMUSDT", "UNIUSDT", "LTCUSDT", "BCHUSDT", "AVAXUSDT",
+    "NEARUSDT", "DOTUSDT", "ENAUSDT", "SUIUSDT",
+]
+FIXED_TOP20 = MCAP_TOP20
+print("Fixed mcap top 20 (#19 ENA, #20 SUI):", FIXED_TOP20)
+
+fixed_cols = [c for c in FIXED_TOP20 if c in net_panel.columns]
+sub_fixed = net_panel[fixed_cols]
+n_fixed = sub_fixed.notna().sum(axis=1).replace(0, np.nan)
+port_fixed = (sub_fixed.sum(axis=1, skipna=True) / n_fixed).fillna(0.0).rename("net")
+
+fixed_full = kpis_from_net(port_fixed)
+fixed_oos = kpis_from_net(port_fixed.loc[cut:])
+fixed_is = kpis_from_net(port_fixed.loc[: cut - pd.Timedelta(days=1)])
+a_fix, b_fix = ann_alpha_vs_btc(port_fixed.loc[cut:], btc.loc[cut:])
+
+display(pd.DataFrame({
+    "fixed_top20_full": fixed_full,
+    "fixed_top20_IS": fixed_is,
+    "fixed_top20_OOS": fixed_oos,
+    "rotating_topN_OOS": oos_k,
+}).T.round(4))
+
+from scipy import stats as sp_stats
+oos_daily = port_fixed.loc[cut:].dropna()
+_, p_mean = sp_stats.ttest_1samp(oos_daily, 0.0)
+print("OOS ann alpha vs BTC", round(a_fix, 4), "beta", round(b_fix, 3))
+print("Mean names contributing", round(float(n_fixed.mean()), 2))
+print("OOS mean daily net", round(float(oos_daily.mean()), 6), "H0 mean=0 p-value", round(float(p_mean), 4))
+"""),
+    cell(True, """## Readout vs paper (SSRN 5209907)
+
+| Metric (top-20 book, net) | Paper ~2015–Mar 2025 | This notebook |
+|---|---:|---:|
+| Sharpe | **1.57** | see table above |
+| CAGR | **~18%** | see table above |
+| Max DD | **~11%** | see table above |
+| Alpha vs BTC | **10.8%** / yr | see print above |
+
+**Gaps:** CMC survivorship panel, exact same-bar execution, and broader alt history. Treat this as **QMIE Vision replication**, not a claim to reproduce Concretum’s exact numbers.
+
+**Not long-vol:** this is **trend + vol targeting + rotation**, same economic story as the paper — not options straddle long-vol.
+"""),
+    cell(False, """
+# Optional: export last KPI snapshot for CI / agents (no secrets)
+import json
+from pathlib import Path
+snap = {
+    "model": "Combo_topN_SSRN5209907_replica",
+    "data": "binance_vision_usdt_m_1d",
+    "n_symbols_loaded": len(ohlcv),
+    "top_n": TOP_N,
+    "full": full_k,
+    "oos": oos_k,
+    "alpha_ann_vs_btc_full": alpha_full,
+    "alpha_ann_vs_btc_oos": alpha_oos,
+    "btc_combo_oos": btc_k["OOS"],
+}
+out = Path("/opt/cursor/artifacts/catching_crypto_trends_results.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(snap, indent=2, default=float))
+print("wrote", out)
+"""),
+])
+
+write("10_donchian_carver_cross_sectional.ipynb", [
+    cell(True, """# 10 — Donchian Combo × Carver × cross-sectional rank
+
+**One notebook, two questions** (fixed **mcap top 20**, Vision 1d, #19 ENA / #20 SUI — same as notebook 09):
+
+1. **Donchian + Carver** — per-asset **50/50 blend**, **Carver gated by Donchian** (`carver × 1{donchian>1%}`), vs each engine alone (equal-weight 20 names).
+2. **Donchian + cross-sectional** — apply **`carver_book`** ranked layer (60d ROC, **top 5**, portfolio vol target) to **Donchian weights**, **Carver weights**, and the blends.
+
+**Carver source:** `HedgeFund_WiP/carver_engine_with_cross_sectional.ipynb` → `trend_lab/carver.py` + `carver_book.py`.
+
+**Costs / execution:** 10 bps turnover, `shift(1)` weights. OOS split: `SPLIT.oos_start` (2023-01-01).
+
+Research only — does not change live QMIE scanner weights.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from research.trend_lab.allocation import blend_weights
+from research.trend_lab.carver import VOL_TARGET
+from research.trend_lab.carver_book import BookParams, book_from_raw_weights, carver_weight_panel
+from research.trend_lab.data import load_symbol
+from research.trend_lab.donchian_combo import (
+    COST_BPS, EXEC_LAG, MCAP_TOP20, combo_weight_series, equal_weight_portfolio,
+)
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.protocol import SPLIT
+
+ANN = 365
+MIN_BARS = 370
+START_CAP = 100_000.0
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+"""),
+    cell(False, """
+def load_panel(symbols: list[str]) -> pd.DataFrame:
+    def _one(sym: str):
+        df, _ = load_symbol(sym, "1d", start=date(2015, 1, 1))
+        return sym, df
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        rows = list(ex.map(_one, symbols))
+    ok = {s: df["close"] for s, df in rows if len(df) >= MIN_BARS}
+    panel = pd.DataFrame(ok).sort_index()
+    print("panel", panel.shape, "from", panel.index[0], "to", panel.index[-1])
+    return panel
+
+panel = load_panel(MCAP_TOP20)
+"""),
+    cell(False, """
+# Raw weight panels
+w_don = pd.DataFrame({s: combo_weight_series(panel[s]) for s in panel.columns})
+w_car = carver_weight_panel(panel, use_cs=True, ann_days=ANN)
+w_blend = pd.DataFrame(
+    {s: blend_weights(w_car[s], w_don[s], mix=0.5) for s in panel.columns},
+    index=panel.index,
+)
+w_gate = w_car * (w_don > 0.01).astype(float)
+print("mean lagged Donchian weight OOS", float(w_don.loc[cut:].shift(EXEC_LAG).mean().mean()))
+print("mean lagged Carver weight OOS", float(w_car.loc[cut:].shift(EXEC_LAG).mean().mean()))
+"""),
+    cell(True, """## Part 1 — Donchian channel breakout + Carver (equal-weight 20)
+
+Per-name weights are combined **before** the equal-weight portfolio step.
+"""),
+    cell(False, """
+part1_books = {
+    "donchian_combo_eq20": equal_weight_portfolio(w_don, panel),
+    "carver_engine_eq20": equal_weight_portfolio(w_car, panel),
+    "blend_50_50_eq20": equal_weight_portfolio(w_blend, panel),
+    "gate_carver_if_donchian_eq20": equal_weight_portfolio(w_gate, panel),
+}
+
+def kpi_row(name: str, net: pd.Series) -> dict:
+    oos = net.loc[cut:].fillna(0.0)
+    k = kpis_from_net(oos)
+    pnl = float(START_CAP * ((1.0 + oos).prod() - 1.0))
+    return {"book": name, "oos_sharpe": k["sharpe"], "oos_cagr": k["cagr"],
+            "oos_max_dd": k["max_dd"], "oos_pnl_100k": pnl}
+
+part1 = pd.DataFrame([kpi_row(n, s) for n, s in part1_books.items()]).sort_values("oos_sharpe", ascending=False)
+display(part1.round(4))
+"""),
+    cell(True, """## Part 2 — Cross-sectional ranked book (ROC 60, top 5)
+
+Same **`book_from_raw_weights`** as ranked Carver desk research: rank by 60d return among names with raw weight > 0, keep top 5, scale to Carver vol target (20% crypto default in engine).
+"""),
+    cell(False, """
+cs = BookParams(vol_target=VOL_TARGET, lookback=60, top_n=5, cost_bps=COST_BPS, exec_lag=EXEC_LAG)
+
+part2_books = {
+    "donchian_cs_top5": book_from_raw_weights(panel, w_don, cs)["net"],
+    "carver_cs_top5": book_from_raw_weights(panel, w_car, cs)["net"],
+    "blend_cs_top5": book_from_raw_weights(panel, w_blend, cs)["net"],
+    "gate_cs_top5": book_from_raw_weights(panel, w_gate, cs)["net"],
+}
+
+part2 = pd.DataFrame([kpi_row(n, s) for n, s in part2_books.items()]).sort_values("oos_sharpe", ascending=False)
+display(part2.round(4))
+
+# Baselines side-by-side (OOS)
+compare = pd.concat([
+    part1.assign(layer="eq20"),
+    part2.assign(layer="cs_top5"),
+], ignore_index=True)
+display(compare.sort_values("oos_sharpe", ascending=False).round(4))
+"""),
+    cell(False, """
+# OOS equity curves ($100k start at OOS open)
+eq_rows = {}
+for label, net in {**part1_books, **part2_books}.items():
+    oos = net.loc[cut:].fillna(0.0)
+    eq_rows[label] = START_CAP * (1.0 + oos).cumprod()
+eq_df = pd.DataFrame(eq_rows).dropna(how="all")
+display(eq_df.tail(3).round(0))
+
+out = Path("/opt/cursor/artifacts/donchian_carver_cs_notebook10.json")
+payload = {
+    "universe": list(panel.columns),
+    "oos_start": str(cut.date()),
+    "part1_donchian_plus_carver": part1.to_dict(orient="records"),
+    "part2_cross_sectional": part2.to_dict(orient="records"),
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- **Donchian-only eq20** is the conservative baseline (~−8% OOS max DD in prior runs).
+- **Donchian + CS top5** concentrates into momentum leaders — higher CAGR / Sharpe but **deeper drawdowns** (~−20% class).
+- **Carver + Donchian blend** sits between; gating Carver on Donchian trend reduces turnover when breakout flat.
+
+Re-run CLI: `python -m research.trend_lab.run_donchian_carver_hybrid`
+"""),
+])
+
+write("11_donchian_nb08_carver.ipynb", [
+    cell(True, """# 11 — Donchian (notebook 08 dual channel) × Carver
+
+**Scope:** Only the **first Donchian research notebook** logic — **55/20 prior-bar channels**, breakout / lower-band (+ ATR stop) — blended with the **Carver engine** (`carver.py`). No SSRN 09 Combo, no cross-sectional rank book, no AVWAP/ranked weekly book in this file.
+
+| Book | Meaning |
+|------|---------|
+| `donchian_nb08` | Daily Donchian 08 weights, equal-weight across universe |
+| `carver` | Full Carver forecast weights per name |
+| `blend_50_50` | Per-name 50/50 Donchian + Carver |
+| `gate` | Carver × 1{Donchian weight > 1%} |
+
+Universe: `DEFAULT_UNIVERSE` (~11 liquid alts + BTC in panel). Costs 10 bps, `shift(1)`. OOS from `SPLIT.oos_start`.
+
+CLI: `python -m research.trend_lab.run_donchian_nb08_carver`
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pandas as pd
+
+from research.trend_lab.allocation import blend_weights
+from research.trend_lab.carver_book import carver_weight_panel
+from research.trend_lab.data import DEFAULT_UNIVERSE, load_symbol
+from research.trend_lab.donchian_combo import COST_BPS, EXEC_LAG, equal_weight_portfolio
+from research.trend_lab.donchian_nb08 import Donchian08Params, donchian_nb08_weight_panel
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS
+
+START_CAP = 100_000.0
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+p = Donchian08Params()
+"""),
+    cell(False, """
+symbols = ["BTCUSDT"] + [s for s in DEFAULT_UNIVERSE if s != "BTCUSDT"]
+ohlcv = {}
+for sym in symbols:
+    df, src = load_symbol(sym, "1d", start=date(2015, 1, 1))
+    if len(df) >= WARMUP_BARS:
+        ohlcv[sym] = df
+        print(sym, len(df), src)
+panel = pd.DataFrame({s: df["close"] for s, df in ohlcv.items()}).sort_index()
+"""),
+    cell(False, """
+w_don = donchian_nb08_weight_panel(ohlcv, p).reindex(panel.index).fillna(0.0)
+w_car = carver_weight_panel(panel, use_cs=True, ann_days=365)
+w_blend = pd.DataFrame({s: blend_weights(w_car[s], w_don[s], mix=0.5) for s in panel.columns}, index=panel.index)
+w_gate = w_car * (w_don > 0.01).astype(float)
+
+books = {
+    "donchian_nb08_eq": equal_weight_portfolio(w_don, panel),
+    "carver_eq": equal_weight_portfolio(w_car, panel),
+    "blend_50_50_eq": equal_weight_portfolio(w_blend, panel),
+    "gate_carver_if_donchian_eq": equal_weight_portfolio(w_gate, panel),
+}
+
+def row(name, net):
+    oos = net.loc[cut:].fillna(0.0)
+    k = kpis_from_net(oos)
+    return {"book": name, "oos_sharpe": k["sharpe"], "oos_cagr": k["cagr"],
+            "oos_max_dd": k["max_dd"], "oos_pnl_100k": float(START_CAP * ((1 + oos).prod() - 1))}
+
+tbl = pd.DataFrame([row(n, s) for n, s in books.items()]).sort_values("oos_sharpe", ascending=False)
+display(tbl.round(4))
+"""),
+    cell(False, """
+out = Path("/opt/cursor/artifacts/donchian_nb08_carver_results.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps({"params": p.__dict__, "results": tbl.to_dict(orient="records")}, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Donchian only @ ~10% max DD (prop dial)
+
+**IS-only** search on ``target_vol_ann`` (2023 split held out). Channels unchanged (55/20). Not Carver.
+"""),
+    cell(False, """
+from research.trend_lab.donchian_nb08 import dial_target_vol_for_dd
+
+is_end = cut - pd.Timedelta(days=1)
+vt_dd, net_dd = dial_target_vol_for_dd(ohlcv, panel, is_end=is_end, target_dd=-0.10)
+p_dd = Donchian08Params(target_vol_ann=vt_dd)
+k_is = kpis_from_net(net_dd.loc[:is_end])
+k_oos = kpis_from_net(net_dd.loc[cut:])
+print("chosen target_vol_ann (IS dial)", vt_dd)
+display(pd.DataFrame({"IS_10pct_dial": k_is, "OOS": k_oos}).T.round(4))
+print("OOS PnL $100k", round(START_CAP * ((1 + net_dd.loc[cut:].fillna(0)).prod() - 1), 0))
+"""),
+])
+
+write("12_mentor_prop_hypothesis.ipynb", [
+    cell(True, """# 12 — Mentor prop hypothesis (ensemble flag → Carver + canaries)
+
+**Research only.** Tests the Bootcamp / Carver **deployment model** for prop firms (FTMO-style), not a live playbook.
+
+## Mentor model (what we pre-register)
+
+1. **Timing (M1):** binary **ensemble** (`spot_signal`) or **Donchian** breakout **flags** *when* to participate.
+2. **Sizing (M2):** **Carver** continuous weights *how much* (vol-targeted).
+3. **Basket:** **Decorrelated trio** BTC/QQQ/GLD (252d ann) vs **crypto-only** panel (365d ann) — **separate ledgers, never merged**.
+4. **Macro:** simple **canaries** (QQQ/SPY, XLU/SPY) scale gross on the **trio** book only.
+5. **Prop dial:** IS-only scale to **−8% max DD** proxy under 10% static loss / 5% daily loss.
+
+## Hypotheses
+
+| Id | Claim |
+|----|--------|
+| H1 | Gated Carver (ensemble **or** Donchian flag) has **lower OOS max DD** than always-on equal-weight Carver on the same universe |
+| H2 | Trio ranked Carver shows **meaningful CS diversification** vs crypto-only (different DD/Corr — not higher Sharpe guaranteed) |
+| H3 | **Mentor stack** `flag × Carver` on crypto beats always-on Carver on **FTMO proxy** (DD + worst day) at lower CAGR |
+| H4 | Canary gross multiplier on trio **reduces OOS DD** vs unscaled trio Carver |
+| H5 | After IS dial, report **days to +10%** on OOS for eval timeline (not a pass guarantee) |
+
+Split: IS through `SPLIT.is_end`, OOS from `SPLIT.oos_start`. No tuning on OOS.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from IPython.display import display
+
+from research.trend_lab.allocation import blend_weights
+from research.trend_lab.carver_book import (
+    ANN_SESSIONS,
+    BookParams,
+    book_from_raw_weights,
+    carver_weight_panel,
+    pick_vol_target,
+)
+from research.trend_lab.data import DEFAULT_UNIVERSE, load_etf, load_symbol, mixed_panel
+from research.trend_lab.donchian_combo import COST_BPS, equal_weight_portfolio
+from research.trend_lab.donchian_nb08 import Donchian08Params, donchian_nb08_weight_panel
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.mentor_prop import (
+    apply_gross_multiplier,
+    canary_defensive_multiplier,
+    days_to_profit_pct,
+    dial_return_scale_is,
+    ftmo_daily_stats,
+    mentor_gated_weights,
+)
+from research.trend_lab.protocol import SPLIT, WARMUP_BARS
+from research.trend_lab.spot_system import SpotParams, spot_signal
+
+START_CAP = 100_000.0
+FTMO_MAX_DD = -0.10
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_end = cut - pd.Timedelta(days=1)
+spot_p = SpotParams()
+"""),
+    cell(True, """## A — Crypto ledger (365d, Vision alts + BTC in panel)"""),
+    cell(False, """
+symbols = ["BTCUSDT"] + [s for s in DEFAULT_UNIVERSE if s != "BTCUSDT"]
+ohlcv_c = {}
+for sym in symbols:
+    df, src = load_symbol(sym, "1d", start=date(2015, 1, 1))
+    if len(df) >= WARMUP_BARS:
+        ohlcv_c[sym] = df
+        print(sym, len(df), src)
+panel_c = pd.DataFrame({s: df["close"] for s, df in ohlcv_c.items()}).sort_index()
+w_car_c = carver_weight_panel(panel_c, use_cs=True, ann_days=365)
+flags_ens = pd.DataFrame(
+    {s: spot_signal(ohlcv_c[s], spot_p)["signal"].reindex(panel_c.index).fillna(0) for s in panel_c.columns},
+    index=panel_c.index,
+)
+w_don_c = donchian_nb08_weight_panel(ohlcv_c, Donchian08Params()).reindex(panel_c.index).fillna(0.0)
+flags_don = (w_don_c > 0.01).astype(float)
+
+def crypto_net(w: pd.DataFrame) -> pd.Series:
+    return equal_weight_portfolio(w, panel_c, cost_bps=COST_BPS)
+
+books_c = {
+    "carver_always_on": crypto_net(w_car_c),
+    "mentor_ensemble_x_carver": crypto_net(mentor_gated_weights(w_car_c, flags_ens)),
+    "mentor_donchian_x_carver": crypto_net(mentor_gated_weights(w_car_c, flags_don)),
+    "blend_50_50_carver_don": crypto_net(
+        pd.DataFrame({s: blend_weights(w_car_c[s], w_don_c[s], mix=0.5) for s in panel_c.columns}, index=panel_c.index)
+    ),
+}
+"""),
+    cell(False, """
+def eval_row(name: str, net: pd.Series, *, dial: bool = True) -> dict:
+    net = net.fillna(0.0)
+    sc, scaled = dial_return_scale_is(net, is_end) if dial else (1.0, net)
+    oos = scaled.loc[cut:]
+    k = kpis_from_net(oos)
+    fd = ftmo_daily_stats(oos)
+    d10 = days_to_profit_pct(oos, 0.10)
+    return {
+        "ledger": "crypto",
+        "book": name,
+        "is_scale": sc,
+        "oos_sharpe": k["sharpe"],
+        "oos_cagr": k["cagr"],
+        "oos_max_dd": k["max_dd"],
+        "oos_pnl_100k": float(START_CAP * ((1 + oos).prod() - 1)),
+        "oos_days_to_10pct": d10,
+        "ftmo_10pct_ok": k["max_dd"] > FTMO_MAX_DD,
+        **fd,
+    }
+
+rows_c = [eval_row(n, s) for n, s in books_c.items()]
+tbl_c = pd.DataFrame(rows_c).sort_values("oos_max_dd", ascending=False)
+display(tbl_c.round(4))
+h1 = (
+    tbl_c.loc[tbl_c["book"] == "carver_always_on", "oos_max_dd"].iloc[0]
+    > tbl_c.loc[tbl_c["book"] == "mentor_ensemble_x_carver", "oos_max_dd"].iloc[0]
+)
+print("H1 ensemble gate improves DD vs always-on Carver:", h1)
+"""),
+    cell(True, """## B — Trio ledger (BTC / QQQ / GLD, 252d, separate from crypto)"""),
+    cell(False, """
+panel_t, src_t = mixed_panel()
+is_p = panel_t.loc[:is_end]
+raw_w_t = carver_weight_panel(panel_t, use_cs=True, ann_days=ANN_SESSIONS)
+picked = pick_vol_target(is_p, raw_w_t.reindex(is_p.index).fillna(0.0), lookback=60, top_n=2)
+params = BookParams(vol_target=picked["vol_target"], lookback=60, top_n=2, cost_bps=2.0)
+book_t = book_from_raw_weights(panel_t, raw_w_t, params)["net"]
+
+# Ensemble flags on trio (close-only OHLCV proxy for Donchian on ETFs)
+ohlcv_t = {
+    c: pd.DataFrame(
+        {"open": panel_t[c], "high": panel_t[c], "low": panel_t[c], "close": panel_t[c], "volume": 1.0},
+        index=panel_t.index,
+    )
+    for c in panel_t.columns
+}
+flags_t = pd.DataFrame(
+    {c: spot_signal(ohlcv_t[c], spot_p)["signal"].reindex(panel_t.index).fillna(0) for c in panel_t.columns},
+    index=panel_t.index,
+)
+w_car_t = raw_w_t.reindex(panel_t.index).fillna(0.0)
+w_gate_t = mentor_gated_weights(w_car_t, flags_t)
+net_gate_t = equal_weight_portfolio(w_gate_t, panel_t, cost_bps=2.0)
+
+books_t = {"trio_ranked_carver": book_t, "trio_mentor_ensemble_x_carver": net_gate_t}
+rows_t = [eval_row(n, s) | {"ledger": "trio"} for n, s in books_t.items()]
+tbl_t = pd.DataFrame(rows_t)
+display(tbl_t.round(4))
+"""),
+    cell(True, """## C — Canaries on trio (macro gross multiplier)"""),
+    cell(False, """
+spy, _ = load_etf("SPY")
+qqq, _ = load_etf("QQQ")
+xlu, _ = load_etf("XLU")
+mult = canary_defensive_multiplier(spy, qqq, xlu).reindex(panel_t.index).ffill().fillna(1.0)
+w_canary = apply_gross_multiplier(w_car_t, mult)
+net_canary = equal_weight_portfolio(w_canary, panel_t, cost_bps=2.0)
+row_can = eval_row("trio_carver_x_canary", net_canary) | {"ledger": "trio"}
+display(pd.DataFrame([row_can]).round(4))
+h4 = row_can["oos_max_dd"] > tbl_t.loc[tbl_t["book"] == "trio_ranked_carver", "oos_max_dd"].iloc[0]
+print("H4 canary improves DD vs ranked Carver:", h4)
+"""),
+    cell(True, """## D — Combined hypothesis board + artifact"""),
+    cell(False, """
+all_rows = rows_c + rows_t + [row_can]
+board = pd.DataFrame(all_rows)
+board["recommended_prop"] = board["ftmo_10pct_ok"] & (board["worst_daily_loss_pct"] > -0.05)
+display(board.sort_values(["recommended_prop", "oos_cagr"], ascending=[False, False]).round(4))
+
+payload = {
+    "mentor_model": "ensemble_or_donchian_flag_x_carver_size",
+    "hypotheses": {"H1_ensemble_gate_dd": bool(h1), "H4_canary_dd": bool(h4)},
+    "ledgers_separate": ["crypto", "trio"],
+    "sources_trio": src_t,
+    "results": board.to_dict(orient="records"),
+}
+out = Path("/opt/cursor/artifacts/mentor_prop_hypothesis.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- **Mentor prop** = **flag → Carver**, not Donchian-only or Carver-only by default.
+- Compare **crypto** rows to **trio** rows separately; do not sum PnL.
+- **`oos_days_to_10pct`** is bars from OOS start on the **scaled** book — see notebook 12 / FTMO runner for rolling pass time.
+- Re-run: execute all cells, or `python -m research.trend_lab.run_mentor_prop_hypothesis`, or regenerate via `python research/notebooks/_build.py`.
+"""),
+])
+
+write("14_us100_canary_stock_momentum.ipynb", [
+    cell(True, """# 14 — US100 canary × S&P momentum (validation)
+
+**Idea:** When **US100** ( **QQQ** proxy ) is in a bull regime (**> SMA200** and **Donchian breakout**), allow a **top-10 monthly momentum** book on **current S&P 500** members. When canary is off, stock gross = 0.
+
+**Compare:**
+- Ungated top-10 momentum
+- Per-stock **> SMA200** filter (rotation style)
+- US100 canary gated (both / Donchian-only / SMA200-only)
+
+**Honesty:** Survivorship-biased index membership; not prop-safe at full gross. Research only.
+
+CLI: `python -m research.trend_lab.run_us100_canary_validation`
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import display
+
+from research.trend_lab.data import load_etf
+from research.trend_lab.equity_universe import load_equity_panel, sp500_tickers
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.momentum_rotation import RotationParams, monthly_top_momentum_weights, rotation_net_returns
+from research.trend_lab.protocol import SPLIT
+from research.trend_lab.us100_canary import us100_bull_canary
+
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+is_end = cut - pd.Timedelta(days=1)
+"""),
+    cell(False, """
+panel, _ = load_equity_panel(sp500_tickers(), start=date(2015, 1, 1))
+qqq, qsrc = load_etf("QQQ")
+qqq = qqq.reindex(panel.index).ffill()
+canary = us100_bull_canary(qqq, mode="both")
+print("stocks", panel.shape[1], "bars", len(panel), "QQQ", qsrc)
+print("OOS canary ON %", round(float(canary.loc[cut:].mean()) * 100, 1))
+"""),
+    cell(False, """
+def gated_net(panel, canary, p):
+    w = monthly_top_momentum_weights(panel, p)
+    mult = canary.reindex(panel.index).ffill().fillna(0.0)
+    return rotation_net_returns(panel, w.mul(mult, axis=0), p)
+
+p = RotationParams(top_n=10, use_sma200_filter=False)
+p_stk = RotationParams(top_n=10, use_sma200_filter=True)
+books = {
+    "ungated": rotation_net_returns(panel, monthly_top_momentum_weights(panel, p), p),
+    "per_stock_sma200": rotation_net_returns(panel, monthly_top_momentum_weights(panel, p_stk), p_stk),
+    "us100_canary_both": gated_net(panel, canary, p),
+    "us100_donchian_only": gated_net(panel, us100_bull_canary(qqq, mode="donchian"), p),
+}
+spy = load_etf("SPY")[0].reindex(panel.index).ffill().pct_change(fill_method=None).fillna(0.0)
+books["SPY"] = spy
+"""),
+    cell(False, """
+rows = []
+for name, net in books.items():
+    for label, sl in [("IS", net.loc[:is_end]), ("OOS", net.loc[cut:])]:
+        rows.append({"book": name, "slice": label, **kpis_from_net(sl)})
+tbl = pd.DataFrame(rows)
+display(tbl[tbl["slice"] == "OOS"].set_index("book").round(4))
+out = Path("/opt/cursor/artifacts/us100_canary_validation.json")
+out.write_text(json.dumps({"results": rows}, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- **Raw OOS max DD ~−16%** on the strict canary book **fails** FTMO **10%** static max loss — canary alone is **not** prop-compliant.
+- Apply **IS-only return scale** (see `run_us100_canary_validation` **OOS_prop_dial**): at **~0.18×** the gated book sits **~−3% OOS DD** but **~2.4% OOS CAGR** — safe, **slow** eval.
+- For **quick prop**, use **US100/XAU/BTC Carver** (trio), not full-size stock momentum; use this sleeve as **regime-signed overlay** at **dialed** gross.
+- Do **not** merge with trio Carver without separate vol budgets.
+"""),
+])
+
+write("15_tema_macd_prop_grid.ipynb", [
+    cell(True, """# 15 — TEMA + MACD prop grid (QQQ / GLD / BTC)
+
+**Research only.** Brute-force **IS** grid maximizing **Calmar** with **max DD ≥ −10%** (FTMO static loss proxy).
+**OOS 2023→** is never used to pick parameters.
+
+- **Daily** bars; **1× leverage**, **1% risk/trade** compounding on $100k (`tema_macd_prop.py`).
+- **MACD histogram > 0** gate optional per grid cell.
+- **Not** live QMIE 4h TEMA 9/90/199 — do **not** promote grid winners to `scanner/signal_engine.py` without walk-forward + Pine parity review.
+
+## Prop readout
+
+After grid: check OOS **max_dd**, **worst_daily_loss_pct**, **calmar**. Tighten `max_dd_floor` to **−0.08** for buffer under 10% firm max loss.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from dataclasses import asdict
+from pathlib import Path
+import json
+
+import pandas as pd
+
+from research.trend_lab.protocol import SPLIT
+from research.trend_lab.tema_macd_prop import (
+    ANN_PROP,
+    PROP_START_EQ,
+    TemaMacdParams,
+    brute_force_calmar_is,
+    eval_tema_macd_prop,
+    ftmo_proxy,
+    load_trio_daily_ohlcv,
+)
+
+is_end = pd.Timestamp(SPLIT.is_end, tz="UTC")
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+MAX_DD_FLOOR = -0.10
+QUICK = True  # set False for larger grid (~2k combos / symbol)
+
+ohlcv, sources = load_trio_daily_ohlcv()
+print("sources", sources)
+for k, df in ohlcv.items():
+    print(k, df.index[0].date(), "→", df.index[-1].date(), len(df))
+"""),
+    cell(False, """
+grid_rows = {}
+best_params = {}
+for sym, df in ohlcv.items():
+    table, best = brute_force_calmar_is(
+        df, is_end=is_end, quick=QUICK, max_dd_floor=MAX_DD_FLOOR, min_trades=8,
+    )
+    grid_rows[sym] = table
+    best_params[sym] = best
+    print(f"\\n=== {sym} IS grid top 5 (Calmar) ===")
+    if table.empty:
+        print("no combo passed filters")
+        continue
+    cols = ["calmar", "sharpe", "cagr", "max_dd", "n_trades", "use_macd", "fast", "mid", "slow", "sl_atr", "tp_atr", "min_adx"]
+    print(table.head(5)[cols].to_string(index=False))
+"""),
+    cell(False, """
+results = []
+for sym, df in ohlcv.items():
+    p = best_params[sym]
+    if p is None:
+        continue
+    ev = eval_tema_macd_prop(df, p, is_end=is_end, ann=ANN_PROP)
+    for slice_name, k in [("IS", ev["is"]), ("OOS", ev["oos"])]:
+        fp = ftmo_proxy(ev["net"].loc[:is_end] if slice_name == "IS" else ev["net"].loc[cut:])
+        results.append({
+            "symbol": sym,
+            "slice": slice_name,
+            **k,
+            **fp,
+            "n_trades": ev["n_trades_full"],
+            "params": ev["params"],
+        })
+res = pd.DataFrame(results)
+display(res.drop(columns=["params"], errors="ignore").round(4))
+"""),
+    cell(False, """
+# Equal-weight portfolio of daily nets (research ledger)
+nets = []
+for sym, df in ohlcv.items():
+    p = best_params[sym]
+    if p is None:
+        continue
+    ev = eval_tema_macd_prop(df, p, is_end=is_end)
+    nets.append(ev["net"].rename(sym))
+if nets:
+    port = pd.concat(nets, axis=1).fillna(0.0).mean(axis=1)
+    from research.trend_lab.metrics import kpis_from_net
+    for label, sl in [("IS", port.loc[:is_end]), ("OOS", port.loc[cut:])]:
+        k = kpis_from_net(sl, ann=ANN_PROP)
+        fp = ftmo_proxy(sl)
+        print(label, {**k, **fp})
+"""),
+    cell(False, """
+out = Path("/opt/cursor/artifacts/tema_macd_prop_grid.json")
+payload = {
+    "protocol": {"is_end": str(is_end.date()), "oos_start": str(cut.date()), "max_dd_floor": MAX_DD_FLOOR},
+    "sources": sources,
+    "best_params": {k: asdict(v) for k, v in best_params.items() if v is not None},
+    "results": results,
+    "grid_top10": {k: v.head(10).to_dict(orient="records") for k, v in grid_rows.items() if not v.empty},
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Notes
+
+- **Overfitting:** Calmar on IS with many knobs — always read **OOS** and walk-forward before prop.
+- **ETF OHLC** is synthetic from close; BTC uses Vision OHLC.
+- **TradingView:** export best params per symbol into Pine alerts (TEMA stack + MACD hist); no auto parity with this notebook until scripted.
+- **vs trio Carver:** this is **discrete TEMA+MACD tickets**; Carver is **continuous vol book** — separate ledgers.
+"""),
+])

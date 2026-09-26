@@ -50,6 +50,24 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/05_tema_validation.ipynb` — frozen 4h TEMA equity, honest DD, daily-marked KPIs
 - `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
+- `research/notebooks/08_donchian_avwap_ranked_validation.ipynb` — Donchian + anchored VWAP + ranked spot book (H2/H4/H5 + placebo; research only)
+- `research/notebooks/09_catching_crypto_trends.ipynb` — **Final approach:** Zarattini et al. Combo (9 Donchian horizons) + vol target + monthly top-N rotation (SSRN 5209907 replica on Vision)
+- `research/notebooks/11_donchian_nb08_carver.ipynb` — **Focus:** notebook **08** dual Donchian (55/20) × Carver only (no AVWAP book, no SSRN Combo, no CS rank)
+- `research/trend_lab/run_donchian_nb08_carver.py` — CLI + JSON for notebook 11
+- `research/trend_lab/run_ftmo_swing_crypto.py` — mcap crypto list, Carver + Donchian, IS DD floor for FTMO Swing proxy
+- `research/trend_lab/run_ftmo_donchian_vwap_crypto.py` — **crypto-only** Donchian 55/20 + AVWAP + compression coil; ranked weekly or daily; FTMO proxy (no Carver; not merged with BTC/QQQ/GLD)
+- `research/notebooks/12_mentor_prop_hypothesis.ipynb` — mentor model: **ensemble/Donchian flag × Carver**, separate crypto vs trio ledgers, canary gross scale, FTMO dial + days-to-+10%
+- `research/trend_lab/run_mentor_prop_hypothesis.py` — CLI mirror of notebook 12 → `/opt/cursor/artifacts/mentor_prop_hypothesis.json`
+- `research/trend_lab/run_prop_eval_monte_carlo.py` — **prop rinse MC:** EV/day vs risk scale (IS bootstrap); eval sprint vs funded throttle documented in output JSON
+- `research/trend_lab/run_equity_momentum_rotation.py` — **S&P 500** monthly top-10 momentum vs **+SMA200** (survivorship-biased current members); 14-day eval cadence proxy
+- `research/notebooks/14_us100_canary_stock_momentum.ipynb` — **US100 (QQQ) canary** gates S&P top-10 momentum; `run_us100_canary_validation`
+- `docs/prop-sizing-ftmo-swing.md` — **FTMO Swing rules + prop sizing web synthesis**; vol-target layer in `prop_sizing.py`
+- `research/trend_lab/run_carver_cs_layer_study.py` — **CS layer on vs off** by bucket → `/opt/cursor/artifacts/carver_cs_layer_study.json`
+- `research/notebooks/15_tema_macd_prop_grid.ipynb` — **TEMA + MACD** brute-force **Calmar** grid (QQQ/GLD/BTC daily, prop 1×); `run_tema_macd_prop_grid.py`
+- `research/trend_lab/run_fti_donchian_carver_edge.py` — Khalsa FTI (indicatorPy) gates on Donchian/Carver/blend
+- `research/trend_lab/run_btc_qqq_gld_suite.py` — BTC/QQQ/GLD ranked + equal Carver, Donchian, FTI (`run_carver_book` for charts)
+- `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)
+- `research/trend_lab/run_donchian_carver_hybrid.py` — same books as notebook 10 (CLI + JSON artifact)
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
