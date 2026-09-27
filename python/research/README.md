@@ -64,6 +64,7 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `docs/prop-sizing-ftmo-swing.md` — **FTMO Swing rules + prop sizing web synthesis**; vol-target layer in `prop_sizing.py`
 - `research/trend_lab/run_carver_cs_layer_study.py` — **CS layer on vs off** by bucket → `/opt/cursor/artifacts/carver_cs_layer_study.json`
 - `research/notebooks/15_tema_macd_prop_grid.ipynb` — **TEMA + MACD** brute-force **Calmar** grid (QQQ/GLD/BTC daily, prop 1×); `run_tema_macd_prop_grid.py`
+- `research/notebooks/16_cs_prop_basket.ipynb` — **CS prop basket** (10/20 decorrelated ETFs + BTC); `run_cs_prop_basket.py`
 - `research/trend_lab/run_fti_donchian_carver_edge.py` — Khalsa FTI (indicatorPy) gates on Donchian/Carver/blend
 - `research/trend_lab/run_btc_qqq_gld_suite.py` — BTC/QQQ/GLD ranked + equal Carver, Donchian, FTI (`run_carver_book` for charts)
 - `research/notebooks/10_donchian_carver_cross_sectional.ipynb` — SSRN **Combo** Donchian × Carver + cross-sectional rank (mcap 20; optional)

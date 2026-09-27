@@ -2068,3 +2068,110 @@ print("wrote", out)
 - **vs trio Carver:** this is **discrete TEMA+MACD tickets**; Carver is **continuous vol book** — separate ledgers.
 """),
 ])
+
+write("16_cs_prop_basket.ipynb", [
+    cell(True, """# 16 — Cross-sectional prop basket (10 or 20 assets)
+
+**Research only.** Mentor-style **CS layer**: normalized price vs group (**R = PN − mean(PN)**),
+**3 horizons** (14 / 40 / 80 sessions) → **votes** (2-of-3 = long eligible),
+**rank by relative strength**, **equal weight** among top-N, **gross ≈ 68%**, **1/N name cap**.
+
+- **IS** fit diagnostics only; **OOS 2023→** for prop readout (max DD, worst daily).
+- **252d** ann for all names; BTC aligned to ETF session (see `mixed_panel` note).
+- Not live QMIE; execution = your prop API basket.
+
+**CLI:** `python -m research.trend_lab.run_cs_prop_basket --n 10`
+"""),
+    cell(False, SETUP),
+    cell(False, """
+import json
+from pathlib import Path
+
+import pandas as pd
+
+from research.trend_lab.protocol import SPLIT
+from research.trend_lab.cs_prop_basket import (
+    UNIVERSE_10,
+    UNIVERSE_20,
+    CsBasketParams,
+    avg_pairwise_corr,
+    evaluate_cs_basket,
+    load_cs_panel,
+    basket_net_returns,
+)
+from research.trend_lab.metrics import kpis_from_net
+from research.trend_lab.mentor_prop import ftmo_daily_stats
+
+N_ASSETS = 10  # or 20
+is_end = pd.Timestamp(SPLIT.is_end, tz="UTC")
+cut = pd.Timestamp(SPLIT.oos_start, tz="UTC")
+syms = UNIVERSE_10 if N_ASSETS == 10 else UNIVERSE_20
+params = CsBasketParams(
+    horizons=(14, 40, 80),
+    min_votes=2,
+    top_n=10 if N_ASSETS == 10 else 12,
+    gross_target=0.68,
+)
+"""),
+    cell(False, """
+panel, sources = load_cs_panel(syms)
+print("loaded", panel.shape, "sources:", sources)
+print("range", panel.index[0].date(), "→", panel.index[-1].date())
+corr_is = avg_pairwise_corr(panel.loc[:is_end], lookback=60)
+corr_oos = avg_pairwise_corr(panel.loc[cut:], lookback=60)
+print(f"avg pairwise corr 60d  IS={corr_is:.3f}  OOS={corr_oos:.3f}")
+display(panel.pct_change().iloc[-60:].corr().round(2))
+"""),
+    cell(False, """
+ev = evaluate_cs_basket(panel, params, is_end=is_end)
+w = ev["weights"]
+print("avg gross", round(ev["avg_gross"], 3), "avg names", round(ev["avg_names"], 2))
+for label, k in [("IS", ev["is"]), ("OOS", ev["oos"])]:
+    sl = ev["net"].loc[:is_end] if label == "IS" else ev["net"].loc[cut:]
+    fp = ftmo_daily_stats(sl)
+    row = {**k, **fp}
+    print(label, {kk: round(v, 4) if isinstance(v, float) else v for kk, v in row.items()})
+"""),
+    cell(False, """
+# Benchmark: equal-weight buy-and-hold same universe
+bh = panel.pct_change(fill_method=None).mean(axis=1).fillna(0.0)
+for label, sl in [("IS", bh.loc[:is_end]), ("OOS", bh.loc[cut:])]:
+    print(label, kpis_from_net(sl, ann=252))
+"""),
+    cell(False, """
+# Latest day snapshot (prop basket JSON)
+last = w.iloc[-1]
+held = last[last > 0].sort_values(ascending=False)
+print("Latest weights sum", round(float(last.sum()), 4))
+display(held.to_frame("weight"))
+"""),
+    cell(False, """
+out = Path("/opt/cursor/artifacts/cs_prop_basket.json")
+payload = {
+    "n_assets": N_ASSETS,
+    "universe": list(panel.columns),
+    "sources": sources,
+    "params": {
+        "horizons": params.horizons,
+        "min_votes": params.min_votes,
+        "top_n": params.top_n,
+        "gross_target": params.gross_target,
+    },
+    "corr": {"is_60d": corr_is, "oos_60d": corr_oos},
+    "is": ev["is"],
+    "oos": ev["oos"],
+    "ftmo_oos": ftmo_daily_stats(ev["net"].loc[cut:]),
+    "latest_weights": held.to_dict(),
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(payload, indent=2, default=float))
+print("wrote", out)
+"""),
+    cell(True, """## Readout
+
+- Lower **avg pairwise corr** → CS layer has more to rank; **>0.5** → bucket acts like one bet.
+- Tune **`min_votes`**, **`gross_target`**, **`top_n`** on **IS** only; confirm **OOS max_dd** vs −8% / −10% prop buffer.
+- **Do not** merge this book with trio Carver without separate vol budgets (252 ann; different logic).
+- **Automation:** export `latest_weights` daily to your prop JSON order batch (FTMO ~13:37 pattern).
+"""),
+])
