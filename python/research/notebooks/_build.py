@@ -684,3 +684,54 @@ print("median OOS daily held", float(pack["held_daily"].reindex(oos_idx).median(
 If corr(fc, ret) ≈ 0 and Carver-daily ≈ inv-vol, ship a **vol dial** (smaller tickets in high vol), not a forecast engine.
 """),
 ])
+
+write("08_time_series_momentum_top10_crypto.ipynb", [
+    cell(True, """# 08 — Time-series momentum (SIGN) on top-10 crypto
+
+Research only. Vendored upstream: [maxlamberti/time-series-momentum](https://github.com/maxlamberti/time-series-momentum) (`research/third_party/time_series_momentum/`).
+
+## Trading idea (SIGN baseline)
+
+| Piece | Rule |
+|---|---|
+| Direction | Long if rolling **365d** compound return ≥ 0, else short (long-only variant clips at 0) |
+| Size | `weight = sign × 0.15 / EWMσ(daily returns, span=60)` — same structure as `Backtest_Baseline.ipynb` (`SIGMA_TARGET=0.15`) |
+| Rebalance | **Monthly** (Lamberti month-end + forward-fill daily) or **daily** variant |
+| Execution | Hold `weight.shift(1)`; **3.25 bps** per unit turnover |
+| Book | Equal **1/10** notional per name in static top-10 USDT perps |
+
+**Not** the Deep Momentum Network (MLP): that needs TensorFlow + CLC futures data. QMIE runs SIGN on Binance Vision daily klines only.
+
+**Do not** retune live QMIE `W_*` from this notebook. TEMA 9/90/199 remains the scanner.
+"""),
+    cell(False, SETUP),
+    cell(False, """
+from research.trend_lab.run_tsmom_crypto import run
+from research.trend_lab.data import load_panel, coverage_table
+from research.trend_lab.tsmom import TOP10_CRYPTO
+import pandas as pd
+
+print("Top-10:", TOP10_CRYPTO)
+display(coverage_table(TOP10_CRYPTO, ("1d",)))
+summary = run(quick=False)
+"""),
+    cell(False, """
+import json
+from pathlib import Path
+from research.trend_lab.metrics import kpi_table
+
+books = summary["books"]
+tbl = kpi_table({k: v["book_oos"] for k, v in books.items()})
+print("OOS book KPIs (chronological holdout 2023→today):")
+display(tbl.round(3))
+print(json.dumps(summary["trading_rules"], indent=2))
+"""),
+    cell(True, """## Relation to QMIE
+
+- **Scanner (4h TEMA)** — discrete A/A+ tickets with ADX/RSI/HTF gates; not a continuous vol-target book.
+- **SIGN TSMOM** — slow macro trend filter; monthly turns; can stay short in bear legs (futures/perp analog).
+- **Carver book** (`07_tema_carver_sizing`) — continuous forecast sizing on a different feature set.
+
+Use SIGN as a **regime overlay** research input only until a second holdout confirms edge vs equal-weight spot.
+"""),
+])
