@@ -50,6 +50,14 @@ Notebooks (from `python/`, kernel with `python/` on `sys.path`):
 - `research/notebooks/05_tema_validation.ipynb` — frozen 4h TEMA equity, honest DD, daily-marked KPIs
 - `research/notebooks/06_tema_robustness_sensitivity.ipynb` — walk-forward, DF neighborhood, SL/TP and ADX/ATR grids (IS only)
 - `research/notebooks/07_tema_carver_sizing.ipynb` — Carver as a lagged sizer on frozen TEMA tickets
+- `research/notebooks/08_time_series_momentum_top10_crypto.ipynb` — Lamberti SIGN TSMOM on top-10 crypto daily
+
+Upstream reference (notebooks + utils, no CLC data): `research/third_party/time_series_momentum/`.
+Trading review: `docs/research/tsmom-crypto-review.md`.
+
+```bash
+/workspace/.venv/bin/python -m research.trend_lab.run_tsmom_crypto
+```
 
 Artifacts: `python/research/artifacts/` and `/opt/cursor/artifacts/`.
 
