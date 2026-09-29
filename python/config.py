@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     # Replay last N closed 1D bars on each radar pass so a missed coil-UP is not lost
     radar_setup_lookback_bars: int = 7
 
+    # ─── Donchian turtle (daily trend book; separate from coil expansion) ───
+    donchian_turtle_enabled: bool = True
+    donchian_turtle_dispatch: bool = True
+    donchian_entry_channel: int = 55
+    donchian_exit_channel: int = 20
+    donchian_use_vwap: bool = True
+
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4.1-mini"

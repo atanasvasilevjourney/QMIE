@@ -15,6 +15,7 @@ Endpoints:
   GET  /screens               combo review list (unique symbol, never orders)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
+  GET  /donchian/turtle       last Donchian turtle spot watchlist (55/20 + VWAP)
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
@@ -55,6 +56,7 @@ from notifiers import DiscordNotifier, Notifier, TelegramNotifier
 from scanner.allocator import AllocConfig
 from scanner.dispatcher import SignalDispatcher
 from scanner.exchange_clients import get_client
+from scanner.donchian_turtle import TurtleParams, empty_donchian_snapshot
 from scanner.radar import RadarConfig, empty_radar_snapshot
 from scanner.scheduler import ScannerScheduler
 from scanner.signal_engine import Weights
@@ -232,6 +234,13 @@ async def lifespan(app: FastAPI):
             min_coverage_pct=s.radar_min_coverage_pct,
             setup_lookback_bars=s.radar_setup_lookback_bars,
         ),
+        donchian_turtle_enabled=s.donchian_turtle_enabled,
+        donchian_turtle_dispatch=s.donchian_turtle_dispatch,
+        donchian_params=TurtleParams(
+            entry_channel=s.donchian_entry_channel,
+            exit_channel=s.donchian_exit_channel,
+            use_vwap_filter=s.donchian_use_vwap,
+        ),
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -404,6 +413,22 @@ async def get_radar() -> dict[str, Any]:
     out = snap.as_dict()
     out.setdefault("enabled", state.scheduler.radar_enabled)
     return out
+
+
+@app.get("/donchian/turtle")
+async def get_donchian_turtle() -> dict[str, Any]:
+    """Last daily Donchian turtle spot book (in-trend names + new entries).
+
+    Separate from QMIE-DailyExpansion coil breaks. Signal-only — never orders."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    snap = state.scheduler.last_donchian
+    if not snap:
+        return empty_donchian_snapshot(
+            enabled=state.scheduler.donchian_enabled,
+            note="no_pass_yet",
+        )
+    return snap
 
 
 @app.get("/screens")

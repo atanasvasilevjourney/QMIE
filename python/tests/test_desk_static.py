@@ -120,4 +120,5 @@ def test_vercel_json_proxies_health_and_radar_to_render():
     sources = {row["source"]: row["destination"] for row in cfg["rewrites"]}
     assert sources["/health"] == "https://qmie.onrender.com/health"
     assert sources["/radar"] == "https://qmie.onrender.com/radar"
+    assert sources["/donchian/turtle"] == "https://qmie.onrender.com/donchian/turtle"
     assert sources["/(.*)"] == "/index.html"

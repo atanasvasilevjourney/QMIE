@@ -24,6 +24,7 @@ from models import AssetClass, EventType, Grade, Side, TVSignal
 from notifiers.base import Notifier
 from security import IdempotencyStore
 
+from .donchian_turtle import STRATEGY_ID as DONCHIAN_TURTLE_STRATEGY
 from .signal_engine import ScanResult
 
 logger = logging.getLogger(__name__)
@@ -35,10 +36,14 @@ _GRADE_RANK = {Grade.A_PLUS: 4, Grade.A: 3, Grade.B: 2, Grade.C: 1, Grade.REJECT
 def _is_radar_spot(sig: TVSignal) -> bool:
     """1D radar expansions / color-flips are the spot book; TEMA is leveraged."""
     setup = getattr(sig, "setup_type", None)
-    if setup in ("expansion", "breakout"):
+    if setup in ("expansion", "breakout", "turtle"):
         return True
     strat = (sig.strategy or "").lower()
-    return "dailyexpansion" in strat or "dailybreakout" in strat
+    return (
+        "dailyexpansion" in strat
+        or "dailybreakout" in strat
+        or "donchianturtle" in strat
+    )
 
 
 def _to_grade(s: str) -> Grade:
@@ -90,6 +95,39 @@ def trend_start_to_tvsignal(item: dict) -> TVSignal:
         daily_trend="bearish" if short else "bullish",
         setup_type="expansion" if is_expansion else "breakout",
         action="sell" if short else "buy",
+    )
+
+
+def donchian_turtle_to_tvsignal(item: dict) -> TVSignal:
+    """Map a daily Donchian turtle watch/entry row to inbound TVSignal."""
+    bar_time = item.get("bar_time")
+    bar_ms = None
+    if bar_time is not None:
+        ts = pd.Timestamp(bar_time)
+        if not pd.isna(ts):
+            bar_ms = int(ts.value // 1_000_000)
+    sl = item.get("exit_low")
+    if sl is not None:
+        try:
+            sl = float(sl)
+        except (TypeError, ValueError):
+            sl = None
+    return TVSignal(
+        strategy=DONCHIAN_TURTLE_STRATEGY,
+        event=EventType.ENTRY,
+        symbol=str(item.get("symbol") or ""),
+        asset_class=AssetClass.CRYPTO,
+        timeframe="1d",
+        side=Side.BUY,
+        signal_price=item.get("price"),
+        stop_loss=sl,
+        timestamp=str(bar_time) if bar_time else None,
+        bar_time=bar_ms,
+        reason=str(item.get("reason") or "donchian_breakout_long"),
+        trend="bullish",
+        daily_trend="bullish",
+        setup_type="turtle",
+        action="buy",
     )
 
 

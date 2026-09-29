@@ -168,9 +168,37 @@ export type JournalStats = {
   oos_edge?: string
 }
 
+export type DonchianWatchRow = {
+  symbol: string
+  side?: string
+  price?: number
+  entry_high?: number | null
+  exit_low?: number | null
+  vwap?: number | null
+  strength?: number
+  bar_time?: string
+  is_new_entry?: boolean
+  reason?: string
+  setup_type?: string
+}
+
+export type DonchianTurtleSnapshot = {
+  enabled?: boolean
+  as_of?: string | null
+  strategy?: string
+  timeframe?: string
+  requested?: number
+  in_trend?: number
+  new_entries?: number
+  watchlist?: DonchianWatchRow[]
+  note?: string
+  places_orders?: boolean
+}
+
 export type DeskTab =
   | 'orbit'
   | 'ops'
+  | 'trend'
   | 'screens'
   | 'charts'
   | 'book'
