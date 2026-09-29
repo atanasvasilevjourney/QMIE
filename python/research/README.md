@@ -32,6 +32,25 @@ Plus **Carver** continuous vol-targeted sizing vs the binary ensemble, a
 blend, an ADX chop gate, a causal DD circuit breaker, and a ranked top-N
 spot book (lookback ROC, cluster_max=1).
 
+## Donchian turtle (daily, top-100 universe)
+
+Separate from TEMA and from radar coil expansion (`QMIE-DailyExpansion`).
+
+| Piece | Path |
+|---|---|
+| Signal math | `scanner/donchian_turtle.py` |
+| Portfolio backtest + CLI | `backtest/donchian_turtle.py` |
+| Notebook | `research/notebooks/08_donchian_turtle_validation.ipynb` |
+
+```bash
+cd /workspace/python
+python -m backtest.donchian_turtle --start 2024-01-01 --split 2025-01-01 --top-universe 100
+pytest tests/test_donchian_turtle.py -v
+```
+
+Does not dispatch live alerts until a frozen OOS write-up exists (same
+governance as daily expansion).
+
 ## Run
 
 ```bash
