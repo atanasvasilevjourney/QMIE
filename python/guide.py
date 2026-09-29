@@ -12,8 +12,8 @@ def trading_guide() -> dict[str, Any]:
     return {
         "title": "QMIE Trading Guide",
         "places_orders": False,
-        "version": "1.5",
-        "headline": "Signal-only desk. Radar is the spot book. TEMA is the leveraged add. You click size yourself.",
+        "version": "1.6",
+        "headline": "Signal-only desk. Radar + Trend turtle are spot books. TEMA is the leveraged add.",
         "sections": [
             {
                 "id": "what",
@@ -40,6 +40,22 @@ def trading_guide() -> dict[str, Any]:
                     "Use the printed SL / TP; do not invent levels",
                     "If price already ran far from signal_price, skip the chase",
                     "OPS TEMA BUY is A/A+ BUY only — leverage, not spot",
+                ],
+            },
+            {
+                "id": "turtle",
+                "title": "Donchian turtle (Trend tab)",
+                "body": (
+                    "Classic 55/20 Donchian breakout on daily bars with optional "
+                    "VWAP filter. Strategy id QMIE-DonchianTurtle — separate from "
+                    "GREY coil QMIE-DailyExpansion. Stop hint is the 20-day channel "
+                    "low (exit_low), not TEMA ATR. Spot book only; manual entry."
+                ),
+                "rules": [
+                    "Trend tab = GET /donchian/turtle watchlist",
+                    "New-entry alerts fire once per symbol per breakout day",
+                    "In-trend names stay listed without re-firing",
+                    "Backtest before sizing — research harness is not live edge",
                 ],
             },
             {

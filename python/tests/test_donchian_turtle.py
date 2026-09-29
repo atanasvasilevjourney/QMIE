@@ -5,7 +5,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scanner.donchian_turtle import TurtleParams, donchian_turtle_frame, min_warmup_bars
+from scanner.donchian_turtle import (
+    TurtleParams,
+    build_donchian_snapshot,
+    donchian_turtle_frame,
+    donchian_watch_from_df,
+    min_warmup_bars,
+)
 
 
 def _ohlcv(n: int = 120, *, trend: float = 0.002) -> pd.DataFrame:
@@ -56,6 +62,34 @@ def test_breakout_after_flat_base():
 def test_min_warmup_bars():
     p = TurtleParams(entry_channel=55, exit_channel=20, vwap_window=20)
     assert min_warmup_bars(p) >= 58
+
+
+def test_watch_row_flags_new_entry():
+    df = _ohlcv(70, trend=0.0)
+    df.loc[df.index[-1], "close"] = 200.0
+    df.loc[df.index[-1], "high"] = 205.0
+    row = donchian_watch_from_df(
+        df, "TESTUSDT", TurtleParams(entry_channel=20, exit_channel=10, use_vwap_filter=False)
+    )
+    assert row is not None
+    assert row["symbol"] == "TESTUSDT"
+    assert row["is_new_entry"] is True
+    assert row["setup_type"] == "turtle"
+
+
+def test_build_snapshot_sorts_by_strength():
+    snap = build_donchian_snapshot(
+        [
+            {"symbol": "A", "strength": 0.01, "is_new_entry": False},
+            {"symbol": "B", "strength": 0.05, "is_new_entry": True},
+        ],
+        as_of="2026-01-01",
+        enabled=True,
+        requested=10,
+    )
+    assert snap["watchlist"][0]["symbol"] == "B"
+    assert snap["new_entries"] == 1
+    assert snap["strategy"] == "QMIE-DonchianTurtle"
 
 
 def test_portfolio_backtest_runs_on_tiny_universe():

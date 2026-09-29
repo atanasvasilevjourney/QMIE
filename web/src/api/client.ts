@@ -7,6 +7,7 @@ import type {
   JournalFill,
   JournalStats,
   RadarSnapshot,
+  DonchianTurtleSnapshot,
   SignalRow,
   AnalysisCard,
   TradingGuide,
@@ -88,6 +89,7 @@ async function sendJson<T>(
 export const api = {
   health: () => getJson<Health>('/health'),
   radar: () => getJson<RadarSnapshot>('/radar'),
+  donchianTurtle: () => getJson<DonchianTurtleSnapshot>('/donchian/turtle'),
   radarOnce: (notify = false) =>
     sendJson<{ ok: boolean; queued?: boolean; already_running?: boolean }>(
       `/radar/once?notify=${notify}`,

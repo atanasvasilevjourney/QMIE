@@ -8,6 +8,7 @@ import type {
   JournalFill,
   JournalStats,
   RadarSnapshot,
+  DonchianTurtleSnapshot,
   SignalRow,
   PaperSnapshot,
   TradingGuide,
@@ -16,6 +17,7 @@ import type {
 type DeskState = {
   health: Health | null
   radar: RadarSnapshot | null
+  donchian: DonchianTurtleSnapshot | null
   signals: SignalRow[]
   allocation: AllocationPlan | null
   fills: JournalFill[]
@@ -33,6 +35,7 @@ type DeskState = {
 const empty: DeskState = {
   health: null,
   radar: null,
+  donchian: null,
   signals: [],
   allocation: null,
   fills: [],
@@ -64,9 +67,11 @@ export function useQmieDesk(pollMs = 12000) {
   const [state, setState] = useState<DeskState>(empty)
 
   const refresh = useCallback(async () => {
-    const [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper] = await Promise.all([
+    const [health, radar, donchian, signals, allocation, fills, stats, universe, briefing, desk, guide, paper] =
+      await Promise.all([
       settled(api.health()),
       settled(api.radar()),
+      settled(api.donchianTurtle()),
       settled(api.signals(80)),
       settled(api.allocation()),
       settled(api.journal(80)),
@@ -79,7 +84,7 @@ export function useQmieDesk(pollMs = 12000) {
     ])
 
     const failures = [...new Set(
-      [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper]
+      [health, radar, donchian, signals, allocation, fills, stats, universe, briefing, desk, guide, paper]
         .filter((r) => !r.ok)
         .map((r) => (r as { ok: false; error: string }).error),
     )]
@@ -87,6 +92,7 @@ export function useQmieDesk(pollMs = 12000) {
     setState((prev) => ({
       health: health.ok ? health.value : prev.health,
       radar: radar.ok ? radar.value : prev.radar,
+      donchian: donchian.ok ? donchian.value : prev.donchian,
       signals: signals.ok ? signals.value : prev.signals,
       allocation: allocation.ok ? allocation.value : prev.allocation,
       fills: fills.ok ? fills.value : prev.fills,

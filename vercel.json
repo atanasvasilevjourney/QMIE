@@ -11,6 +11,8 @@
     { "source": "/allocation", "destination": "https://qmie.onrender.com/allocation" },
     { "source": "/radar", "destination": "https://qmie.onrender.com/radar" },
     { "source": "/radar/:path*", "destination": "https://qmie.onrender.com/radar/:path*" },
+    { "source": "/donchian/turtle", "destination": "https://qmie.onrender.com/donchian/turtle" },
+    { "source": "/donchian/:path*", "destination": "https://qmie.onrender.com/donchian/:path*" },
     { "source": "/screens", "destination": "https://qmie.onrender.com/screens" },
     { "source": "/guide", "destination": "https://qmie.onrender.com/guide" },
     { "source": "/paper", "destination": "https://qmie.onrender.com/paper" },

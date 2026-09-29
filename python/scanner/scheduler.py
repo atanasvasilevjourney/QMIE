@@ -27,7 +27,13 @@ from typing import Any, Optional
 from models import Side
 
 from .allocator import AllocConfig, AllocationPlan, allocate
-from .dispatcher import SignalDispatcher, trend_start_to_tvsignal
+from .dispatcher import SignalDispatcher, donchian_turtle_to_tvsignal, trend_start_to_tvsignal
+from .donchian_turtle import (
+    TurtleParams,
+    build_donchian_snapshot,
+    donchian_watch_from_df,
+    empty_donchian_snapshot,
+)
 from .exchange_clients import ExchangeClient
 from .radar import (
     RadarConfig,
@@ -88,6 +94,9 @@ class ScannerScheduler:
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
         radar_dispatch_trend_start: bool = True,
+        donchian_turtle_enabled: bool = True,
+        donchian_turtle_dispatch: bool = True,
+        donchian_params: Optional[TurtleParams] = None,
     ):
         self.client = client
         self.universe = universe
@@ -116,6 +125,12 @@ class ScannerScheduler:
             self.radar_enabled = False
         self.last_radar: Optional[RadarSnapshot] = empty_radar_snapshot(
             enabled=self.radar_enabled, note="no_radar_yet",
+        )
+        self.donchian_enabled = donchian_turtle_enabled
+        self.donchian_dispatch = donchian_turtle_dispatch
+        self.donchian_params = donchian_params or TurtleParams()
+        self.last_donchian: dict[str, Any] = empty_donchian_snapshot(
+            enabled=self.donchian_enabled,
         )
         # Seed to "today's" boundary so unit tests that tick without start()
         # do not fire a radar pass. start() runs a silent warm-up.
@@ -438,24 +453,28 @@ class ScannerScheduler:
             )
             t0 = time.time()
 
-            async def one(sym: str) -> tuple[str, Optional[RadarRow], list[dict[str, Any]], Optional[str]]:
+            async def one(sym: str) -> tuple[str, Optional[RadarRow], list[dict[str, Any]], Optional[dict], Optional[str]]:
                 async with self.sem:
                     try:
                         df = await self.client.fetch_klines(
                             sym, "1d", limit=cfg.kline_limit,
                         )
                         row, setups = classify_with_recent_setups(df, sym, cfg=cfg)
+                        watch = None
+                        if self.donchian_enabled and row is not None:
+                            watch = donchian_watch_from_df(df, sym, self.donchian_params)
                         if row is None:
-                            return sym, None, [], "too_short_or_empty"
-                        return sym, row, setups, None
+                            return sym, None, [], watch, "too_short_or_empty"
+                        return sym, row, setups, watch, None
                     except Exception as e:
-                        return sym, None, [], str(e)
+                        return sym, None, [], None, str(e)
 
             gathered = await asyncio.gather(
                 *(one(s) for s in symbols), return_exceptions=True,
             )
             rows: list[RadarRow] = []
             replay: list[dict[str, Any]] = []
+            turtle_watch: list[dict[str, Any]] = []
             failed: list[str] = []
             for item in gathered:
                 if isinstance(item, Exception):
@@ -463,10 +482,12 @@ class ScannerScheduler:
                     self.stats["radar_errors"] += 1
                     self.stats["errors"] += 1
                     continue
-                sym, row, setups, err = item
+                sym, row, setups, watch, err = item
                 if row is not None:
                     rows.append(row)
                     replay.extend(setups)
+                    if watch is not None:
+                        turtle_watch.append(watch)
                 else:
                     failed.append(sym)
                     self.stats["radar_errors"] += 1
@@ -491,6 +512,12 @@ class ScannerScheduler:
             )
             overlay_recent_expansions(snap, replay)
             self.last_radar = snap
+            self.last_donchian = build_donchian_snapshot(
+                turtle_watch,
+                as_of=snap.as_of,
+                enabled=self.donchian_enabled,
+                requested=snap.requested,
+            )
             self.stats["radar_passes"] += 1
             self.stats["last_radar_at"] = int(time.time())
             if mark_seen:
@@ -507,6 +534,9 @@ class ScannerScheduler:
 
             if self.radar_dispatch_trend_start:
                 await self._dispatch_trend_starts(snap, replay=replay)
+
+            if self.donchian_dispatch:
+                await self._dispatch_donchian_turtle(turtle_watch)
 
             coverage = (
                 100.0 * snap.succeeded / snap.requested if snap.requested else 0.0
@@ -573,6 +603,29 @@ class ScannerScheduler:
                 await paper.mark_with_client(self.client)
             except Exception:
                 logger.exception("paper mark after radar failed (non-fatal)")
+        return n
+
+    async def _dispatch_donchian_turtle(self, watch_rows: list[dict[str, Any]]) -> int:
+        """Fan out first-day Donchian turtle long entries (spot book)."""
+        n = 0
+        for item in watch_rows:
+            if not item.get("is_new_entry"):
+                continue
+            try:
+                sig = donchian_turtle_to_tvsignal(item)
+                ok = await self.dispatcher.dispatch_inbound(sig)
+                if ok:
+                    n += 1
+            except Exception:
+                logger.exception("donchian turtle dispatch failed for %s", item.get("symbol"))
+        if n:
+            logger.info("Donchian turtle dispatched %d new daily entry setup(s)", n)
+        paper = getattr(self.dispatcher, "paper", None)
+        if n and paper is not None and getattr(paper, "enabled", False):
+            try:
+                await paper.mark_with_client(self.client)
+            except Exception:
+                logger.exception("paper mark after donchian failed (non-fatal)")
         return n
 
     async def _notify_rotation_text(self, plan: AllocationPlan) -> None:

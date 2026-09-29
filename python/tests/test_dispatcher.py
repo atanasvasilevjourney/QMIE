@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 from models import Grade
-from scanner.dispatcher import SignalDispatcher, trend_start_to_tvsignal, tv_chart_url
+from scanner.dispatcher import SignalDispatcher, donchian_turtle_to_tvsignal, trend_start_to_tvsignal, tv_chart_url
 from scanner.signal_engine import ScanResult
 
 
@@ -479,3 +479,45 @@ class TestDailyBreakoutInbound:
         assert "BINANCE:ETHUSDT" in received[0].chart_url
         # duplicate bar is dropped
         assert await dispatcher.dispatch_inbound(sig) is False
+
+
+class TestDonchianTurtleInbound:
+    def test_donchian_maps_to_spot_turtle(self):
+        sig = donchian_turtle_to_tvsignal({
+            "symbol": "BTCUSDT",
+            "price": 70000.0,
+            "exit_low": 65000.0,
+            "bar_time": "2026-09-01T00:00:00+00:00",
+            "reason": "donchian_breakout_long",
+        })
+        assert sig.strategy == "QMIE-DonchianTurtle"
+        assert sig.setup_type == "turtle"
+        assert sig.side.value == "BUY"
+        assert sig.stop_loss == 65000.0
+        assert sig.timeframe == "1d"
+
+    @pytest.mark.asyncio
+    async def test_donchian_chart_is_spot_not_perp(self):
+        received: list = []
+
+        class _Cap:
+            enabled = True
+
+            async def send_signal(self, sig, _):
+                received.append(sig)
+
+        dispatcher = SignalDispatcher(
+            db=_DummyDB(),
+            notifiers=[_Cap()],
+            idem=_InMemIdem(),
+            min_alert_grade=Grade.A,
+        )
+        sig = donchian_turtle_to_tvsignal({
+            "symbol": "BTCUSDT",
+            "price": 70000.0,
+            "exit_low": 65000.0,
+            "bar_time": "2026-09-01T00:00:00+00:00",
+        })
+        assert await dispatcher.dispatch_inbound(sig) is True
+        assert "BTCUSDT.P" not in received[0].chart_url
+        assert "BINANCE:BTCUSDT" in received[0].chart_url
