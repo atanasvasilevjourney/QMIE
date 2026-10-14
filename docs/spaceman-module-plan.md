@@ -158,6 +158,7 @@ No tick TPO in v1; label UI **“VA lite (30m bars)”** to set expectations.
 | `GET /flow/screener` | Ranked rows + join latest TEMA grade (exists; refactor to snapshots) |
 | `GET /flow/{symbol}` | Time series last K snapshots + VP levels |
 | `GET /flow/leaderboard?view=` | Presets: `oi_up`, `cvd_up`, `divergence_bull`, `crowded_long` |
+| `GET /flow/ideas/{symbol}` | Rule-based ideas (+ optional LLM Take on demand) |
 | Signal payload | `flow_context` on stored alert + Discord field |
 
 Query params: `timeframe=4h|1h`, `limit`, `view`.
@@ -181,6 +182,40 @@ Consolidate Spaceman into **Flow** as home (already default tab), with sub-views
 - Orbis WebGL stays dark; Flow panels follow theme.
 - IBM Plex Mono for numbers; no 10px table text.
 - Empty state: one dashed line + data_source hint if geo-blocked.
+
+### Symbol review + trade ideas (bottom panel)
+
+When the user **selects a row** in any screener, a **sticky bottom sheet** (or split
+pane) opens — “Review: BTCUSDT” — with two blocks:
+
+1. **Context strip** — mini sparklines (OI, CVD, price), VP/TPO levels, funding,
+   active screener tags (`OI↑`, `CVD diverging`, `Below VAL`, …).
+2. **Trade ideas** — ranked **suggestions**, not orders (`places_orders: false` everywhere).
+
+**Idea card schema (v1, rule-based):**
+
+| Field | Example |
+|-------|---------|
+| `bias` | `LONG` / `SHORT` / `NEUTRAL` / `WAIT` |
+| `setup` | `OI build + aggressive buy` |
+| `thesis` | One sentence from template + live numbers |
+| `invalidation` | Close below VAL / CVD slope flips negative |
+| `levels` | Entry zone (last 4h close or POC), SL (structure or ATR×k), TP1/TP2 (VAH/POC/R multiples) |
+| `confidence` | `high` / `medium` / `low` from rule score |
+| `actions` | `Log manual fill` · `Open chart` · `Copy TV link` — **no** “Place order” |
+
+**Rule engine (pure flow, no TEMA required):**
+
+- Map OI quadrant + CVD slope + location vs POC/VA → template catalog (e.g.
+  “Breakout long: price above VAH, OI rising, CVD positive”).
+- Conflicting signals → top idea is **WAIT** with bullet list of what would change bias.
+- Optional **on-demand** `GET /flow/ideas/{symbol}` → may call OpenAI like
+  `GET /agents/analysis/{id}` but input is **flow snapshot only**; levels still
+  stamped from rule/ATR geometry after LLM text. Empty `OPENAI_API_KEY` → templates only.
+- Briefing poll and screener table refresh **must not** call OpenAI.
+
+**Compliance copy (always visible):** “Ideas are for manual review only. QMIE does not
+execute or size positions.”
 
 ### Spaceman-specific chrome
 
