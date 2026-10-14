@@ -10,6 +10,19 @@ no tick streaming into `compute_signal`, no `W_*` changes without frozen-OOS pro
 
 **Spaceman = pure flow / positioning trading module — not merged with TEMA.**
 
+**Primary UX = screeners** (each view is a ranked table + filters), not one mixed Ops table:
+
+| Screener | What it ranks | Core fields |
+|----------|----------------|-------------|
+| **OI** | Crowding / squeeze fuel | OI, OI Δ4h/1d, OI Δ vs price quadrant |
+| **CVD** | Aggressive buy/sell | Bar Δ, CVD slope, optional divergence vs price |
+| **Volume profile** | Where volume traded | POC, VAH, VAL, distance from close |
+| **TPO / auction** | Time at price (session) | POC, single prints, poor high/low, IB (lite) |
+| **Funding** | Carry stretch | Funding rate, OI (context) |
+| **Combo** | Rotation / “what’s moving” | Union or weighted **flow_score** across the above |
+
+All screeners share: same universe, bar-close discipline, `data_source` badge, TV deep link, optional `source=flow` journal — **never orders**.
+
 - **Space Observer (+ Ops TEMA tables):** swing edge from the 7-component stack + Pine.
 - **Spaceman:** ranks and alerts from **OI, CVD, funding, VA** only; optional
   “also graded A/A+” is a **cross-link**, not a column required for action.
