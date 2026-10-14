@@ -6,6 +6,15 @@ no tick streaming into `compute_signal`, no `W_*` changes without frozen-OOS pro
 
 **As of:** persona gate + `GET /flow/screener` v1 (OI, bar-Δ, CVD slope, funding table).
 
+### Product fork (chosen direction)
+
+**Spaceman = pure flow / positioning trading module — not merged with TEMA.**
+
+- **Space Observer (+ Ops TEMA tables):** swing edge from the 7-component stack + Pine.
+- **Spaceman:** ranks and alerts from **OI, CVD, funding, VA** only; optional
+  “also graded A/A+” is a **cross-link**, not a column required for action.
+- **“Pure trading” here still means manual entry** — no broker, no auto size.
+
 ---
 
 ## 1. Product definition
@@ -22,9 +31,10 @@ TradingView — not bot execution.
 |-----|-------------------|
 | See **who is crowded** | OI level + Δ vs recent baseline, per symbol |
 | See **who is being bought/sold aggressively** | Bar-CVD (later: divergence vs price) |
-| **Combine** with existing edge | TEMA grade + flow rank on one screener |
-| **Act** with context | Alert / desk row shows flow chips + TV link |
-| **Review** | Journal + optional flow snapshot at entry time |
+| **Rank setups on flow alone** | Composite **Flow rank** (e.g. OI Δ + CVD slope + funding z-score) |
+| **Act** with context | **Flow alerts** (FLOW-LONG / FLOW-SHORT / CROWDED) + TV deep link |
+| **Review** | Journal tagged `source=flow` + snapshot at alert time |
+| *Optional* | “TEMA overlap” chip if same symbol also has recent A/A+ (read-only) |
 
 ### Non-goals
 
@@ -38,31 +48,23 @@ TradingView — not bot execution.
 ## 2. Architecture (target)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     ScannerScheduler (unchanged)                 │
-│  closed 4h/1h → SignalEngine → Dispatcher → SQLite signals      │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ same signals
+┌──────────────────────────────┐     ┌──────────────────────────────┐
+│   TEMA path (Observer/Ops)   │     │   Flow path (Spaceman)       │
+│ ScannerScheduler → Engine    │     │ FlowScheduler (bar-close)    │
+│ → signals (A/A+/…)           │     │ → flow_snapshots + flow_alerts│
+└──────────────┬───────────────┘     └──────────────┬───────────────┘
+               │                                    │
+               │         shared only:               │
+               │    universe, REST client, journal, │
+               │    notifiers, paper (tagged)       │
+               └────────────────┬───────────────────┘
                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              FlowScheduler (new, bar-close aligned)              │
-│  after TEMA pass OR on 1h close: snapshot flow per symbol      │
-│  → SQLite flow_snapshots (symbol, tf, bar_ts, oi, delta, …)     │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
- GET /flow/screener      GET /flow/{symbol}     attach on dispatch
- (ranked table)          (detail + series)       flow_context JSON
-        │                       │
-        └───────────┬───────────┘
-                    ▼
-            Spaceman desk (Flow tab + Ops overlays)
-            Agents checklist (WATCH rules, not REJECT by default)
+                      Desk (persona picks default tab)
 ```
 
-**Principle:** Flow is **parallel overlay**. TEMA remains source of grade; flow
-**ranks, enriches, and optionally gates** via config (one knob at a time in review).
+**Principle:** Two **independent signal products** in one desk. Flow does **not**
+call `compute_signal`, does **not** reuse `W_*`, and does **not** require TEMA grade
+to fire a Flow alert. Cross-reference is optional UI.
 
 ---
 
@@ -204,13 +206,13 @@ Briefing poll **must not** call OpenAI; flow fields come from SQLite snapshot on
 
 ## 8. Rollout phases (recommended order)
 
-### Sprint 1 — Cache & correctness
+### Sprint 1 — Cache & correctness (pure flow)
 
 - [ ] `flow_snapshots` table + migration in `db.py`
-- [ ] FlowScheduler hook on 4h bar close (batch write)
-- [ ] Refactor `/flow/screener` to read DB; join `recent_signals` grade
+- [ ] FlowScheduler on 4h (and optional 1h) bar close — **no SignalEngine dependency**
+- [ ] Refactor `/flow/screener` to read DB; sort by **flow_score** (document formula v1)
 - [ ] OKX OI Δ if endpoint supports; document gaps
-- [ ] Flow tab: sort columns, data_source banner, refresh on Sync
+- [ ] Flow tab: no TEMA grade column by default; optional “TEMA overlap” toggle
 
 ### Sprint 2 — Leaderboard intelligence
 
@@ -250,16 +252,30 @@ Briefing poll **must not** call OpenAI; flow fields come from SQLite snapshot on
 
 ---
 
-## 10. Open decisions (need product call)
+## 10. Flow score v1 (pure, not TEMA)
+
+Example **rank-only** composite (tune one weight at a time in review):
+
+- Normalize OI Δ4h, CVD slope, funding extremity per universe (z-score or percentile).
+- **flow_score** = weighted sum → sort screener; map to labels:
+  - `CROWDED_LONG` / `CROWDED_SHORT` (OI Δ + price direction)
+  - `AGGRESSIVE_BUY` / `AGGRESSIVE_SELL` (CVD slope)
+  - `FUNDING_STRETCHED` (optional filter, not hard reject)
+
+Alerts: new table `flow_alerts` + dispatcher fan-out with dedup
+`symbol|flow|kind|bar_ts`. Journal rows use `source=flow`, not TEMA `signal_id`
+unless user links manually.
+
+## 11. Open decisions (need product call)
 
 1. **Default Spaceman tf:** 4h only vs 4h table + 1h “pulse” sub-tab?
-2. **Alerts:** flow-only Discord channel or same webhook with tag?
+2. **Alerts:** flow-only Discord channel or same webhook with `[FLOW]` tag?
 3. **VP session:** UTC day vs rolling 24h vs exchange maintenance window?
-4. **Gate hardness:** WATCH-only forever vs optional suppress like funding?
+4. **Spaceman Ops tab:** hide TEMA-heavy Ops default for persona, or keep Ops as “advanced”?
 
 ---
 
-## 11. References in repo
+## 12. References in repo
 
 - Persona / nav: `web/src/deskNav.ts`, `web/src/hooks/usePersona.ts`
 - Flow v1: `python/scanner/flow_metrics.py`, `GET /flow/screener` in `main.py`
