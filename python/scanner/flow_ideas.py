@@ -202,7 +202,10 @@ def flow_ideas(row: dict[str, Any]) -> list[dict[str, Any]]:
         key=lambda idea: {"high": 0, "medium": 1, "low": 2}.get(str(idea["confidence"]), 3),
     )
     # Prefer a directional idea over WAIT when both exist at the same confidence.
-    ranked.sort(key=lambda idea: (idea["bias"] == "WAIT", {"high": 0, "medium": 1, "low": 2}[idea["confidence"]]))
+    ranked.sort(key=lambda idea: (
+        idea["bias"] == "WAIT",
+        {"high": 0, "medium": 1, "low": 2}.get(str(idea["confidence"]), 3),
+    ))
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for idea in ranked:

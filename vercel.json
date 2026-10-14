@@ -19,6 +19,8 @@
     { "source": "/journal", "destination": "https://qmie.onrender.com/journal" },
     { "source": "/journal/:path*", "destination": "https://qmie.onrender.com/journal/:path*" },
     { "source": "/agents/:path*", "destination": "https://qmie.onrender.com/agents/:path*" },
+    { "source": "/flow", "destination": "https://qmie.onrender.com/flow" },
+    { "source": "/flow/:path*", "destination": "https://qmie.onrender.com/flow/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
