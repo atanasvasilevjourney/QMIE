@@ -379,10 +379,12 @@ function UniverseFX() {
 export function Scene3D({
   radar,
   allowZoom = false,
+  onEnterMission,
 }: {
   radar: RadarSnapshot | null
   signalCount?: number
   allowZoom?: boolean
+  onEnterMission?: () => void
 }) {
   const rawGreen = radar?.green ?? 0
   const rawGrey = radar?.grey ?? 0
@@ -505,6 +507,21 @@ export function Scene3D({
           <p className="hud-meta">Transmission · ACES · fog</p>
         </div>
       </div>
+
+      {onEnterMission ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-4">
+          <button
+            type="button"
+            onClick={onEnterMission}
+            className="persona-enter-btn group pointer-events-auto"
+            aria-label="Open mission deck and choose Space Observer or Spaceman"
+          >
+            <span className="persona-enter-ring" aria-hidden="true" />
+            <span className="font-display text-lg font-bold text-[#e8f4ff] sm:text-xl">Enter mission deck</span>
+            <span className="mt-1 block font-mono text-xs text-[#9eb8c8]">Choose Observer or Spaceman</span>
+          </button>
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="flex items-end justify-between gap-3">

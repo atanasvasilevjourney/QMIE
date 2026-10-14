@@ -1,19 +1,10 @@
+import { navForPersona } from '../deskNav'
+import type { DeskPersona } from '../hooks/usePersona'
 import type { DeskTab, DeskTheme } from '../types'
-
-const TABS: { id: DeskTab; label: string }[] = [
-  { id: 'orbit', label: 'Orbit' },
-  { id: 'ops', label: 'Ops' },
-  { id: 'screens', label: 'Screens' },
-  { id: 'charts', label: 'Charts' },
-  { id: 'guide', label: 'Guide' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'book', label: 'Book' },
-  { id: 'journal', label: 'Journal' },
-  { id: 'flows', label: 'Flows' },
-]
 
 export function TopBar({
   tab,
+  persona,
   onTab,
   healthOk,
   uptime,
@@ -25,9 +16,12 @@ export function TopBar({
   busy,
   theme,
   onTheme,
+  onSwitchCrew,
 }: {
   tab: DeskTab
+  persona: DeskPersona | null
   onTab: (t: DeskTab) => void
+  onSwitchCrew?: () => void
   healthOk: boolean
   uptime: number
   source?: string
@@ -40,6 +34,7 @@ export function TopBar({
   onTheme: () => void
 }) {
   const light = theme === 'light'
+  const tabs = navForPersona(persona)
   return (
     <header className="relative z-20 border-b border-line bg-void/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1920px] flex-col gap-3 px-4 py-3 sm:px-6">
@@ -52,7 +47,12 @@ export function TopBar({
               <h1 className="font-display text-lg font-bold tracking-tight text-ink">
                 QMIE Desk
               </h1>
-              <p className="text-sm text-muted">Signal-only · manual entry · never orders</p>
+              <p className="text-sm text-muted">
+                Signal-only · manual entry · never orders
+                {persona ? (
+                  <span className="text-cyan"> · {persona === 'observer' ? 'Space Observer' : 'Spaceman'}</span>
+                ) : null}
+              </p>
             </div>
           </div>
 
@@ -79,11 +79,16 @@ export function TopBar({
             <button type="button" disabled={busy} onClick={onPaper} className="btn btn-ok">
               Paper sync
             </button>
+            {onSwitchCrew ? (
+              <button type="button" className="btn" onClick={onSwitchCrew}>
+                Switch crew
+              </button>
+            ) : null}
           </div>
         </div>
 
         <nav className="flex flex-wrap gap-1.5 lg:hidden" aria-label="Desk sections">
-          {TABS.map((t) => {
+          {tabs.map((t) => {
             const active = tab === t.id
             return (
               <button

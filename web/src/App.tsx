@@ -10,6 +10,11 @@ import { SignalsPanel } from './components/SignalsPanel'
 import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
+import { FlowDeskPanel } from './components/FlowDeskPanel'
+import { ObserverTodayPanel } from './components/ObserverTodayPanel'
+import { PersonaGateOverlay } from './components/PersonaGateScene'
+import { defaultTabForPersona } from './deskNav'
+import { personaLabel, usePersona } from './hooks/usePersona'
 import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
 import { ChartsPanel } from './components/ChartsPanel'
@@ -19,6 +24,8 @@ import { PageHeader } from './components/layout/ModuleCard'
 
 export default function App() {
   const [tab, setTab] = useState<DeskTab>('orbit')
+  const [personaGateOpen, setPersonaGateOpen] = useState(false)
+  const { persona, setPersona } = usePersona()
   const [selected, setSelected] = useState<SignalRow | null>(null)
   const [chartFocus, setChartFocus] = useState<{ symbol: string; timeframe?: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -97,6 +104,12 @@ export default function App() {
     setTab('charts')
   }
 
+  const onPersonaPick = (p: NonNullable<typeof persona>) => {
+    setPersona(p)
+    setPersonaGateOpen(false)
+    setTab(defaultTabForPersona(p))
+  }
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <a href="#desk-main" className="skip-link">Skip to desk</a>
@@ -104,8 +117,15 @@ export default function App() {
       <div className="pointer-events-none fixed -left-24 top-10 h-64 w-64 rounded-full bg-cyan/10 blur-3xl theme-blob" />
       <div className="pointer-events-none fixed right-0 top-32 h-72 w-72 rounded-full bg-lime/10 blur-3xl theme-blob" />
 
+      <PersonaGateOverlay
+        open={personaGateOpen}
+        onClose={() => setPersonaGateOpen(false)}
+        onSelect={onPersonaPick}
+      />
+
       <TopBar
         tab={tab}
+        persona={persona}
         onTab={setTab}
         healthOk={healthOk}
         uptime={uptime}
@@ -117,10 +137,11 @@ export default function App() {
         busy={busy || desk.loading}
         theme={theme}
         onTheme={toggleTheme}
+        onSwitchCrew={() => setPersonaGateOpen(true)}
       />
 
       <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-8 sm:px-8 lg:py-10">
-        <DeskShell sidebar={<DeskSidebar tab={tab} onTab={setTab} />}>
+        <DeskShell sidebar={<DeskSidebar tab={tab} persona={persona} onTab={setTab} />}>
         {(desk.error || radarMsg) && (
           <div
             role="status"
@@ -152,13 +173,29 @@ export default function App() {
                 highlight="Universe"
                 lede="Glass core and crypto logos on the rails. Radar and strategy tables live on Ops. Signal-only — never orders."
                 actions={
-                  <button type="button" onClick={() => setTab('ops')} className="btn btn-accent">
-                    Open Ops
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setPersonaGateOpen(true)} className="btn btn-accent">
+                      Enter mission deck
+                    </button>
+                    {persona ? (
+                      <button
+                        type="button"
+                        onClick={() => setTab(defaultTabForPersona(persona))}
+                        className="btn"
+                      >
+                        {personaLabel(persona)} home
+                      </button>
+                    ) : null}
+                  </div>
                 }
               />
               <div className="h-[min(78vh,860px)] min-h-[520px]">
-                <Scene3D radar={desk.radar} signalCount={desk.signals.length} allowZoom />
+                <Scene3D
+                  radar={desk.radar}
+                  signalCount={desk.signals.length}
+                  allowZoom
+                  onEnterMission={() => setPersonaGateOpen(true)}
+                />
               </div>
               <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
                 <MiniStat label="A / A+" value={gradeMix.A + gradeMix.A_PLUS} tone="text-amber" />
@@ -171,6 +208,31 @@ export default function App() {
                   mono={false}
                 />
               </div>
+            </motion.div>
+          )}
+
+          {tab === 'today' && (
+            <motion.div
+              key="today"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <PageHeader
+                kicker="Space Observer"
+                title="Today"
+                highlight="digest"
+                lede="One screen for lazy swing: breadth, paper book, top 4h A/A+, and briefing — then Screens when you want the full list."
+              />
+              <ObserverTodayPanel
+                signals={desk.signals}
+                radar={desk.radar}
+                paper={desk.paper}
+                briefing={desk.briefing}
+                onOpenScreens={() => setTab('screens')}
+                onOpenGuide={() => setTab('guide')}
+              />
             </motion.div>
           )}
 
@@ -337,6 +399,24 @@ export default function App() {
                 onDone={() => void desk.refresh()}
                 onViewChart={goChart}
               />
+            </motion.div>
+          )}
+
+          {tab === 'flow' && (
+            <motion.div
+              key="flow"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <PageHeader
+                kicker="Spaceman module"
+                title="Flow"
+                highlight="desk"
+                lede="Pure flow screeners — OI, CVD, volume profile, TPO, funding. Select a symbol for rule-based trade ideas. Manual review only."
+              />
+              <FlowDeskPanel />
             </motion.div>
           )}
 

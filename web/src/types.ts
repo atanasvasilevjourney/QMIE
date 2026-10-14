@@ -168,10 +168,61 @@ export type JournalStats = {
   oos_edge?: string
 }
 
+export type FlowView = 'combo' | 'oi' | 'cvd' | 'vp' | 'tpo' | 'funding'
+
+export type FlowIdea = {
+  bias: 'LONG' | 'SHORT' | 'WAIT' | 'NEUTRAL' | string
+  setup: string
+  thesis: string
+  invalidation: string
+  confidence: 'high' | 'medium' | 'low' | string
+  entry?: number | null
+  stop?: number | null
+  target?: number | null
+  places_orders: boolean
+}
+
+export type FlowRow = {
+  symbol: string
+  timeframe?: string
+  close?: number | null
+  price_change_pct?: number | null
+  open_interest?: number | null
+  oi_change_pct?: number | null
+  bar_delta?: number | null
+  cvd_slope?: number | null
+  delta_source?: string
+  funding_rate?: number | null
+  poc?: number | null
+  vah?: number | null
+  val?: number | null
+  dist_to_poc_pct?: number | null
+  tpo_poc?: number | null
+  tpo_vah?: number | null
+  tpo_val?: number | null
+  dist_to_tpo_poc_pct?: number | null
+  poor_high?: boolean
+  poor_low?: boolean
+  flow_score?: number | null
+  ideas?: FlowIdea[]
+}
+
+export type FlowScreener = {
+  places_orders: boolean
+  data_source?: string
+  timeframe?: string
+  view?: FlowView | string
+  views?: string[]
+  note?: string
+  rows: FlowRow[]
+}
+
 export type DeskTab =
   | 'orbit'
+  | 'today'
   | 'ops'
   | 'screens'
+  | 'flow'
   | 'charts'
   | 'book'
   | 'journal'

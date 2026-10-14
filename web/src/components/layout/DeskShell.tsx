@@ -1,29 +1,23 @@
+import { navForPersona } from '../../deskNav'
+import type { DeskPersona } from '../../hooks/usePersona'
 import type { DeskTab } from '../../types'
-
-const NAV: { id: DeskTab; label: string; hint: string }[] = [
-  { id: 'orbit', label: 'Orbit', hint: '3D universe' },
-  { id: 'ops', label: 'Ops', hint: 'Radar + tables' },
-  { id: 'screens', label: 'Screens', hint: 'Combo list' },
-  { id: 'charts', label: 'Charts', hint: 'Equity + price' },
-  { id: 'guide', label: 'Guide', hint: 'Playbook' },
-  { id: 'agents', label: 'Agents', hint: 'Briefing' },
-  { id: 'book', label: 'Book', hint: 'Allocation' },
-  { id: 'journal', label: 'Journal', hint: 'Fills' },
-  { id: 'flows', label: 'Flows', hint: 'Pipeline' },
-]
 
 export function DeskSidebar({
   tab,
+  persona,
   onTab,
 }: {
   tab: DeskTab
+  persona: DeskPersona | null
   onTab: (t: DeskTab) => void
 }) {
+  const nav = navForPersona(persona)
+
   return (
     <aside className="desk-sidebar hidden lg:block" aria-label="Desk sections">
-      <p className="desk-sidebar-kicker">Modules</p>
+      <p className="desk-sidebar-kicker">{persona ? (persona === 'observer' ? 'Observer path' : 'Spaceman path') : 'Modules'}</p>
       <nav className="desk-sidebar-nav">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active = tab === item.id
           return (
             <button
