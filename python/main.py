@@ -13,6 +13,7 @@ Endpoints:
   POST /scan/once             admin: force an immediate scan pass on a TF
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /screens               combo review list (unique symbol, never orders)
+  GET  /flow/screener         bar-close OI + bar-CVD context (desk Flow module)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
@@ -68,6 +69,7 @@ from journal import JournalError, close_fill, create_fill, drift_message
 from paper import PaperBook
 from guide import trading_guide
 from screens import VIEWS, build_screens
+from scanner.flow_metrics import build_flow_screener
 from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
@@ -426,6 +428,26 @@ async def get_screens(view: str = "all") -> dict[str, Any]:
         allocation = state.scheduler.last_allocation.as_dict()
     return build_screens(
         signals=signals, radar=radar, allocation=allocation, view=v,
+    )
+
+
+@app.get("/flow/screener")
+async def get_flow_screener(timeframe: str = "4h", limit: int = 18) -> dict[str, Any]:
+    """Bar-close open interest + volume delta for the active scan universe.
+
+    Overlay only — never orders, never retunes ``W_*``.
+    """
+    if state.client is None or state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    tf = (timeframe or "4h").strip().lower()
+    if tf not in ("1h", "4h"):
+        raise HTTPException(400, "timeframe must be 1h or 4h")
+    cap = max(1, min(int(limit), 30))
+    symbols = await state.scheduler.universe.get()
+    if not symbols and state.settings:
+        symbols = list(state.settings.symbols_static or [])
+    return await build_flow_screener(
+        state.client, symbols, timeframe=tf, max_symbols=cap,
     )
 
 

@@ -5,6 +5,7 @@ export type NavItem = { id: DeskTab; label: string; hint: string }
 
 const ALL: NavItem[] = [
   { id: 'orbit', label: 'Orbit', hint: '3D universe' },
+  { id: 'today', label: 'Today', hint: 'Swing digest' },
   { id: 'ops', label: 'Ops', hint: 'Radar + tables' },
   { id: 'screens', label: 'Screens', hint: 'Combo list' },
   { id: 'flow', label: 'Flow', hint: 'OI · CVD · VA' },
@@ -16,7 +17,7 @@ const ALL: NavItem[] = [
   { id: 'flows', label: 'Playbook', hint: 'Operator loop' },
 ]
 
-const OBSERVER_IDS: DeskTab[] = ['orbit', 'screens', 'charts', 'guide', 'book', 'journal', 'flows']
+const OBSERVER_IDS: DeskTab[] = ['orbit', 'today', 'screens', 'charts', 'guide', 'book', 'journal', 'flows']
 const SPACEMAN_IDS: DeskTab[] = ['orbit', 'ops', 'flow', 'screens', 'charts', 'agents', 'book', 'journal', 'flows']
 
 export function navForPersona(persona: DeskPersona | null): NavItem[] {
@@ -26,5 +27,5 @@ export function navForPersona(persona: DeskPersona | null): NavItem[] {
 }
 
 export function defaultTabForPersona(persona: DeskPersona): DeskTab {
-  return persona === 'observer' ? 'screens' : 'flow'
+  return persona === 'observer' ? 'today' : 'flow'
 }

@@ -168,8 +168,28 @@ export type JournalStats = {
   oos_edge?: string
 }
 
+export type FlowRow = {
+  symbol: string
+  timeframe?: string
+  open_interest?: number | null
+  oi_change_pct?: number | null
+  bar_delta?: number | null
+  cvd_slope?: number | null
+  delta_source?: string
+  funding_rate?: number | null
+}
+
+export type FlowScreener = {
+  places_orders: boolean
+  data_source?: string
+  timeframe?: string
+  note?: string
+  rows: FlowRow[]
+}
+
 export type DeskTab =
   | 'orbit'
+  | 'today'
   | 'ops'
   | 'screens'
   | 'flow'

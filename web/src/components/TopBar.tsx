@@ -16,10 +16,12 @@ export function TopBar({
   busy,
   theme,
   onTheme,
+  onSwitchCrew,
 }: {
   tab: DeskTab
   persona: DeskPersona | null
   onTab: (t: DeskTab) => void
+  onSwitchCrew?: () => void
   healthOk: boolean
   uptime: number
   source?: string
@@ -77,6 +79,11 @@ export function TopBar({
             <button type="button" disabled={busy} onClick={onPaper} className="btn btn-ok">
               Paper sync
             </button>
+            {onSwitchCrew ? (
+              <button type="button" className="btn" onClick={onSwitchCrew}>
+                Switch crew
+              </button>
+            ) : null}
           </div>
         </div>
 

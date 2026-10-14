@@ -11,6 +11,7 @@ import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
 import { FlowDeskPanel } from './components/FlowDeskPanel'
+import { ObserverTodayPanel } from './components/ObserverTodayPanel'
 import { PersonaGateOverlay } from './components/PersonaGateScene'
 import { defaultTabForPersona } from './deskNav'
 import { personaLabel, usePersona } from './hooks/usePersona'
@@ -136,6 +137,7 @@ export default function App() {
         busy={busy || desk.loading}
         theme={theme}
         onTheme={toggleTheme}
+        onSwitchCrew={() => setPersonaGateOpen(true)}
       />
 
       <main id="desk-main" className="relative z-10 mx-auto max-w-[1920px] px-4 py-8 sm:px-8 lg:py-10">
@@ -206,6 +208,31 @@ export default function App() {
                   mono={false}
                 />
               </div>
+            </motion.div>
+          )}
+
+          {tab === 'today' && (
+            <motion.div
+              key="today"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22 }}
+            >
+              <PageHeader
+                kicker="Space Observer"
+                title="Today"
+                highlight="digest"
+                lede="One screen for lazy swing: breadth, paper book, top 4h A/A+, and briefing — then Screens when you want the full list."
+              />
+              <ObserverTodayPanel
+                signals={desk.signals}
+                radar={desk.radar}
+                paper={desk.paper}
+                briefing={desk.briefing}
+                onOpenScreens={() => setTab('screens')}
+                onOpenGuide={() => setTab('guide')}
+              />
             </motion.div>
           )}
 
