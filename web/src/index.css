@@ -192,6 +192,68 @@ html[data-theme="light"] .universe-frame {
   background: #05070c;
 }
 
+.persona-gate-frame {
+  min-height: min(72vh, 720px);
+  border-radius: 20px;
+}
+
+.persona-gate-overlay {
+  animation: persona-fade-in 0.35s ease-out;
+}
+
+@keyframes persona-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.persona-enter-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 220px;
+  padding: 1.25rem 1.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 233, 242, 0.45);
+  background: rgba(8, 14, 24, 0.72);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 40px rgba(94, 233, 242, 0.15),
+    inset 0 0 24px rgba(94, 233, 242, 0.08);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.persona-enter-btn:hover {
+  transform: scale(1.04);
+  border-color: rgba(142, 240, 168, 0.55);
+  box-shadow:
+    0 0 56px rgba(255, 77, 154, 0.18),
+    0 0 32px rgba(94, 233, 242, 0.22);
+}
+
+.persona-enter-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 1px dashed rgba(255, 197, 92, 0.35);
+  animation: persona-ring-spin 12s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes persona-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .hud {
   background: rgba(8, 12, 18, 0.88) !important;
   border: 1px solid rgba(126, 224, 234, 0.32) !important;

@@ -172,6 +172,7 @@ export type DeskTab =
   | 'orbit'
   | 'ops'
   | 'screens'
+  | 'flow'
   | 'charts'
   | 'book'
   | 'journal'
