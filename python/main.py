@@ -69,7 +69,7 @@ from journal import JournalError, close_fill, create_fill, drift_message
 from paper import PaperBook
 from guide import trading_guide
 from screens import VIEWS, build_screens
-from scanner.flow_metrics import build_flow_screener
+from scanner.flow_metrics import VIEWS as FLOW_VIEWS, build_flow_screener, flow_row_for_symbol
 from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
@@ -432,23 +432,50 @@ async def get_screens(view: str = "all") -> dict[str, Any]:
 
 
 @app.get("/flow/screener")
-async def get_flow_screener(timeframe: str = "4h", limit: int = 18) -> dict[str, Any]:
-    """Bar-close open interest + volume delta for the active scan universe.
+async def get_flow_screener(
+    timeframe: str = "4h",
+    limit: int = 18,
+    view: str = "combo",
+) -> dict[str, Any]:
+    """Flow screeners: OI, CVD, volume profile, TPO-lite, funding, combo.
 
-    Overlay only — never orders, never retunes ``W_*``.
+    Pure flow — not merged with TEMA. Ideas on each row are suggestions.
+    Never orders. Never retunes ``W_*``.
     """
     if state.client is None or state.scheduler is None:
         raise HTTPException(503, "scanner_not_ready")
     tf = (timeframe or "4h").strip().lower()
     if tf not in ("1h", "4h"):
         raise HTTPException(400, "timeframe must be 1h or 4h")
+    v = (view or "combo").strip().lower()
+    if v not in FLOW_VIEWS:
+        raise HTTPException(400, f"view must be one of {list(FLOW_VIEWS)}")
     cap = max(1, min(int(limit), 30))
     symbols = await state.scheduler.universe.get()
     if not symbols and state.settings:
         symbols = list(state.settings.symbols_static or [])
     return await build_flow_screener(
-        state.client, symbols, timeframe=tf, max_symbols=cap,
+        state.client, symbols, timeframe=tf, view=v, max_symbols=cap,
     )
+
+
+@app.get("/flow/ideas/{symbol}")
+async def get_flow_ideas(symbol: str, timeframe: str = "4h") -> dict[str, Any]:
+    """Rule-based trade ideas for one symbol. Manual review only."""
+    if state.client is None:
+        raise HTTPException(503, "scanner_not_ready")
+    tf = (timeframe or "4h").strip().lower()
+    if tf not in ("1h", "4h"):
+        raise HTTPException(400, "timeframe must be 1h or 4h")
+    row = await flow_row_for_symbol(state.client, symbol, timeframe=tf)
+    return {
+        "places_orders": False,
+        "symbol": row["symbol"],
+        "timeframe": tf,
+        "data_source": state.client.name,
+        "ideas": row.get("ideas") or [],
+        "note": "Suggestions for manual entry. QMIE does not execute or size positions.",
+    }
 
 
 @app.post("/radar/once")

@@ -13,6 +13,10 @@ import numpy as np
 import pandas as pd
 
 from .exchange_clients import BinanceClient, BybitClient, ExchangeClient, OkxClient, _okx_inst
+from .flow_ideas import flow_ideas
+from .flow_profile import tpo_profile, volume_profile
+
+VIEWS = ("combo", "oi", "cvd", "vp", "tpo", "funding")
 
 logger = logging.getLogger(__name__)
 
@@ -31,36 +35,6 @@ def _cvd_slope(delta: pd.Series, lookback: int = 6) -> float | None:
         return None
     n = min(lookback, len(cvd))
     return float(cvd.iloc[-1] - cvd.iloc[-n])
-
-
-async def _binance_taker_delta(client: BinanceClient, symbol: str, timeframe: str, limit: int) -> pd.Series:
-    from . import exchange_clients as ec
-
-    tf = ec._BINANCE_TF.get(timeframe.lower())
-    if tf is None:
-        return pd.Series(dtype=float)
-    sym = symbol.upper().replace(".P", "")
-    url = f"{client.BASE}/fapi/v1/klines"
-    params = {"symbol": sym, "interval": tf, "limit": min(limit, 1500)}
-    s = await client._s()
-    async with s.get(url, params=params) as resp:
-        if resp.status >= 400:
-            return pd.Series(dtype=float)
-        data = await resp.json()
-    if not data:
-        return pd.Series(dtype=float)
-    df = pd.DataFrame(data, columns=[
-        "openTime", "open", "high", "low", "close", "volume", "closeTime",
-        "quoteVolume", "trades", "takerBuyBase", "takerBuyQuote", "_ignore",
-    ])
-    df["openTime"] = pd.to_datetime(df["openTime"], unit="ms", utc=True)
-    df.set_index("openTime", inplace=True)
-    vol = pd.to_numeric(df["volume"], errors="coerce")
-    taker_buy = pd.to_numeric(df["takerBuyBase"], errors="coerce")
-    delta = 2.0 * taker_buy - vol
-    if len(delta) > 0:
-        delta = delta.iloc[:-1]
-    return delta.dropna()
 
 
 async def _binance_oi(client: BinanceClient, symbol: str) -> tuple[float | None, float | None]:
@@ -142,6 +116,91 @@ async def _bybit_oi(client: BybitClient, symbol: str) -> tuple[float | None, flo
     return oi_now, oi_chg
 
 
+async def _load_bars(
+    client: ExchangeClient,
+    symbol: str,
+    timeframe: str,
+    limit: int,
+) -> tuple[pd.DataFrame, pd.Series, str]:
+    """Closed bars plus a delta series. ``delta_source`` is taker or proxy."""
+    sym = symbol.upper().replace(".P", "")
+    if isinstance(client, BinanceClient):
+        from . import exchange_clients as ec
+
+        tf = ec._BINANCE_TF.get(timeframe.lower())
+        if tf is None:
+            return pd.DataFrame(), pd.Series(dtype=float), "taker"
+        url = f"{client.BASE}/fapi/v1/klines"
+        params = {"symbol": sym, "interval": tf, "limit": min(limit, 1500)}
+        s = await client._s()
+        async with s.get(url, params=params) as resp:
+            if resp.status >= 400:
+                return pd.DataFrame(), pd.Series(dtype=float), "taker"
+            data = await resp.json()
+        if not data:
+            return pd.DataFrame(), pd.Series(dtype=float), "taker"
+        df = pd.DataFrame(data, columns=[
+            "openTime", "open", "high", "low", "close", "volume", "closeTime",
+            "quoteVolume", "trades", "takerBuyBase", "takerBuyQuote", "_ignore",
+        ])
+        df["openTime"] = pd.to_datetime(df["openTime"], unit="ms", utc=True)
+        df.set_index("openTime", inplace=True)
+        for c in ("open", "high", "low", "close", "volume", "takerBuyBase"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        if len(df) > 0:
+            df = df.iloc[:-1]
+        df = df.dropna(subset=["open", "high", "low", "close", "volume"])
+        delta = (2.0 * df["takerBuyBase"] - df["volume"]).dropna()
+        return df, delta, "taker"
+
+    df = await client.fetch_klines(sym, timeframe, limit=limit)
+    if df.empty:
+        return df, pd.Series(dtype=float), "proxy"
+    return df, _ohlc_proxy_delta(df).dropna(), "proxy"
+
+
+def _price_change_pct(df: pd.DataFrame, lookback: int = 6) -> float | None:
+    if df.empty or len(df) < 2:
+        return None
+    n = min(lookback, len(df) - 1)
+    prev = float(df["close"].iloc[-1 - n])
+    last = float(df["close"].iloc[-1])
+    if prev == 0:
+        return None
+    return (last - prev) / prev * 100.0
+
+
+def _attach_scores(rows: list[dict[str, Any]]) -> None:
+    def z(key: str) -> list[float]:
+        vals = np.array([float(r.get(key) or 0.0) for r in rows], dtype=float)
+        std = float(vals.std())
+        if std < 1e-12:
+            return [0.0] * len(rows)
+        return list((vals - float(vals.mean())) / std)
+
+    z_oi = z("oi_change_pct")
+    z_cvd = z("cvd_slope")
+    z_fund = z("funding_rate")
+    z_poc = z("dist_to_poc_pct")
+    for i, row in enumerate(rows):
+        row["flow_score"] = abs(z_oi[i]) + abs(z_cvd[i]) + abs(z_fund[i]) + abs(z_poc[i])
+
+
+def _sort_rows(rows: list[dict[str, Any]], view: str) -> None:
+    key_map = {
+        "oi": "oi_change_pct",
+        "cvd": "cvd_slope",
+        "vp": "dist_to_poc_pct",
+        "tpo": "dist_to_tpo_poc_pct",
+        "funding": "funding_rate",
+    }
+    if view == "combo" or view not in key_map:
+        rows.sort(key=lambda r: float(r.get("flow_score") or 0), reverse=True)
+        return
+    key = key_map[view]
+    rows.sort(key=lambda r: abs(float(r.get(key) or 0)), reverse=True)
+
+
 async def flow_row_for_symbol(
     client: ExchangeClient,
     symbol: str,
@@ -153,20 +212,27 @@ async def flow_row_for_symbol(
     delta_src = "proxy"
     bar_delta: float | None = None
     cvd_slope: float | None = None
+    close: float | None = None
+    price_change: float | None = None
+    profile: dict[str, Any] = {}
+    tpo: dict[str, Any] = {}
 
     try:
-        if isinstance(client, BinanceClient):
-            delta = await _binance_taker_delta(client, sym, timeframe, limit)
-            delta_src = "taker"
-        else:
-            df = await client.fetch_klines(sym, timeframe, limit=limit)
-            delta = _ohlc_proxy_delta(df) if not df.empty else pd.Series(dtype=float)
-            delta_src = "proxy"
+        df, delta, delta_src = await _load_bars(client, sym, timeframe, limit)
+        if not df.empty:
+            close = float(df["close"].iloc[-1])
+            price_change = _price_change_pct(df)
+            vp = volume_profile(df)
+            if vp:
+                profile = vp
+            tp = tpo_profile(df)
+            if tp:
+                tpo = tp
         if not delta.empty:
             bar_delta = float(delta.iloc[-1])
             cvd_slope = _cvd_slope(delta)
     except Exception as exc:
-        logger.warning("flow delta %s: %s", sym, exc)
+        logger.warning("flow bars %s: %s", sym, exc)
 
     oi_now: float | None = None
     oi_chg: float | None = None
@@ -187,16 +253,22 @@ async def flow_row_for_symbol(
     except Exception:
         funding = None
 
-    return {
+    row: dict[str, Any] = {
         "symbol": sym,
         "timeframe": timeframe,
+        "close": close,
+        "price_change_pct": price_change,
         "open_interest": oi_now,
         "oi_change_pct": oi_chg,
         "bar_delta": bar_delta,
         "cvd_slope": cvd_slope,
         "delta_source": delta_src,
         "funding_rate": funding,
+        **profile,
+        **tpo,
     }
+    row["ideas"] = flow_ideas(row)
+    return row
 
 
 async def build_flow_screener(
@@ -204,9 +276,13 @@ async def build_flow_screener(
     symbols: list[str],
     *,
     timeframe: str = "4h",
+    view: str = "combo",
     max_symbols: int = 18,
     concurrency: int = 4,
 ) -> dict[str, Any]:
+    v = (view or "combo").strip().lower()
+    if v not in VIEWS:
+        v = "combo"
     syms = [s.upper().replace(".P", "") for s in symbols[:max_symbols]]
     sem = asyncio.Semaphore(concurrency)
     rows: list[dict[str, Any]] = []
@@ -216,11 +292,17 @@ async def build_flow_screener(
             rows.append(await flow_row_for_symbol(client, sym, timeframe=timeframe))
 
     await asyncio.gather(*(one(s) for s in syms))
-    rows.sort(key=lambda r: abs(r.get("cvd_slope") or 0), reverse=True)
+    _attach_scores(rows)
+    _sort_rows(rows, v)
     return {
         "places_orders": False,
         "data_source": client.name,
         "timeframe": timeframe,
+        "view": v,
+        "views": list(VIEWS),
         "rows": rows,
-        "note": "Bar-close OI + bar delta. Taker delta on Binance; proxy elsewhere.",
+        "note": (
+            "Pure flow screeners (OI, CVD, volume profile, TPO-lite, funding). "
+            "Ideas are manual suggestions. Taker delta on Binance; proxy elsewhere. Never orders."
+        ),
     }

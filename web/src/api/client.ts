@@ -125,8 +125,8 @@ export const api = {
       `/charts/price?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
     ),
   screens: (view = 'all') => getJson<ScreenBook>(`/screens?view=${encodeURIComponent(view)}`),
-  flowScreener: (timeframe = '4h', limit = 18) =>
+  flowScreener: (timeframe = '4h', limit = 18, view = 'combo') =>
     getJson<FlowScreener>(
-      `/flow/screener?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
+      `/flow/screener?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}&view=${encodeURIComponent(view)}`,
     ),
 }

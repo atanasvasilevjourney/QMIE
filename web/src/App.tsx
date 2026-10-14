@@ -414,7 +414,7 @@ export default function App() {
                 kicker="Spaceman module"
                 title="Flow"
                 highlight="desk"
-                lede="Open interest, CVD, and value context for active perps workflow. Metrics ship next — routing and shell are live."
+                lede="Pure flow screeners — OI, CVD, volume profile, TPO, funding. Select a symbol for rule-based trade ideas. Manual review only."
               />
               <FlowDeskPanel />
             </motion.div>
