@@ -17,3 +17,6 @@ pandas==2.2.3
 redis==5.0.8
 
 python-multipart==0.0.12
+
+# Frozen strategy YAML (long_vol research configs)
+PyYAML==6.0.2
