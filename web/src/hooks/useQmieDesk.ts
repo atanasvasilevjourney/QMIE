@@ -11,6 +11,8 @@ import type {
   SignalRow,
   PaperSnapshot,
   TradingGuide,
+  LevierLeaderboardResponse,
+  LevierGainerRow,
 } from '../types'
 
 type DeskState = {
@@ -25,6 +27,8 @@ type DeskState = {
   desk: DeskGraph | null
   guide: TradingGuide | null
   paper: PaperSnapshot | null
+  levier: LevierLeaderboardResponse | null
+  levierGainers: LevierGainerRow[]
   loading: boolean
   error: string | null
   lastSync: number | null
@@ -42,6 +46,8 @@ const empty: DeskState = {
   desk: null,
   guide: null,
   paper: null,
+  levier: null,
+  levierGainers: [],
   loading: true,
   error: null,
   lastSync: null,
@@ -64,7 +70,7 @@ export function useQmieDesk(pollMs = 12000) {
   const [state, setState] = useState<DeskState>(empty)
 
   const refresh = useCallback(async () => {
-    const [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper] = await Promise.all([
+    const [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper, levier, levierGainers] = await Promise.all([
       settled(api.health()),
       settled(api.radar()),
       settled(api.signals(80)),
@@ -76,10 +82,12 @@ export function useQmieDesk(pollMs = 12000) {
       settled(api.desk()),
       settled(api.guide()),
       settled(api.paper()),
+      settled(api.levierLeaderboard()),
+      settled(api.levierGainers(30)),
     ])
 
     const failures = [...new Set(
-      [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper]
+      [health, radar, signals, allocation, fills, stats, universe, briefing, desk, guide, paper, levier, levierGainers]
         .filter((r) => !r.ok)
         .map((r) => (r as { ok: false; error: string }).error),
     )]
@@ -96,6 +104,8 @@ export function useQmieDesk(pollMs = 12000) {
       desk: desk.ok ? desk.value : prev.desk,
       guide: guide.ok ? guide.value : prev.guide,
       paper: paper.ok ? paper.value : prev.paper,
+      levier: levier.ok ? levier.value : prev.levier,
+      levierGainers: levierGainers.ok ? levierGainers.value.rows : prev.levierGainers,
       loading: false,
       error: failures.length ? failures.slice(0, 2).join(' · ') : null,
       lastSync: Date.now(),

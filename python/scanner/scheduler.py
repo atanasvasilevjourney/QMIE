@@ -501,6 +501,18 @@ class ScannerScheduler:
         board = result.get("leaderboard") or []
         self.last_levier = result
 
+        db = getattr(self.dispatcher, "db", None)
+        if db is not None:
+            try:
+                from levier.gainers_persist import persist_snapshot, sync_gainer_stats
+
+                await persist_snapshot(db, result)
+                await sync_gainer_stats(
+                    db, panels, top_n=getattr(cfg.gainers, "top_n_yesterday", 20),
+                )
+            except Exception:
+                logger.exception("LevierScan DB persist failed (non-fatal)")
+
         for row in board:
             sym = str(row.get("symbol"))
             if sym and row.get("rsi") is not None:

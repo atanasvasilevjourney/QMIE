@@ -19,6 +19,7 @@ import { AgentsPanel } from './components/AgentsPanel'
 import { GuidePanel } from './components/GuidePanel'
 import { ChartsPanel } from './components/ChartsPanel'
 import { ScreensPanel } from './components/ScreensPanel'
+import { LevierPanel } from './components/LevierPanel'
 import { DeskShell, DeskSidebar } from './components/layout/DeskShell'
 import { PageHeader } from './components/layout/ModuleCard'
 
@@ -249,8 +250,9 @@ export default function App() {
                 kicker="Operations"
                 title="Radar +"
                 highlight="strategy tables"
-                lede="Trend Radar is the spot book (1D coil-UP). TEMA BUY is the leveraged USDT-perp add. Never orders."
+                lede="Trend Radar (1D spot). TEMA (4h leverage). LeveriScan (30m VWAP tape + #CryptoGainers). Never orders."
               />
+              <LevierPanel snap={desk.levier} gainers={desk.levierGainers} />
               <div className="grid gap-8 xl:grid-cols-12">
                 <div className="xl:col-span-8">
                   <RadarPanel radar={desk.radar} />
@@ -286,6 +288,9 @@ export default function App() {
                       </p>
                       <p>
                         <span className="font-semibold text-ink">Leverage:</span> TEMA A/A+ on 4h
+                      </p>
+                      <p>
+                        <span className="font-semibold text-ink">Tape:</span> LeveriScan 30m · 48/day
                       </p>
                       <p>
                         <span className="font-semibold text-ink">Alerts:</span> Discord / Telegram on the API host

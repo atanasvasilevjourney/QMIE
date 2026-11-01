@@ -87,6 +87,24 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
     trade_count    INTEGER NOT NULL DEFAULT 0,
     halted         INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS levier_snapshots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    captured_at  TEXT NOT NULL,
+    payload      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_levier_snapshots_time ON levier_snapshots(captured_at DESC);
+
+CREATE TABLE IF NOT EXISTS levier_gainer_stats (
+    symbol          TEXT NOT NULL,
+    gainer_day      TEXT NOT NULL,
+    yday_pct        REAL,
+    entry_price     REAL,
+    fwd_ret_pct     REAL,
+    first_seen_at   TEXT NOT NULL,
+    last_updated_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, gainer_day)
+);
 """
 
 
@@ -185,6 +203,70 @@ class Database:
             ) as cur:
                 rows = await cur.fetchall()
                 return [dict(r) for r in rows]
+
+    # ─── LeveriScan persistence ───────────────────────────────────────────
+    async def insert_levier_snapshot(self, payload_json: str) -> int:
+        now = _now()
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "INSERT INTO levier_snapshots (captured_at, payload) VALUES (?, ?)",
+                (now, payload_json),
+            )
+            await db.commit()
+            return int(cur.lastrowid or 0)
+
+    async def upsert_levier_gainer(
+        self,
+        *,
+        symbol: str,
+        gainer_day: str,
+        yday_pct: float,
+        entry_price: float,
+        fwd_ret_pct: float,
+        first_seen_at: str,
+        last_updated_at: str,
+    ) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO levier_gainer_stats
+                (symbol, gainer_day, yday_pct, entry_price, fwd_ret_pct,
+                 first_seen_at, last_updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    symbol, gainer_day, yday_pct, entry_price, fwd_ret_pct,
+                    first_seen_at, last_updated_at,
+                ),
+            )
+            await db.commit()
+
+    async def update_levier_gainer_fwd(
+        self, symbol: str, gainer_day: str, fwd_ret_pct: float, last_updated_at: str,
+    ) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                UPDATE levier_gainer_stats
+                   SET fwd_ret_pct = ?, last_updated_at = ?
+                 WHERE symbol = ? AND gainer_day = ?
+                """,
+                (fwd_ret_pct, last_updated_at, symbol, gainer_day),
+            )
+            await db.commit()
+
+    async def list_levier_gainers(self, limit: int = 100) -> list[dict]:
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM levier_gainer_stats
+                ORDER BY gainer_day DESC, yday_pct DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ) as cur:
+                return [dict(r) for r in await cur.fetchall()]
 
     # ─── Fills (manual journal) ──────────────────────────────────────────
     async def insert_fill(

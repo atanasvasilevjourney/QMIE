@@ -23,6 +23,43 @@ export type RadarRow = {
   is_early_short?: boolean
 }
 
+export type LevierLeaderRow = {
+  rank?: number
+  symbol: string
+  venue?: string
+  price?: number
+  vwap24?: number
+  dist?: number
+  dist_pct?: number
+  atr_pct?: number
+  quote_vol_24h?: number
+  rsi?: number
+  rsi_delta?: number | null
+  adx?: number
+  label?: string
+  gainer_watch?: boolean
+  score?: number
+}
+
+export type LevierLeaderboardResponse = {
+  enabled: boolean
+  count?: number
+  leaderboard: LevierLeaderRow[]
+  gainers_yesterday?: string[]
+  generated_at?: string | null
+  stats?: Record<string, unknown>
+}
+
+export type LevierGainerRow = {
+  symbol: string
+  gainer_day: string
+  yday_pct?: number | null
+  entry_price?: number | null
+  fwd_ret_pct?: number | null
+  first_seen_at?: string
+  last_updated_at?: string
+}
+
 export type RadarSnapshot = {
   as_of: string | null
   timeframe: string

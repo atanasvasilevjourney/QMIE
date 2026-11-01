@@ -113,7 +113,8 @@ docs/
 - [x] **Gate 1:** Inspection + file plan (this document)
 - [ ] **Gate 2:** Data loader + validation + tests
 - [ ] **Gate 3:** Features + parity + no-lookahead tests
-- [ ] **Gate 4:** Event study + report (before full backtest)
+- [x] **Gate 4:** Event study + report (notebook + `run_long_vol_jupyter.py`)
+- [x] **Live ingest:** 15m scheduler pass + `GET /longvol/candidates` + `QMIE-LongVol` alerts (`LONG_VOL_ENABLED`)
 - [ ] **Gate 5:** Signal state machine + tests
 - [ ] **Gate 6:** Engine + costs + accounting tests
 - [ ] **Gate 7:** Dev-sample backtest + cost stress + metrics

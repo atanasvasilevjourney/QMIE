@@ -7,6 +7,7 @@ import pandas as pd
 from levier.config import LevierConfig
 from levier.features import compute_tape_row, tape_label
 from levier.gainers import mark_gainer_watch, yesterday_top_movers
+from levier.hl_symbols import venue_tag
 from levier.rank import rank_rows
 
 
@@ -38,6 +39,7 @@ def scan_universe(
         if float(row.get("quote_vol_24h") or 0) < uni.min_24h_quote_volume_usdt:
             continue
         row["symbol"] = sym
+        row["venue"] = venue_tag(sym)
         row["label"] = tape_label(
             float(row["dist_pct"]), float(row["rsi"]), float(row["adx"]),
         )

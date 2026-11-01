@@ -594,6 +594,15 @@ async def levier_leaderboard() -> dict[str, Any]:
     }
 
 
+@app.get("/levier/gainers")
+async def levier_gainers(limit: int = 50) -> dict[str, Any]:
+    """#CryptoGainers — yesterday's movers and forward % since first 30m sighting."""
+    if state.db is None:
+        raise HTTPException(503, "db_not_ready")
+    rows = await state.db.list_levier_gainers(limit=min(limit, 200))
+    return {"count": len(rows), "rows": rows}
+
+
 @app.post("/levier/once")
 async def levier_once(notify: bool | None = None) -> dict[str, Any]:
     if state.scheduler is None:
