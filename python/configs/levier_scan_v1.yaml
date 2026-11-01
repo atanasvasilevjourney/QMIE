@@ -1,0 +1,27 @@
+# LeveriScan-style tape reader v1 (public #LevierScan parity target)
+version: 1
+name: levier_scan_v1
+
+scan:
+  timeframe: 30m
+  vwap_bars: 48
+  atr_length: 14
+  rsi_length: 14
+  adx_length: 14
+  min_bars: 60
+
+universe:
+  min_24h_quote_volume_usdt: 200000
+  top_n_leaderboard: 10
+  min_atr_pct: 0.15
+  max_atr_pct: 8.0
+
+gainers:
+  lookback_days: 1
+  top_n_yesterday: 20
+  continuation_min_dist_pct: 1.0
+
+alerts:
+  notify_top_n: 3
+  notify_new_leader_only: true
+  min_dist_pct_for_alert: 2.0

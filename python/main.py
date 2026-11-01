@@ -18,6 +18,8 @@ Endpoints:
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /longvol/candidates    last 15m long-vol scan (gates + features)
   POST /longvol/once          admin: force one long-vol pass (alerts if enabled)
+  GET  /levier/leaderboard    30m tape leaderboard (#LevierScan-style)
+  POST /levier/once           admin: force one LeveriScan pass
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
@@ -186,6 +188,18 @@ async def lifespan(app: FastAPI):
     state.paper = paper
     state.dispatcher = dispatcher
 
+    levier_cfg = None
+    if s.levier_scan_enabled:
+        try:
+            from levier.config import load_levier_config
+
+            lp = Path(__file__).resolve().parent / s.levier_config_path
+            levier_cfg = load_levier_config(lp)
+            logger.info("LevierScan enabled (config=%s)", lp.name)
+        except Exception:
+            logger.exception("LevierScan config failed; disabled")
+            levier_cfg = None
+
     long_vol_cfg = None
     if s.long_vol_enabled:
         try:
@@ -255,6 +269,10 @@ async def lifespan(app: FastAPI):
         long_vol_notify=s.long_vol_notify,
         long_vol_cfg=long_vol_cfg,
         long_vol_kline_limit=s.long_vol_kline_limit,
+        levier_enabled=s.levier_scan_enabled and levier_cfg is not None,
+        levier_notify=s.levier_notify,
+        levier_cfg=levier_cfg,
+        levier_kline_limit=s.levier_kline_limit,
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -556,6 +574,41 @@ async def longvol_once(notify: bool | None = None) -> dict[str, Any]:
         "candidates": len(state.scheduler.last_long_vol or []),
         "alerts": state.scheduler.stats.get("long_vol_alerts"),
     }
+
+
+@app.get("/levier/leaderboard")
+async def levier_leaderboard() -> dict[str, Any]:
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    snap = state.scheduler.last_levier or {}
+    return {
+        "enabled": state.scheduler.levier_enabled,
+        "stats": {
+            "levier_passes": state.scheduler.stats.get("levier_passes"),
+            "levier_alerts": state.scheduler.stats.get("levier_alerts"),
+            "last_levier_at": state.scheduler.stats.get("last_levier_at"),
+        },
+        "leaderboard": snap.get("leaderboard") or [],
+        "gainers_yesterday": snap.get("gainers_yesterday") or [],
+        "generated_at": snap.get("generated_at"),
+    }
+
+
+@app.post("/levier/once")
+async def levier_once(notify: bool | None = None) -> dict[str, Any]:
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    if not state.scheduler.levier_enabled:
+        raise HTTPException(400, "levier_disabled")
+    prev = state.scheduler.levier_notify
+    if notify is not None:
+        state.scheduler.levier_notify = notify
+    try:
+        await state.scheduler._levier_pass()
+    finally:
+        state.scheduler.levier_notify = prev
+    board = (state.scheduler.last_levier or {}).get("leaderboard") or []
+    return {"ok": True, "leaders": len(board), "alerts": state.scheduler.stats.get("levier_alerts")}
 
 
 @app.get("/agents/briefing")

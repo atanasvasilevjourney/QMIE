@@ -92,6 +92,10 @@ class ScannerScheduler:
         long_vol_notify: bool = True,
         long_vol_cfg: object | None = None,
         long_vol_kline_limit: int = 400,
+        levier_enabled: bool = False,
+        levier_notify: bool = True,
+        levier_cfg: object | None = None,
+        levier_kline_limit: int = 120,
     ):
         self.client = client
         self.universe = universe
@@ -141,6 +145,15 @@ class ScannerScheduler:
         self._last_long_vol_seen: int = 0
         self.last_long_vol: list[dict] = []
 
+        self.levier_enabled = levier_enabled and levier_cfg is not None
+        self.levier_notify = levier_notify
+        self.levier_cfg = levier_cfg
+        self.levier_kline_limit = max(60, levier_kline_limit)
+        self._last_levier_seen: int = 0
+        self._levier_prev_rsi: dict[str, float] = {}
+        self._levier_prev_top: set[str] = set()
+        self.last_levier: dict = {}
+
         # Stats exposed via /health
         self.stats = {
             "passes": 0,
@@ -153,6 +166,9 @@ class ScannerScheduler:
             "long_vol_passes": 0,
             "long_vol_alerts": 0,
             "last_long_vol_at": None,
+            "levier_passes": 0,
+            "levier_alerts": 0,
+            "last_levier_at": None,
         }
 
     # ─── Lifecycle ───────────────────────────────────────────────────────
@@ -166,6 +182,8 @@ class ScannerScheduler:
         self._last_radar_seen = _last_close_ts(now, _tf_seconds("1d"))
         if self.long_vol_enabled:
             self._last_long_vol_seen = _last_close_ts(now, _tf_seconds("15m"))
+        if self.levier_enabled:
+            self._last_levier_seen = _last_close_ts(now, _tf_seconds("30m"))
         self._task = asyncio.create_task(self._run())
         logger.info(
             "Scanner scheduler started: TFs=%s radar=%s symbols=universe",
@@ -228,6 +246,17 @@ class ScannerScheduler:
             except Exception:
                 logger.exception("Scan pass failed for tf=%s", tf)
                 self.stats["errors"] += 1
+
+        if self.levier_enabled:
+            m30 = _tf_seconds("30m")
+            cur30 = _last_close_ts(now, m30)
+            if (cur30 > self._last_levier_seen) and (now - cur30 >= 5):
+                try:
+                    await self._levier_pass()
+                    self._last_levier_seen = cur30
+                except Exception:
+                    logger.exception("LevierScan pass failed")
+                    self.stats["errors"] += 1
 
         if self.long_vol_enabled:
             m15 = _tf_seconds("15m")
@@ -441,6 +470,62 @@ class ScannerScheduler:
         self.stats["last_pass_at"] = int(time.time())
         logger.info("Scan pass tf=%s completed in %.2fs (symbols=%d)",
                     tf, elapsed, len(symbols))
+
+    async def _levier_pass(self) -> None:
+        """30m LeveriScan-style tape leaderboard (~48×/day)."""
+        from levier.alert import leaderboard_to_tvsignal, pick_alert_rows
+        from levier.live_scan import scan_universe
+
+        cfg = self.levier_cfg
+        symbols = await self.universe.get()
+        if not symbols or cfg is None:
+            return
+        limit = self.levier_kline_limit
+        tf = getattr(cfg.scan, "timeframe", "30m")
+
+        async def fetch(sym: str):
+            async with self.sem:
+                try:
+                    return sym, await self.client.fetch_klines(sym, tf, limit=limit)
+                except Exception as exc:
+                    logger.debug("levier fetch %s: %s", sym, exc)
+                    return sym, None
+
+        gathered = await asyncio.gather(*(fetch(s) for s in symbols))
+        panels: dict = {}
+        for sym, df in gathered:
+            if df is not None and len(df) >= cfg.scan.min_bars:
+                panels[sym] = df
+
+        result = scan_universe(panels, cfg, prev_rsi=self._levier_prev_rsi)
+        board = result.get("leaderboard") or []
+        self.last_levier = result
+
+        for row in board:
+            sym = str(row.get("symbol"))
+            if sym and row.get("rsi") is not None:
+                self._levier_prev_rsi[sym] = float(row["rsi"])
+
+        alerts = 0
+        if self.levier_notify:
+            to_alert = pick_alert_rows(board, cfg, prev_top_symbols=self._levier_prev_top)
+            for row in to_alert:
+                sig = leaderboard_to_tvsignal(row, int(row.get("rank") or 0))
+                try:
+                    if await self.dispatcher.dispatch_inbound(sig):
+                        alerts += 1
+                        self.stats["alerts_dispatched"] += 1
+                except Exception:
+                    logger.exception("levier dispatch failed for %s", row.get("symbol"))
+
+        self._levier_prev_top = {str(r.get("symbol")) for r in board[: cfg.alerts.notify_top_n]}
+        self.stats["levier_passes"] += 1
+        self.stats["levier_alerts"] += alerts
+        self.stats["last_levier_at"] = int(time.time())
+        logger.info(
+            "LevierScan pass: symbols=%d board=%d alerts=%d",
+            len(panels), len(board), alerts,
+        )
 
     async def _long_vol_pass(self) -> None:
         """15m long-vol breakout scan — closed bar only; alerts via dispatch_inbound."""
