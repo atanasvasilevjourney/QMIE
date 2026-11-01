@@ -16,6 +16,8 @@ Endpoints:
   GET  /flow/screener         bar-close OI + bar-CVD context (desk Flow module)
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
+  GET  /longvol/candidates    last 15m long-vol scan (gates + features)
+  POST /longvol/once          admin: force one long-vol pass (alerts if enabled)
   GET  /agents/briefing       six specialist agents in parallel (read-only)
   GET  /agents/desk           DAG analog: start→data→strategy→risk→portfolio
   GET  /agents/checklist/{id} native Smart Checklist for one stored signal
@@ -184,6 +186,21 @@ async def lifespan(app: FastAPI):
     state.paper = paper
     state.dispatcher = dispatcher
 
+    long_vol_cfg = None
+    if s.long_vol_enabled:
+        try:
+            from long_vol.config import LongVolConfig, load_config
+
+            cfg_path = Path(__file__).resolve().parent / s.long_vol_config_path
+            long_vol_cfg = load_config(cfg_path)
+            dumped = long_vol_cfg.model_dump()
+            dumped["features"]["width_pct_lookback_1h_bars"] = s.long_vol_width_lookback_1h
+            long_vol_cfg = LongVolConfig.model_validate(dumped)
+            logger.info("Long-vol scanner enabled (config=%s)", cfg_path.name)
+        except Exception:
+            logger.exception("Long-vol config failed; module disabled")
+            long_vol_cfg = None
+
     # Scheduler
     scheduler = ScannerScheduler(
         client=client,
@@ -234,6 +251,10 @@ async def lifespan(app: FastAPI):
             min_coverage_pct=s.radar_min_coverage_pct,
             setup_lookback_bars=s.radar_setup_lookback_bars,
         ),
+        long_vol_enabled=s.long_vol_enabled and long_vol_cfg is not None,
+        long_vol_notify=s.long_vol_notify,
+        long_vol_cfg=long_vol_cfg,
+        long_vol_kline_limit=s.long_vol_kline_limit,
     )
     await scheduler.start()
     state.scheduler = scheduler
@@ -493,6 +514,48 @@ async def radar_once(notify: bool = False) -> dict[str, Any]:
     if not result.get("ok") and result.get("reason") == "radar_disabled":
         raise HTTPException(400, "radar_disabled")
     return result
+
+
+@app.get("/longvol/candidates")
+async def longvol_candidates(alert_only: bool = False) -> dict[str, Any]:
+    """Last closed-bar long-vol scan across the universe (read-only)."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    rows = list(state.scheduler.last_long_vol or [])
+    if alert_only:
+        rows = [r for r in rows if r.get("alert")]
+    return {
+        "enabled": state.scheduler.long_vol_enabled,
+        "count": len(rows),
+        "stats": {
+            "long_vol_passes": state.scheduler.stats.get("long_vol_passes"),
+            "long_vol_alerts": state.scheduler.stats.get("long_vol_alerts"),
+            "last_long_vol_at": state.scheduler.stats.get("last_long_vol_at"),
+        },
+        "candidates": rows,
+    }
+
+
+@app.post("/longvol/once")
+async def longvol_once(notify: bool | None = None) -> dict[str, Any]:
+    """Admin: force one 15m long-vol pass. Default uses LONG_VOL_NOTIFY."""
+    if state.scheduler is None:
+        raise HTTPException(503, "scanner_not_ready")
+    if not state.scheduler.long_vol_enabled:
+        raise HTTPException(400, "long_vol_disabled")
+    prev = state.scheduler.long_vol_notify
+    if notify is not None:
+        state.scheduler.long_vol_notify = notify
+    try:
+        await state.scheduler._long_vol_pass()
+    finally:
+        state.scheduler.long_vol_notify = prev
+    return {
+        "ok": True,
+        "notified": prev if notify is None else notify,
+        "candidates": len(state.scheduler.last_long_vol or []),
+        "alerts": state.scheduler.stats.get("long_vol_alerts"),
+    }
 
 
 @app.get("/agents/briefing")
