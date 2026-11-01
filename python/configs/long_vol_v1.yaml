@@ -1,0 +1,80 @@
+# FROZEN baseline v1 — do not edit. Copy to long_vol_v2.yaml for changes.
+version: 1
+name: long_vol_breakout_v1
+
+data:
+  exchange: binance_um
+  source: vision  # vision | parquet_dir
+  base_tf: 15m
+  signal_tf: 1h
+  cache_dir: backtest/data/cache
+  btc_symbol: BTCUSDT
+
+universe:
+  top_n: 100
+  rebalance: monthly
+  min_24h_quote_volume_usdt: 5000000
+  max_spread_proxy_median: 0.0025
+  exclude_patterns:
+    - USDC
+    - USDTUSDT
+    - UPUSDT
+    - DOWNUSDT
+    - BULLUSDT
+    - BEARUSDT
+
+features:
+  vwap_bars: 96
+  donchian_entry: 20
+  donchian_exit: 10
+  width_pct_lookback_1h_bars: 2160  # ~90 days
+  rvol_tod_days: 20
+  compression_lookback_1h: 12
+  compression_width_pct_max: 25
+
+entry:
+  dist_atr_min: 0.5
+  dist_atr_max: 2.5
+  rvol_min: 2.0
+  adx_min: 18
+  adx_max: 35
+  rsi_max: 72
+  no_chase_rsi: 75
+  no_chase_dist_atr: 3.0
+  cooldown_bars: 24
+
+exit:
+  stop_atr_mult: 2.0
+  vwap_exit_bars: 2
+  time_stop_bars: 24
+
+risk:
+  risk_pct: 0.0025
+  max_participation: 0.03
+  max_gross_leverage: 1.0
+  max_positions: 3
+  max_correlated: 2
+  correlation_lookback_days: 7
+  correlation_threshold: 0.7
+
+costs:
+  taker_fee: 0.00055
+  slippage_k: 0.1
+  cost_mult_default: 1.0
+
+backtest:
+  initial_equity: 100000.0
+  lockbox_frac: 0.2
+  dev_end: null  # null = auto (1 - lockbox_frac) of timeline
+
+walkforward:
+  train_months: 6
+  test_months: 2
+
+monte_carlo:
+  seed: 42
+  draws: 1000
+
+random_baseline:
+  seed: 42
+  draws: 200
