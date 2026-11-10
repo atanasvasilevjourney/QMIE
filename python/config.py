@@ -147,6 +147,20 @@ class Settings(BaseSettings):
     # Replay last N closed 1D bars on each radar pass so a missed coil-UP is not lost
     radar_setup_lookback_bars: int = 7
 
+    # ─── Long-vol breakout (15m VWAP + Donchian; signal-only) ───────────
+    long_vol_enabled: bool = False
+    long_vol_notify: bool = True
+    long_vol_config_path: str = "configs/long_vol_v1.yaml"
+    long_vol_kline_limit: int = 400
+    # Live scanner uses shorter width-percentile lookback (Vision backtest uses YAML).
+    long_vol_width_lookback_1h: int = 168
+
+    # ─── LeveriScan-style 30m tape (leaderboard + CryptoGainers watch) ───
+    levier_scan_enabled: bool = False
+    levier_notify: bool = True
+    levier_config_path: str = "configs/levier_scan_v1.yaml"
+    levier_kline_limit: int = 120
+
     # ─── OpenAI analysis overlay (optional; never scores, never orders) ─
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4.1-mini"

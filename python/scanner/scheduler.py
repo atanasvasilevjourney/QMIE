@@ -88,6 +88,14 @@ class ScannerScheduler:
         radar_cfg: Optional[RadarConfig] = None,
         radar_enabled: bool = True,
         radar_dispatch_trend_start: bool = True,
+        long_vol_enabled: bool = False,
+        long_vol_notify: bool = True,
+        long_vol_cfg: object | None = None,
+        long_vol_kline_limit: int = 400,
+        levier_enabled: bool = False,
+        levier_notify: bool = True,
+        levier_cfg: object | None = None,
+        levier_kline_limit: int = 120,
     ):
         self.client = client
         self.universe = universe
@@ -128,6 +136,24 @@ class ScannerScheduler:
         self._last_seen: dict[str, int] = {}
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
+
+        self.long_vol_enabled = long_vol_enabled and long_vol_cfg is not None
+        self.long_vol_notify = long_vol_notify
+        self.long_vol_cfg = long_vol_cfg
+        self.long_vol_kline_limit = max(120, long_vol_kline_limit)
+        self._long_vol_runtime: dict[str, object] = {}
+        self._last_long_vol_seen: int = 0
+        self.last_long_vol: list[dict] = []
+
+        self.levier_enabled = levier_enabled and levier_cfg is not None
+        self.levier_notify = levier_notify
+        self.levier_cfg = levier_cfg
+        self.levier_kline_limit = max(60, levier_kline_limit)
+        self._last_levier_seen: int = 0
+        self._levier_prev_rsi: dict[str, float] = {}
+        self._levier_prev_top: set[str] = set()
+        self.last_levier: dict = {}
+
         # Stats exposed via /health
         self.stats = {
             "passes": 0,
@@ -137,6 +163,12 @@ class ScannerScheduler:
             "radar_passes": 0,
             "last_radar_at": None,
             "radar_errors": 0,
+            "long_vol_passes": 0,
+            "long_vol_alerts": 0,
+            "last_long_vol_at": None,
+            "levier_passes": 0,
+            "levier_alerts": 0,
+            "last_levier_at": None,
         }
 
     # ─── Lifecycle ───────────────────────────────────────────────────────
@@ -148,6 +180,10 @@ class ScannerScheduler:
         for tf in self.timeframes:
             self._last_seen[tf] = _last_close_ts(now, _tf_seconds(tf))
         self._last_radar_seen = _last_close_ts(now, _tf_seconds("1d"))
+        if self.long_vol_enabled:
+            self._last_long_vol_seen = _last_close_ts(now, _tf_seconds("15m"))
+        if self.levier_enabled:
+            self._last_levier_seen = _last_close_ts(now, _tf_seconds("30m"))
         self._task = asyncio.create_task(self._run())
         logger.info(
             "Scanner scheduler started: TFs=%s radar=%s symbols=universe",
@@ -210,6 +246,28 @@ class ScannerScheduler:
             except Exception:
                 logger.exception("Scan pass failed for tf=%s", tf)
                 self.stats["errors"] += 1
+
+        if self.levier_enabled:
+            m30 = _tf_seconds("30m")
+            cur30 = _last_close_ts(now, m30)
+            if (cur30 > self._last_levier_seen) and (now - cur30 >= 5):
+                try:
+                    await self._levier_pass()
+                    self._last_levier_seen = cur30
+                except Exception:
+                    logger.exception("LevierScan pass failed")
+                    self.stats["errors"] += 1
+
+        if self.long_vol_enabled:
+            m15 = _tf_seconds("15m")
+            cur15 = _last_close_ts(now, m15)
+            if (cur15 > self._last_long_vol_seen) and (now - cur15 >= 5):
+                try:
+                    await self._long_vol_pass()
+                    self._last_long_vol_seen = cur15
+                except Exception:
+                    logger.exception("Long-vol pass failed")
+                    self.stats["errors"] += 1
 
         # Daily Trend Radar — once per closed 1D bar. Advance _last_radar_seen
         # only after a successful publish so transient failures retry.
@@ -412,6 +470,141 @@ class ScannerScheduler:
         self.stats["last_pass_at"] = int(time.time())
         logger.info("Scan pass tf=%s completed in %.2fs (symbols=%d)",
                     tf, elapsed, len(symbols))
+
+    async def _levier_pass(self) -> None:
+        """30m LeveriScan-style tape leaderboard (~48×/day)."""
+        from levier.alert import leaderboard_to_tvsignal, pick_alert_rows
+        from levier.live_scan import scan_universe
+
+        cfg = self.levier_cfg
+        symbols = await self.universe.get()
+        if not symbols or cfg is None:
+            return
+        limit = self.levier_kline_limit
+        tf = getattr(cfg.scan, "timeframe", "30m")
+
+        async def fetch(sym: str):
+            async with self.sem:
+                try:
+                    return sym, await self.client.fetch_klines(sym, tf, limit=limit)
+                except Exception as exc:
+                    logger.debug("levier fetch %s: %s", sym, exc)
+                    return sym, None
+
+        gathered = await asyncio.gather(*(fetch(s) for s in symbols))
+        panels: dict = {}
+        for sym, df in gathered:
+            if df is not None and len(df) >= cfg.scan.min_bars:
+                panels[sym] = df
+
+        result = scan_universe(panels, cfg, prev_rsi=self._levier_prev_rsi)
+        board = result.get("leaderboard") or []
+        self.last_levier = result
+
+        db = getattr(self.dispatcher, "db", None)
+        if db is not None:
+            try:
+                from levier.gainers_persist import persist_snapshot, sync_gainer_stats
+
+                await persist_snapshot(db, result)
+                await sync_gainer_stats(
+                    db, panels, top_n=getattr(cfg.gainers, "top_n_yesterday", 20),
+                )
+            except Exception:
+                logger.exception("LevierScan DB persist failed (non-fatal)")
+
+        for row in board:
+            sym = str(row.get("symbol"))
+            if sym and row.get("rsi") is not None:
+                self._levier_prev_rsi[sym] = float(row["rsi"])
+
+        alerts = 0
+        if self.levier_notify:
+            to_alert = pick_alert_rows(board, cfg, prev_top_symbols=self._levier_prev_top)
+            for row in to_alert:
+                sig = leaderboard_to_tvsignal(row, int(row.get("rank") or 0))
+                try:
+                    if await self.dispatcher.dispatch_inbound(sig):
+                        alerts += 1
+                        self.stats["alerts_dispatched"] += 1
+                except Exception:
+                    logger.exception("levier dispatch failed for %s", row.get("symbol"))
+
+        self._levier_prev_top = {str(r.get("symbol")) for r in board[: cfg.alerts.notify_top_n]}
+        self.stats["levier_passes"] += 1
+        self.stats["levier_alerts"] += alerts
+        self.stats["last_levier_at"] = int(time.time())
+        logger.info(
+            "LevierScan pass: symbols=%d board=%d alerts=%d",
+            len(panels), len(board), alerts,
+        )
+
+    async def _long_vol_pass(self) -> None:
+        """15m long-vol breakout scan — closed bar only; alerts via dispatch_inbound."""
+        from long_vol.alert import candidate_to_tvsignal
+        from long_vol.live_scan import candidate_to_scan_fields, scan_closed_bar
+        from long_vol.signals.long_vol_breakout import SymbolRuntime
+
+        cfg = self.long_vol_cfg
+        symbols = await self.universe.get()
+        if not symbols or cfg is None:
+            return
+
+        btc_sym = getattr(cfg.data, "btc_symbol", "BTCUSDT")
+        limit = self.long_vol_kline_limit
+        try:
+            btc_df = await self.client.fetch_klines(btc_sym, "15m", limit=limit)
+        except Exception:
+            logger.warning("Long-vol BTC fetch failed")
+            return
+        if btc_df is None or len(btc_df) < cfg.features.vwap_bars:
+            return
+
+        patterns = tuple(getattr(cfg.universe, "exclude_patterns", []) or ())
+
+        async def one(sym: str):
+            async with self.sem:
+                if any(p in sym.upper() for p in patterns):
+                    return None
+                try:
+                    df = await self.client.fetch_klines(sym, "15m", limit=limit)
+                    if df is None or len(df) < cfg.features.vwap_bars + 5:
+                        return None
+                    rt = self._long_vol_runtime.get(sym)
+                    if not isinstance(rt, SymbolRuntime):
+                        rt = SymbolRuntime()
+                    cand, rt_new = scan_closed_bar(sym, df, cfg=cfg, btc15=btc_df, runtime=rt)
+                    self._long_vol_runtime[sym] = rt_new
+                    return cand
+                except Exception as exc:
+                    logger.warning("long_vol scan %s: %s", sym, exc)
+                    return None
+
+        gathered = await asyncio.gather(*(one(s) for s in symbols))
+        rows: list[dict] = []
+        alerts = 0
+        for cand in gathered:
+            if cand is None:
+                continue
+            row = candidate_to_scan_fields(cand)
+            rows.append(row)
+            if cand.alert and self.long_vol_notify:
+                sig = candidate_to_tvsignal(cand)
+                try:
+                    if await self.dispatcher.dispatch_inbound(sig):
+                        alerts += 1
+                        self.stats["alerts_dispatched"] += 1
+                except Exception:
+                    logger.exception("long_vol dispatch failed for %s", cand.symbol)
+
+        self.last_long_vol = sorted(rows, key=lambda r: (not r.get("alert"), r.get("symbol", "")))
+        self.stats["long_vol_passes"] += 1
+        self.stats["long_vol_alerts"] += alerts
+        self.stats["last_long_vol_at"] = int(time.time())
+        logger.info(
+            "Long-vol pass: symbols=%d candidates=%d alerts=%d",
+            len(symbols), len(rows), alerts,
+        )
 
     async def _radar_pass(
         self,

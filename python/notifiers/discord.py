@@ -94,8 +94,67 @@ class DiscordNotifier(Notifier):
             await self._session.close()
 
     # ─── Embed construction ──────────────────────────────────────────────
+    def _levier_tweet_content(self, sig: TVSignal) -> str:
+        rank = getattr(sig, "levier_rank", "?")
+        display = getattr(sig, "levier_display", sig.symbol)
+        label = (sig.reason or "").replace("_", " ")
+        gainer = " · #CryptoGainers watch" if getattr(sig, "levier_gainer_watch", False) else ""
+        return (
+            f"30-min #Altcoins leaderboard 👇\n"
+            f"#{rank} {display} — {label}{gainer}\n"
+            f"⏱ Next scan in 30 min · 48/day 📊 #LevierScan"
+        )
+
+    def _build_levier_embed(self, sig: TVSignal) -> dict[str, Any]:
+        ac = sig.asset_class
+        rank = getattr(sig, "levier_rank", "?")
+        display = getattr(sig, "levier_display", sig.symbol)
+        dist_pct = float(getattr(sig, "levier_dist_pct", 0) or 0)
+        colour = 0xF7931A if dist_pct >= 0 else 0xE74C3C
+        rsi_l = getattr(sig, "levier_rsi_label", "—")
+        fields = [
+            {"name": "cur", "value": _fmt_price(sig.signal_price, ac), "inline": True},
+            {"name": "24h vwap", "value": _fmt_price(getattr(sig, "levier_vwap24", None), ac), "inline": True},
+            {
+                "name": "dist",
+                "value": (
+                    f"{getattr(sig, 'levier_dist', 0):.4f} ({dist_pct:.2f}%)"
+                    if getattr(sig, "levier_dist", None) is not None
+                    else "—"
+                ),
+                "inline": True,
+            },
+            {"name": "atr", "value": f"{sig.atr_pct:.2f}%" if sig.atr_pct is not None else "—", "inline": True},
+            {
+                "name": "24h vol",
+                "value": f"${float(getattr(sig, 'levier_quote_vol', 0) or 0):,.0f}",
+                "inline": True,
+            },
+            {"name": "rsi", "value": str(rsi_l), "inline": True},
+            {"name": "adx", "value": f"{sig.adx:.0f}" if sig.adx is not None else "—", "inline": True},
+        ]
+        if getattr(sig, "venue_tag", None):
+            fields.append({"name": "Venue", "value": str(sig.venue_tag), "inline": True})
+        if sig.reason:
+            fields.append({"name": "Tape read", "value": sig.reason.replace("_", " "), "inline": False})
+        embed: dict[str, Any] = {
+            "title": f"#{rank} {display} — Bullish Crypto Trending",
+            "description": "NFA · watch-only · manual entry",
+            "color": colour,
+            "fields": fields,
+            "footer": {"text": "QMIE · QMIE-LevierScan"},
+        }
+        chart_url = getattr(sig, "chart_url", None)
+        if chart_url:
+            embed["url"] = chart_url
+        if sig.timestamp:
+            embed["timestamp"] = sig.timestamp
+        return embed
+
     def _build_embed(self, sig: TVSignal,
                      broker_resp: BrokerResponse | None) -> dict[str, Any]:
+        if getattr(sig, "setup_type", None) == "levier_scan":
+            return self._build_levier_embed(sig)
         side = sig.side or Side.BUY
         # base colour by asset, modulated by side
         base = ASSET_COLOURS.get(sig.asset_class, 0x95A5A6)
@@ -242,6 +301,8 @@ class DiscordNotifier(Notifier):
             "username": self.username,
             "embeds": [embed],
         }
+        if getattr(sig, "setup_type", None) == "levier_scan":
+            body["content"] = self._levier_tweet_content(sig)[:1900]
         if self.avatar_url:
             body["avatar_url"] = self.avatar_url
 

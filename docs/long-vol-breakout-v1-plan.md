@@ -111,10 +111,12 @@ docs/
 ## Delivery gates (checklist)
 
 - [x] **Gate 1:** Inspection + file plan (this document)
-- [ ] **Gate 2:** Data loader + validation + tests
-- [ ] **Gate 3:** Features + parity + no-lookahead tests
-- [ ] **Gate 4:** Event study + report (before full backtest)
-- [ ] **Gate 5:** Signal state machine + tests
+- [x] **Gate 2:** Data loader + validation + tests
+- [x] **Gate 3:** Features + parity + no-lookahead tests (partial — rvol TOD loop)
+- [x] **Gate 4:** Event study + report (notebook + `run_long_vol_jupyter.py`)
+- [x] **Live ingest:** 15m scheduler pass + `GET /longvol/candidates` + `QMIE-LongVol` alerts (`LONG_VOL_ENABLED`)
+- [x] **LevierScan:** 30m tape + `GET /levier/*` + `QMIE-LevierScan` Discord (`LEVIER_SCAN_ENABLED`)
+- [x] **Gate 5:** Signal state machine + tests (core transitions; engine hookup pending)
 - [ ] **Gate 6:** Engine + costs + accounting tests
 - [ ] **Gate 7:** Dev-sample backtest + cost stress + metrics
 - [ ] **Gate 8:** Plateau, walk-forward, Monte Carlo, random baseline

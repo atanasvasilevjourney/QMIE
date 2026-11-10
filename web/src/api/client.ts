@@ -15,6 +15,8 @@ import type {
   ChartPrice,
   ScreenBook,
   FlowScreener,
+  LevierGainerRow,
+  LevierLeaderboardResponse,
 } from '../types'
 import { RENDER_API, resolveApiBases } from './bases'
 
@@ -129,4 +131,9 @@ export const api = {
     getJson<FlowScreener>(
       `/flow/screener?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}&view=${encodeURIComponent(view)}`,
     ),
+  levierLeaderboard: () => getJson<LevierLeaderboardResponse>('/levier/leaderboard'),
+  levierGainers: (limit = 50) =>
+    getJson<{ count: number; rows: LevierGainerRow[] }>(`/levier/gainers?limit=${limit}`),
+  levierOnce: (notify = false) =>
+    sendJson<{ ok: boolean; leaders?: number }>(`/levier/once?notify=${notify}`, 'POST'),
 }
