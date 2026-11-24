@@ -1,4 +1,4 @@
-# QMIE Desk — visual system
+# Iskrel Crypto desk — visual system
 
 Read this before changing `web/` UI. Derived from Anthropic **frontend-design**
 (distinctive identity, not Inter/purple-gradient slop) plus Vercel
@@ -7,7 +7,7 @@ Read this before changing `web/` UI. Derived from Anthropic **frontend-design**
 ## Subject
 
 Signal-only crypto desk. One operator. Job: read radar + TEMA / daily-breakout
-tables and journal fills. Never orders. Orbis 3D is the signature; chrome is the
+tables and journal fills. Never orders. The 3D universe scene is the signature; chrome is the
 instrument.
 
 ## Tokens
@@ -42,7 +42,7 @@ Empty buckets are one dashed line (“None yet”), not a vacant card stack.
 
 ## Signature
 
-Orbis WebGL stays dark in both themes. Signature is a refractive glass core
+Universe WebGL stays dark in both themes. Signature is a refractive glass core
 with elliptical satellite rails (not neon tubes). Orbit medallions are
 bundled famous-crypto logos (`web/public/crypto/`). HUD overlays use `.hud`
 (always-dark tokens) so Light mode does not invert the 3D chrome. Panels

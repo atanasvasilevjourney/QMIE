@@ -9,7 +9,7 @@ Project conventions for humans and cloud agents. Core product notes live in `CLA
 | Service | How to run | Notes |
 |---|---|---|
 | QMIE API | `cd python && /workspace/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080` | Health: `GET /health`. SQLite under `python/data/` (gitignored). |
-| QMIE Desk UI | `cd web && npm run dev` | Vite on `:5173`. Proxies `/qmie` → `http://127.0.0.1:8080`. |
+| Iskrel Crypto desk UI | `cd web && npm run dev` | Vite on `:5173`. Proxies `/qmie` → `http://127.0.0.1:8080`. |
 
 Do not put service startup in the environment update script — start them in the session (tmux is fine).
 

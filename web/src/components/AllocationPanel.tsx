@@ -38,7 +38,7 @@ export function AllocationPanel({ plan }: { plan: AllocationPlan | null }) {
         {!slots.length && <Empty>No allocation slots — wait for a scan pass</Empty>}
       </div>
       <p className="mt-3 text-sm text-muted">
-        weight_pct is a risk budget for you — QMIE never places orders.
+        weight_pct is a risk budget for you — Iskrel Crypto never places orders.
       </p>
     </PanelShell>
   )

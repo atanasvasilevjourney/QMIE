@@ -416,7 +416,7 @@ export function Scene3D({
       {!ready && (
         <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center universe-boot">
           <div className="text-center">
-            <p className="hud-kicker">Booting Orbis…</p>
+            <p className="hud-kicker">Booting Iskrel…</p>
             <p className="hud-meta">Glass core · crypto logos</p>
           </div>
         </div>
@@ -500,7 +500,7 @@ export function Scene3D({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between p-3">
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>
-          <p className="hud-kicker">Orbis Universe</p>
+          <p className="hud-kicker">Iskrel Universe</p>
           <p className="hud-meta">Famous logos</p>
         </div>
         <div className="hud" style={{ background: 'rgba(8,12,18,0.88)', border: '1px solid rgba(126,224,234,0.32)' }}>

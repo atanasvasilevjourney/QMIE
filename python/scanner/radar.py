@@ -714,7 +714,7 @@ def format_radar_digest(snap: RadarSnapshot, *, max_items: int = 8) -> str:
     closed = (snap.as_of or "?")[:10]
     cov = f"{snap.succeeded}/{snap.requested}" if snap.requested else str(snap.count)
     lines = [
-        f"**QMIE Trend Radar — SPOT UNRANKED 1D CONTEXT** (closed through {closed})",
+        f"**Iskrel Crypto Trend Radar — SPOT UNRANKED 1D CONTEXT** (closed through {closed})",
         f"Coverage {cov}: 🟢{snap.green}  ⚪{snap.grey}  🔴{snap.red} · bias {snap.bias}",
         "_SPOT book · NOT leverage · NOT a QMIE A/A+ grade · MANUAL ONLY · NO ORDER PATH_",
         "_TEMA A/A+ is the leveraged add — wait for that alert before sizing perps._",

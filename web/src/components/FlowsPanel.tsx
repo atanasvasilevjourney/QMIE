@@ -48,7 +48,7 @@ export function FlowsPanel() {
         ))}
       </ol>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <Tip title="Spot vs leverage" body="Trend Radar + Daily expansion = spot (prior-box stop, no TEMA TP). TEMA BUY = leveraged USDT-perp add with printed 1.5/2.5 ATR. QMIE never sets leverage. You still click size yourself." />
+        <Tip title="Spot vs leverage" body="Trend Radar + Daily expansion = spot (prior-box stop, no TEMA TP). TEMA BUY = leveraged USDT-perp add with printed 1.5/2.5 ATR. Iskrel Crypto never sets leverage. You still click size yourself." />
         <Tip title="4h edge" body="Frozen OOS A/A+ was strongest on 4h (49.1% / E[R] +0.309). Pooled journal win% is not that table." />
         <Tip title="Journal R" body="realized_r needs stop_loss on the signal. Size is coin qty for cash math, not an order." />
       </div>

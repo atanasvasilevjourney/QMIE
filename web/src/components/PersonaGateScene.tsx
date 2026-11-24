@@ -463,7 +463,7 @@ export function PersonaGateOverlay({
           </h2>
         </div>
         <button type="button" className="btn" onClick={onClose}>
-          Back to Orbis
+          Back to Universe
         </button>
       </div>
       <p className="pointer-events-none px-4 pb-2 text-center text-sm text-muted sm:px-8">

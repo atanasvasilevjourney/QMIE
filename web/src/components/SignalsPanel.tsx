@@ -356,7 +356,7 @@ function SignalCard({
             {exit && <Fact k="Fill id" v={s.fill_id == null ? '—' : String(s.fill_id)} />}
           </dl>
           <p className="mt-3 text-sm text-muted">
-            Signal-only. QMIE does not place orders. Confirm on quant_visualizer.pine. Plan card only.
+            Signal-only. Iskrel Crypto does not place orders. Confirm on quant_visualizer.pine. Plan card only.
             {s.lookback_catchup
               ? ' Entry price is the close of that 1D bar, not the live print at Received. Radar replays the last 7 closed days after downtime.'
               : ''}

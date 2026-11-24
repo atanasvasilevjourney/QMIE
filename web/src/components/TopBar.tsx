@@ -41,14 +41,14 @@ export function TopBar({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-lg border border-line bg-panel">
-              <span className="font-display text-sm font-bold text-cyan">Q</span>
+              <span className="font-display text-sm font-bold text-cyan">I</span>
             </div>
             <div>
               <h1 className="font-display text-lg font-bold tracking-tight text-ink">
-                QMIE Desk
+                Iskrel Crypto
               </h1>
               <p className="text-sm text-muted">
-                Signal-only · manual entry · never orders
+                Powered by QMIE engine · signal-only · manual entry · never orders
                 {persona ? (
                   <span className="text-cyan"> · {persona === 'observer' ? 'Space Observer' : 'Spaceman'}</span>
                 ) : null}
