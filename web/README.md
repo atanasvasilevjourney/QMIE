@@ -1,6 +1,6 @@
-# QMIE Desk (web)
+# Iskrel Crypto desk (web)
 
-Cyberpunk operator UI for the QMIE signal scanner. Vite + React + TypeScript + Tailwind v4 + React Three Fiber.
+Cyberpunk operator UI for the Iskrel Crypto scanner (powered by QMIE engine). Vite + React + TypeScript + Tailwind v4 + React Three Fiber.
 
 ## Run (dev)
 
@@ -18,7 +18,7 @@ Production desk (Vercel static hosting) is **not** the scanner. Set
 `VITE_QMIE_API` to the public FastAPI origin (see `docs/deployment.md`).
 Copy `web/.env.example` → `web/.env` only for local production-build previews.
 
-Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light mode is a white desk chrome; the Orbis WebGL canvas stays dark.
+Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light mode is a white desk chrome; the 3D universe WebGL canvas stays dark.
 
 ## Scripts
 
@@ -31,7 +31,7 @@ Theme: top-bar **LIGHT / DARK** toggle (persisted as `qmie-desk-theme`). Light m
 
 | Tab | Purpose |
 |---|---|
-| ORBIT | Landing page: Orbis Universe 3D (RGG nebula + orbit tokens) |
+| ORBIT | Landing page: Iskrel Universe 3D (RGG nebula + orbit tokens) |
 | OPS | Trend Radar + TEMA / Daily breakout / Exit tables |
 | CHARTS | SVG equity curve + closed candles with entry/exit/SL/TP |
 | GUIDE | Trading guide (paper fills, SL/TP exits, PnL) |

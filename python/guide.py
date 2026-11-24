@@ -10,7 +10,7 @@ from typing import Any
 
 def trading_guide() -> dict[str, Any]:
     return {
-        "title": "QMIE Trading Guide",
+        "title": "Iskrel Crypto Trading Guide",
         "places_orders": False,
         "version": "1.5",
         "headline": "Signal-only desk. Radar is the spot book. TEMA is the leveraged add. You click size yourself.",
@@ -19,7 +19,7 @@ def trading_guide() -> dict[str, Any]:
                 "id": "what",
                 "title": "What this is",
                 "body": (
-                    "QMIE scans USDT-perp 1h/4h bars for TEMA (leverage book) and "
+                    "Iskrel Crypto scans USDT-perp 1h/4h bars for TEMA (leverage book) and "
                     "a daily Trend Radar for the spot book. It never sends an order. "
                     "Radar klines are the same closed daily candles; you take expansions "
                     "on spot and TEMA on a leveraged perp."
@@ -31,7 +31,7 @@ def trading_guide() -> dict[str, Any]:
                 "body": (
                     "Take A / A+ only, both BUY and SELL — this is the leveraged book "
                     "on USDT-perp. Frozen OOS was strongest on 4h. Confirm side and "
-                    "grade on quant_visualizer.pine. QMIE does not send leverage to a "
+                    "grade on quant_visualizer.pine. Iskrel Crypto does not send leverage to a "
                     "venue; you set size on your perp."
                 ),
                 "rules": [
@@ -68,7 +68,7 @@ def trading_guide() -> dict[str, Any]:
                     "Prefer 4h — frozen swing edge (1.5×ATR stop / 2.5×ATR take). A badge "
                     "'after expansion' means the same symbol already has a spot 1D "
                     "coil-UP. That is clip 2. SELL A/A+ stays on the TEMA scanner table. "
-                    "QMIE never sets leverage on a venue."
+                    "Iskrel Crypto never sets leverage on a venue."
                 ),
                 "rules": [
                     "A or A+ BUY on a closed bar",

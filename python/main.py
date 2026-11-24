@@ -307,7 +307,7 @@ async def lifespan(app: FastAPI):
 
 # ─── App ─────────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="QMIE — Quant Multi-Asset Intelligence Engine (Scanner Edition)",
+    title="Iskrel Crypto (Scanner Edition · powered by QMIE engine)",
     version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -344,7 +344,7 @@ async def root(request: Request) -> Any:
     dist = find_desk_dist()
     if dist is not None and wants_html(request):
         return FileResponse(dist / "index.html", media_type="text/html")
-    return {"name": "QMIE Scanner", "version": "2.0.0", "ok": True}
+    return {"name": "Iskrel Crypto", "version": "2.0.0", "ok": True, "engine": "QMIE"}
 
 
 @app.get("/favicon.svg")
@@ -513,7 +513,7 @@ async def get_flow_ideas(symbol: str, timeframe: str = "4h") -> dict[str, Any]:
         "timeframe": tf,
         "data_source": state.client.name,
         "ideas": row.get("ideas") or [],
-        "note": "Suggestions for manual entry. QMIE does not execute or size positions.",
+        "note": "Suggestions for manual entry. Iskrel Crypto does not execute or size positions.",
     }
 
 

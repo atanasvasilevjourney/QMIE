@@ -1,6 +1,6 @@
 //@version=6
 // ════════════════════════════════════════════════════════════════════════
-//  QMIE — Visualizer Indicator                                  v2.0
+//  Iskrel Crypto — Visualizer (QMIE engine)                       v2.0
 // ════════════════════════════════════════════════════════════════════════
 //  Companion to the server-side QMIE Scanner. Open this on any chart
 //  and the same scoring math runs locally so the marks you see here
@@ -32,7 +32,7 @@
 //    3. Webhook URL: https://YOUR_HOST/webhook?token=WEBHOOK_SECRET
 //    4. Message: {{alert_message}}
 // ════════════════════════════════════════════════════════════════════════
-indicator("QMIE Visualizer", shorttitle="QMIE", overlay=true,
+indicator("Iskrel Crypto Visualizer", shorttitle="Iskrel", overlay=true,
      max_lines_count = 500,
      max_labels_count = 500,
      max_boxes_count  = 200)
@@ -351,7 +351,7 @@ cellOf(score, w) =>
     score > 0 ? C_BULL : score < 0 ? C_BEAR : C_NEUTRAL
 
 if showPanel and (barstate.islastconfirmedhistory or barstate.islast)
-    table.cell(dash, 0, 0, "QMIE", text_color=color.white, bgcolor=C_HEADER, text_size=size.small)
+    table.cell(dash, 0, 0, "Iskrel", text_color=color.white, bgcolor=C_HEADER, text_size=size.small)
     table.cell(dash, 1, 0, side + " · " + grade,
          text_color=color.white,
          bgcolor = side == "BUY" ? C_BULL : side == "SELL" ? C_BEAR : C_NEUTRAL,

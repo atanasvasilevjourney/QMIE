@@ -170,7 +170,7 @@ export default function App() {
             >
               <PageHeader
                 kicker="Landing"
-                title="Orbis"
+                title="Iskrel"
                 highlight="Universe"
                 lede="Glass core and crypto logos on the rails. Radar and strategy tables live on Ops. Signal-only — never orders."
                 actions={
@@ -441,7 +441,7 @@ export default function App() {
       </main>
 
       <footer className="relative z-10 border-t border-line px-4 py-4 text-center text-sm text-muted">
-        QMIE Desk · Orbit landing · Ops strategy tables · never places orders
+        Iskrel Crypto · Orbit landing · Ops strategy tables · never places orders · QMIE engine
       </footer>
     </div>
   )

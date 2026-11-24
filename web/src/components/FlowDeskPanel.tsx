@@ -143,7 +143,7 @@ function FlowReview({ row, source }: { row: FlowRow; source?: string }) {
         ))}
       </div>
       <p className="mt-4 text-sm text-muted">
-        Ideas are for manual review only. QMIE does not execute or size positions.
+        Ideas are for manual review only. Iskrel Crypto does not execute or size positions.
       </p>
     </section>
   )

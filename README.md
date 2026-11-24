@@ -1,6 +1,11 @@
-# QMIE — Quant Multi-Asset Intelligence Engine
+# Iskrel Crypto
 
-**Scanner Edition · Crypto-Focused · Manual-Entry**
+**USDT-perp scanner desk · Powered by QMIE engine · Manual entry only**
+
+Iskrel Crypto is the crypto product in the Iskrel family (alongside Iskrel GEX,
+Iskrel Equity, Iskrel COT, and Iskrel Outlook). Under the hood it runs the
+**QMIE** (Quant Multi-Asset Intelligence Engine) scoring stack — unchanged
+Pine parity, webhook payloads, and strategy ids.
 
 A server-side multi-symbol crypto scanner that detects A/A+ trade setups
 in real time and pushes alerts to Discord and Telegram. You execute
@@ -101,7 +106,7 @@ qmie/
 │   ├── baseline.yaml                  frozen live knobs
 │   └── reviews/                       dated one-variable proposals
 ├── .cursor/                           review agent / skill / /qmie-review
-├── web/                               QMIE Desk — cyberpunk React + R3F UI
+├── web/                               Iskrel Crypto desk UI (React + R3F)
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml

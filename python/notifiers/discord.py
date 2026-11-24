@@ -29,6 +29,10 @@ from models import AssetClass, BrokerResponse, Side, TVSignal
 
 logger = logging.getLogger(__name__)
 
+# User-visible alert branding (strategy ids stay QMIE-*).
+_BRAND = "Iskrel Crypto"
+_FOOTER = f"{_BRAND} · powered by QMIE"
+
 
 # ─── Theming ─────────────────────────────────────────────────────────────
 ASSET_COLOURS: dict[AssetClass, int] = {
@@ -142,7 +146,7 @@ class DiscordNotifier(Notifier):
             "description": "NFA · watch-only · manual entry",
             "color": colour,
             "fields": fields,
-            "footer": {"text": "QMIE · QMIE-LevierScan"},
+            "footer": {"text": f"{_FOOTER} · {sig.strategy}"},
         }
         chart_url = getattr(sig, "chart_url", None)
         if chart_url:
@@ -278,7 +282,7 @@ class DiscordNotifier(Notifier):
             "title": title,
             "color": colour,
             "fields": fields,
-            "footer": {"text": f"QMIE · {sig.strategy}"},
+            "footer": {"text": f"{_FOOTER} · {sig.strategy}"},
         }
         # TV chart deep-link (set by dispatcher; pydantic extra="allow")
         chart_url = getattr(sig, "chart_url", None)

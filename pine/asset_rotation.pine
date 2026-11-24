@@ -1,9 +1,9 @@
 //@version=6
-// QMIE — Asset Rotation (ARS-style)
+// Iskrel Crypto — Asset Rotation (ARS-style · QMIE engine)
 // Companion to ALLOC_MODE=rotation on the server.
 // Lookback ROC only. Not a port of any invite-only script.
 // Does NOT place trades. Alerts on confirmed bar-close switches.
-indicator("QMIE Asset Rotation", shorttitle="QMIE-ARS", overlay=false,
+indicator("Iskrel Crypto Asset Rotation", shorttitle="Iskrel-ARS", overlay=false,
      max_labels_count=50)
 
 g_core = "Rotation"

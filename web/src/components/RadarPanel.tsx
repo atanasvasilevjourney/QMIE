@@ -34,7 +34,7 @@ export function RadarPanel({ radar }: { radar: RadarSnapshot | null }) {
   return (
     <ModuleCard
       title="Trend Radar"
-      subtitle={`Spot 1D context · ${statusLine} · ADX enter 25 / exit 20 · not a QMIE grade`}
+      subtitle={`Spot 1D context · ${statusLine} · ADX enter 25 / exit 20 · not a TEMA A/A+ grade`}
       footer="Trend Radar is the spot book. Expansions are coil-UP/DOWN with prior-box stop. TEMA is the leveraged add. Early long = GREY coil pressing highs. Manual only."
     >
       {incomplete && (

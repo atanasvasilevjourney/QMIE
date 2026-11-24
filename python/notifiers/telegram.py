@@ -130,6 +130,9 @@ class TelegramNotifier(Notifier):
             lines.append("")
             lines.append(f"[Open in TradingView]({chart_url})")
 
+        lines.append("")
+        lines.append(_escape_md("Iskrel Crypto · powered by QMIE"))
+
         return "\n".join(lines)
 
     # ─── Send ────────────────────────────────────────────────────────────
