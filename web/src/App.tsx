@@ -11,6 +11,7 @@ import { AllocationPanel } from './components/AllocationPanel'
 import { JournalFlow } from './components/JournalFlow'
 import { FlowsPanel } from './components/FlowsPanel'
 import { FlowDeskPanel } from './components/FlowDeskPanel'
+import { DerivativesFlowPanel } from './components/DerivativesFlowPanel'
 import { ObserverTodayPanel } from './components/ObserverTodayPanel'
 import { PersonaGateOverlay } from './components/PersonaGateScene'
 import { defaultTabForPersona } from './deskNav'
@@ -415,13 +416,7 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              <PageHeader
-                kicker="Spaceman module"
-                title="Flow"
-                highlight="desk"
-                lede="Pure flow screeners — OI, CVD, volume profile, TPO, funding. Select a symbol for rule-based trade ideas. Manual review only."
-              />
-              <FlowDeskPanel />
+              <FlowModulePage />
             </motion.div>
           )}
 
@@ -444,6 +439,45 @@ export default function App() {
         QMIE Desk · Orbit landing · Ops strategy tables · never places orders
       </footer>
     </div>
+  )
+}
+
+function FlowModulePage() {
+  const [mode, setMode] = useState<'derivatives' | 'screener'>('derivatives')
+  return (
+    <>
+      <PageHeader
+        kicker="Spaceman module"
+        title="Flow"
+        highlight="desk"
+        lede={
+          mode === 'derivatives'
+            ? 'Daily-style derivatives flow — multi-venue CVD, OI, funding, liquidations, and key levels. Cached server-side; never orders.'
+            : 'Pure flow screeners — OI, CVD, volume profile, TPO, funding. Select a symbol for rule-based trade ideas. Manual review only.'
+        }
+      />
+      <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Flow views">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'derivatives'}
+          className={`nav-tab ${mode === 'derivatives' ? 'nav-tab-on' : ''}`}
+          onClick={() => setMode('derivatives')}
+        >
+          Derivatives flow
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'screener'}
+          className={`nav-tab ${mode === 'screener' ? 'nav-tab-on' : ''}`}
+          onClick={() => setMode('screener')}
+        >
+          Screener
+        </button>
+      </div>
+      {mode === 'derivatives' ? <DerivativesFlowPanel /> : <FlowDeskPanel />}
+    </>
   )
 }
 

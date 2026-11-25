@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     webhook_allow_ips:     str  = ""
     webhook_require_hmac:  bool = True
 
+    # ─── Derivatives flow (desk market update) ──────────────────────────
+    coinalyze_api_key: Optional[str] = None
+    flow_snapshot_ttl_sec: int = 300
+    flow_liq_sample_sec: int = 20
+    flow_background_refresh: bool = True
+
     # ─── Storage ─────────────────────────────────────────────────────────
     db_url:        str = "sqlite+aiosqlite:///./data/qmie.db"
     redis_url:     Optional[str] = None
