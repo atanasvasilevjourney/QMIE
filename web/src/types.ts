@@ -254,6 +254,62 @@ export type FlowScreener = {
   rows: FlowRow[]
 }
 
+export type DerivativesFlowSnapshot = {
+  asset: string
+  generated_at_utc: string
+  narrative: string
+  cached?: boolean
+  cache_age_sec?: number
+  stale?: boolean
+  price: {
+    spot_last: number
+    change_pct: number
+    high: number
+    low: number
+    quote_volume_usd: number
+  }
+  open_interest: {
+    total_usd_now: number
+    by_exchange: Record<string, { oi_usd: number; available?: boolean; source?: string }>
+    change_from_history: Record<string, { chg_1h_pct?: number | null; chg_4h_pct?: number | null; chg_24h_pct?: number | null; oi_usd?: number }>
+  }
+  funding: { oi_weighted_8h_equiv: number | null; by_exchange: Record<string, { rate: number; interval_h: number; '8h_equiv': number }> }
+  cvd: {
+    spot_24h: { total_usd: number; by_exchange_usd: Record<string, number> }
+    perp_24h: { total_usd: number; by_exchange_usd: Record<string, number> }
+  }
+  long_short: Record<string, { ratio?: number; '24h_ago'?: number; error?: string; source?: string }>
+  liquidations_24h: {
+    aggregate_of_complete_venues: { total_usd: number; long_usd: number; short_usd: number; venues_included: string[] }
+    by_exchange: Record<string, { total_usd?: number; long_usd?: number; short_usd?: number; complete?: boolean; sample_seconds?: number; note?: string; error?: string }>
+    missing: Record<string, string>
+    observed_price_clusters: { side: string; price: number; usd: number }[]
+  }
+  levels: {
+    resistance?: { price: number; flipped?: boolean; tfs?: string[] }[]
+    support?: { price: number; tfs?: string[] }[]
+    major_above?: { price: number; flipped?: boolean }[]
+    major_below?: { price: number }[]
+    hvn_4h?: { price: number }[]
+    error?: string
+  }
+  modelled_liq_clusters: { clusters: { side: string; price: number; est_notional_usd: number }[]; note: string }
+  sources_contributed?: string[]
+  fetch_errors?: Record<string, string>
+  chart: {
+    bars_4h: { t: number; o: number; h: number; l: number; c: number }[]
+    price_lo: number
+    price_hi: number
+    spot_cvd_cum: { t: number; cvd_usd: number }[]
+    perp_cvd_cum: { t: number; cvd_usd: number }[]
+    oi_aggregate_hourly: { t: number; oi_usd: number }[]
+    volume_profile: { price: number; norm: number }[]
+    level_lines: Record<string, { price: number; flipped?: boolean }[]>
+    modelled_liq_bands: { side: string; price: number; est_notional_usd: number }[]
+    last_price: number
+  }
+}
+
 export type DeskTab =
   | 'orbit'
   | 'today'

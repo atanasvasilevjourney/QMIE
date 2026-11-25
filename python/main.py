@@ -14,6 +14,8 @@ Endpoints:
   GET  /allocation            last ranked-allocation plan (suggested size, not orders)
   GET  /screens               combo review list (unique symbol, never orders)
   GET  /flow/screener         bar-close OI + bar-CVD context (desk Flow module)
+  GET  /api/flow              derivatives flow snapshot (BTC/ETH/SOL, cached)
+  GET  /flow/snapshot         alias of /api/flow
   GET  /radar                 last daily Trend Radar snapshot (RGG + coils)
   POST /radar/once            admin: force an immediate daily radar pass
   GET  /longvol/candidates    last 15m long-vol scan (gates + features)
@@ -74,6 +76,7 @@ from paper import PaperBook
 from guide import trading_guide
 from screens import VIEWS, build_screens
 from scanner.flow_metrics import VIEWS as FLOW_VIEWS, build_flow_screener, flow_row_for_symbol
+from scanner.derivatives_flow import FLOW_ASSETS, DerivativesFlowCache
 from charts import ALLOWED_CHART_TFS, align_trades, bars_payload, equity_payload, trades_payload
 
 
@@ -99,6 +102,7 @@ class AppState:
         self.scheduler: ScannerScheduler | None = None
         self.client = None
         self.paper: PaperBook | None = None
+        self.flow_cache: DerivativesFlowCache | None = None
         self.start_time: float = 0.0
 
 
@@ -287,6 +291,20 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("paper startup sync failed (non-fatal)")
 
+    flow_cache = DerivativesFlowCache(
+        ttl_sec=s.flow_snapshot_ttl_sec,
+        liq_sample_sec=s.flow_liq_sample_sec,
+        coinalyze_key=s.coinalyze_api_key or "",
+    )
+    state.flow_cache = flow_cache
+    if s.flow_background_refresh:
+        flow_cache.start_background()
+        logger.info(
+            "Derivatives flow cache armed (ttl=%ss, coinalyze=%s)",
+            s.flow_snapshot_ttl_sec,
+            bool(s.coinalyze_api_key),
+        )
+
     logger.info("QMIE Scanner ready — TFs=%s min_grade=%s notifiers=%s",
                 s.timeframes_list, min_grade.value,
                 [n.name for n in notifiers])
@@ -295,6 +313,12 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("QMIE shutting down")
+        if state.flow_cache and state.flow_cache._refresh_task:
+            state.flow_cache._refresh_task.cancel()
+            try:
+                await state.flow_cache._refresh_task
+            except asyncio.CancelledError:
+                pass
         if state.scheduler:
             await state.scheduler.stop()
         if state.client:
@@ -496,6 +520,34 @@ async def get_flow_screener(
     return await build_flow_screener(
         state.client, symbols, timeframe=tf, view=v, max_symbols=cap,
     )
+
+
+async def _derivatives_flow_handler(symbol: str, refresh: bool = False) -> dict[str, Any]:
+    asset = (symbol or "BTC").upper().replace("USDT", "").strip()
+    if asset not in FLOW_ASSETS:
+        raise HTTPException(400, f"symbol must be one of {sorted(FLOW_ASSETS)}")
+    if state.flow_cache is None:
+        state.flow_cache = DerivativesFlowCache(
+            ttl_sec=state.settings.flow_snapshot_ttl_sec if state.settings else 300,
+            liq_sample_sec=state.settings.flow_liq_sample_sec if state.settings else 20,
+            coinalyze_key=(state.settings.coinalyze_api_key or "") if state.settings else "",
+        )
+    try:
+        return await state.flow_cache.get(asset, force=refresh)
+    except Exception as e:
+        raise HTTPException(503, f"flow_snapshot_failed: {e}") from e
+
+
+@app.get("/api/flow")
+async def get_api_flow(symbol: str = "BTC", refresh: bool = False) -> dict[str, Any]:
+    """FlowX-style derivatives snapshot: price, CVD, OI, funding, liquidations, levels."""
+    return await _derivatives_flow_handler(symbol, refresh=refresh)
+
+
+@app.get("/flow/snapshot")
+async def get_flow_snapshot(symbol: str = "BTC", refresh: bool = False) -> dict[str, Any]:
+    """Desk proxy path for derivatives flow snapshot."""
+    return await _derivatives_flow_handler(symbol, refresh=refresh)
 
 
 @app.get("/flow/ideas/{symbol}")

@@ -21,6 +21,7 @@
     { "source": "/agents/:path*", "destination": "https://qmie.onrender.com/agents/:path*" },
     { "source": "/flow", "destination": "https://qmie.onrender.com/flow" },
     { "source": "/flow/:path*", "destination": "https://qmie.onrender.com/flow/:path*" },
+    { "source": "/api/flow", "destination": "https://qmie.onrender.com/api/flow" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

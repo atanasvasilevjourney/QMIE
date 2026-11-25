@@ -15,6 +15,7 @@ import type {
   ChartPrice,
   ScreenBook,
   FlowScreener,
+  DerivativesFlowSnapshot,
   LevierGainerRow,
   LevierLeaderboardResponse,
 } from '../types'
@@ -130,6 +131,10 @@ export const api = {
   flowScreener: (timeframe = '4h', limit = 18, view = 'combo') =>
     getJson<FlowScreener>(
       `/flow/screener?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}&view=${encodeURIComponent(view)}`,
+    ),
+  derivativesFlow: (symbol = 'BTC', refresh = false) =>
+    getJson<DerivativesFlowSnapshot>(
+      `/api/flow?symbol=${encodeURIComponent(symbol)}&refresh=${refresh ? 'true' : 'false'}`,
     ),
   levierLeaderboard: () => getJson<LevierLeaderboardResponse>('/levier/leaderboard'),
   levierGainers: (limit = 50) =>
